@@ -40,7 +40,7 @@ SOLution/
 │       ├── common/               # 공통 응답 형식, 예외 처리, 설정, FastAPI 호출(AiServerClient)
 │       ├── store/                # 매장·기초 설정 (store)
 │       ├── session/              # 세션·입력 버전·대화 기록 (work_session, work_version, session_message)
-│       ├── decision/             # 사장님 확정 처리 (work_result에 기록, 별도 테이블 없음)
+│       ├── decision/             # 사장님 확정 처리 (work_confirmation에 기록)
 │       ├── purchase/             # ① 매입 API
 │       │   ├── controller/
 │       │   ├── service/
@@ -78,7 +78,7 @@ SOLution/
 
 - 기능 코드는 `features/`(화면), `purchase/`·`operation/`(Spring), `tools/`(FastAPI) 아래 **기능별 폴더**에 둡니다.
 - 여러 기능이 같이 쓰는 코드는 `common/`(화면·Spring), `core/`(FastAPI)에만 둡니다.
-- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`만 씁니다.
+- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`만 씁니다.
 
 ---
 
@@ -155,7 +155,8 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
                         │                                    │
                         ▼                                    ▼
           store·work_session·work_version·         execution_log·rag_chunk
-          work_result·session_message 저장
+          work_result·work_confirmation·
+          session_message 저장
 ```
 
 - **화면은 Spring만 부릅니다.** FastAPI는 Spring이 `AiServerClient`로 부릅니다. 예시는 `common/system/SystemController`에 있습니다.
