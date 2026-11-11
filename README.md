@@ -194,6 +194,7 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 | `feat/기능명` | 기능 작업 | 이슈 번호 포함 (예: `feat/12-labor-cost`) |
 
 - PR은 리뷰 1명 이상 승인 후 병합합니다.
+- PR을 올리면 CI(`.github/workflows/ci.yml`)가 Spring·FastAPI 테스트, 화면 린트·빌드, docker compose 연결 확인을 자동으로 돌립니다. 모두 통과해야 병합합니다.
 - 다른 사람 기능 폴더를 고쳤다면 그 기능 담당에게 리뷰를 요청합니다.
 
 ### 커밋 메시지
