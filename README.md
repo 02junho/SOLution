@@ -35,8 +35,9 @@ SOLution/
 ├── backend/                      # Spring Boot
 │   └── src/main/java/com/solution/
 │       ├── common/               # 공통 응답 형식, 예외 처리, 설정
-│       ├── session/              # 세션·대화 기록
-│       ├── decision/             # 사장님 확정 저장
+│       ├── store/                # 매장·기초 설정 (store)
+│       ├── session/              # 세션·입력 버전·대화 기록 (work_session, work_version, session_message)
+│       ├── decision/             # 사장님 확정 처리 (work_result에 기록, 별도 테이블 없음)
 │       ├── purchase/             # ① 매입 API
 │       │   ├── controller/
 │       │   ├── service/
@@ -51,7 +52,7 @@ SOLution/
 │   │   ├── main.py
 │   │   ├── core/                 # 설정, 공통 응답 형식, 상태값
 │   │   ├── agent/                # LangGraph 에이전트 흐름, 프롬프트
-│   │   ├── rag/                  # 견적 품목 매칭, 근거 문서 검색
+│   │   ├── rag/                  # 견적 품목 매칭, 근거 문서 검색 (rag_chunk)
 │   │   ├── tools/
 │   │   │   ├── quote/            # 견적 정리·필요량 계산
 │   │   │   ├── purchase/         # 구매 최적화 (재고 차감 포함)
@@ -74,6 +75,7 @@ SOLution/
 
 - 기능 코드는 `features/`(화면), `purchase/`·`operation/`(Spring), `tools/`(FastAPI) 아래 **기능별 폴더**에 둡니다.
 - 여러 기능이 같이 쓰는 코드는 `common/`(화면·Spring), `core/`(FastAPI)에만 둡니다.
+- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`만 씁니다.
 
 ---
 

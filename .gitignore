@@ -1,0 +1,29 @@
+# 환경 변수 (형식은 .env.example에만)
+.env
+.env.*
+!.env.example
+
+# OS·에디터
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# frontend (React)
+node_modules/
+frontend/dist/
+frontend/build/
+*.log
+
+# backend (Spring)
+.gradle/
+backend/build/
+backend/out/
+*.class
+
+# ai-server (Python)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
