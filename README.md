@@ -7,11 +7,11 @@
 
 | 영역 | 기술 |
 | --- | --- |
-| 화면 | React + TypeScript |
-| 서버 | Spring Boot (세션·대화 기록·확정 저장) |
-| AI·계산 | FastAPI, LangChain/LangGraph, PuLP, SimPy |
-| DB | PostgreSQL + pgvector |
-| 실행 | Docker Compose |
+| 화면 | React 19 + TypeScript, Vite |
+| 서버 | Spring Boot 4.1 (Java 21, Gradle) — 세션·대화 기록·확정 저장 |
+| AI·계산 | FastAPI (Python 3.13), LangChain/LangGraph, PuLP 4, SimPy |
+| DB | PostgreSQL 16 + pgvector, 테이블은 Flyway로 관리 |
+| 실행 | Docker Compose (DB·Spring·FastAPI) |
 
 ---
 
@@ -33,11 +33,14 @@ SOLution/
 │       └── utils/
 │
 ├── backend/                      # Spring Boot
+│   ├── src/main/resources/
+│   │   ├── application.yml
+│   │   └── db/migration/         # DB 테이블 (Flyway, V1__init_schema.sql)
 │   └── src/main/java/com/solution/
-│       ├── common/               # 공통 응답 형식, 예외 처리, 설정
+│       ├── common/               # 공통 응답 형식, 예외 처리, 설정, FastAPI 호출(AiServerClient)
 │       ├── store/                # 매장·기초 설정 (store)
 │       ├── session/              # 세션·입력 버전·대화 기록 (work_session, work_version, session_message)
-│       ├── decision/             # 사장님 확정 처리 (work_result에 기록, 별도 테이블 없음)
+│       ├── decision/             # 사장님 확정 처리 (work_confirmation에 기록)
 │       ├── purchase/             # ① 매입 API
 │       │   ├── controller/
 │       │   ├── service/
@@ -75,7 +78,108 @@ SOLution/
 
 - 기능 코드는 `features/`(화면), `purchase/`·`operation/`(Spring), `tools/`(FastAPI) 아래 **기능별 폴더**에 둡니다.
 - 여러 기능이 같이 쓰는 코드는 `common/`(화면·Spring), `core/`(FastAPI)에만 둡니다.
-- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`만 씁니다.
+- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`만 씁니다.
+
+---
+
+## 실행 방법
+
+### 0. 준비
+
+| 도구 | 버전 | 비고 |
+| --- | --- | --- |
+| Docker Desktop | 최신 | DB(또는 전체)를 compose로 띄울 때 |
+| JDK | 17 이상 | Gradle이 JDK 21을 자동으로 내려받습니다 |
+| Python | 3.13 | |
+| Node.js | 22 이상 | |
+
+```bash
+cp .env.example .env
+```
+
+`.env`를 열어 **`POSTGRES_PASSWORD`(아무 값)** 와 `ANTHROPIC_API_KEY`를 채웁니다. 비워 두면 DB가 뜨지 않습니다.
+
+### 1. 한 번에 띄우기 (DB + FastAPI + Spring)
+
+```bash
+docker compose up --build
+```
+
+화면은 아래 4번처럼 따로 띄웁니다.
+
+### 2. 개발할 때 (DB만 Docker, 서버는 직접 실행)
+
+```bash
+docker compose up -d db
+```
+
+**Spring** (`backend/`, 8080) — 루트의 `.env`를 자동으로 읽고, 처음 뜰 때 Flyway가 테이블을 만듭니다.
+
+```bash
+cd backend && ./gradlew bootRun
+```
+
+**FastAPI** (`ai-server/`, 8000)
+
+```bash
+cd ai-server
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+### 3. 테스트
+
+```bash
+cd backend && ./gradlew test
+```
+
+```bash
+cd ai-server && pytest
+```
+
+### 4. 화면 (`frontend/`, 5173)
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI → DB`가 모두 `ok`로 나오면 연결이 끝난 것입니다. `/api` 요청은 Vite가 Spring(8080)으로 넘겨 줍니다.
+
+---
+
+## 서버 간 호출 규칙
+
+```text
+화면 ──/api/v1/...──▶ Spring ──/tools/{기능}·/agent/...──▶ FastAPI
+                        │                                    │
+                        ▼                                    ▼
+          store·work_session·work_version·         execution_log·rag_chunk
+          work_result·work_confirmation·
+          session_message 저장
+```
+
+- **화면은 Spring만 부릅니다.** FastAPI는 Spring이 `AiServerClient`로 부릅니다. 예시는 `common/system/SystemController`에 있습니다.
+- **주소**: Spring은 `/api/v1/...`, FastAPI 도구는 `/tools/quote`·`/tools/purchase`·`/tools/simulation`·`/tools/labor`, 에이전트는 `/agent/...`
+- **응답 모양**은 모든 서버가 같습니다. Spring은 `ApiResponse`, FastAPI는 `app/core/response.py`, 화면은 `src/types/api.ts`를 씁니다.
+
+  ```json
+  { "status": "ok", "data": { }, "message": null }
+  ```
+
+| status | HTTP | 언제 |
+| --- | --- | --- |
+| `ok` | 200 | 정상 |
+| `needs_input` | 200 | 정보 부족. 사장님께 물어볼 내용을 `message`·`data`에 담음 |
+| `infeasible` | 200 | 조건을 만족하는 답이 없음. 지원 범위 밖 요청(예: 직원 5명)도 여기에 넣고 세부 상태 `UNSUPPORTED`, `message`에 가장 가까운 후보 제안 |
+| `error` | 400 / 404 / 500 / 502 | 잘못된 요청, 없는 주소, 서버 오류, FastAPI 연결 실패 |
+
+- 기능별 세부 상태(`OPTIMAL` 등)는 `status`를 늘리지 않고 `data` 안에 넣습니다.
+- **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
+- **요청 키**: Spring이 `X-Request-Key` 헤더로 넘기고, FastAPI는 `get_request_key`로 받아 `execution_log.request_key`에 씁니다. 같은 요청을 다시 보낼 때는 같은 키를 씁니다.
+- **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
+- **DB 테이블을 바꿀 때**: `V1__init_schema.sql`은 고치지 말고 `backend/src/main/resources/db/migration/V2__설명.sql`을 새로 추가합니다.
+- **RAG 벡터**: `rag_chunk.embedding`은 `vector(1024)`(KURE-v1)이고, 코사인 거리 HNSW 인덱스가 있습니다.
 
 ---
 
@@ -112,6 +216,11 @@ chore     설정·빌드
 - `.env`는 절대 커밋하지 않습니다. 필요한 키 형식은 `.env.example`에만 적습니다.
 - API 키를 코드나 채팅에 붙여넣지 않습니다.
 - 실제 견적서·대화 캡처는 가게 이름, 연락처 등 식별 정보를 지운 뒤에만 `data/`에 넣습니다.
+
+### 패키지 추가
+
+- Python 패키지는 `ai-server/requirements.txt`에 **버전을 고정해서**(`이름==버전`) 적습니다. 테스트에만 쓰는 것은 `requirements-dev.txt`에 적습니다.
+- PuLP는 4.2.0입니다. 3.x로 만든 PoC 코드와 쓰는 법이 조금 다릅니다(변수는 `prob.add_variable(...)`, `LpStatus` 없음). 3.x는 Apple Silicon Mac에서 기본 풀이기가 돌지 않습니다.
 
 ### 계산 규칙 (연결할 때 어긋나기 쉬운 것)
 
