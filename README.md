@@ -171,10 +171,11 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 | --- | --- | --- |
 | `ok` | 200 | 정상 |
 | `needs_input` | 200 | 정보 부족. 사장님께 물어볼 내용을 `message`·`data`에 담음 |
-| `infeasible` | 200 | 조건을 만족하는 답이 없음 |
+| `infeasible` | 200 | 조건을 만족하는 답이 없음. 지원 범위 밖 요청(예: 직원 5명)도 여기에 넣고 세부 상태 `UNSUPPORTED`, `message`에 가장 가까운 후보 제안 |
 | `error` | 400 / 404 / 500 / 502 | 잘못된 요청, 없는 주소, 서버 오류, FastAPI 연결 실패 |
 
 - 기능별 세부 상태(`OPTIMAL` 등)는 `status`를 늘리지 않고 `data` 안에 넣습니다.
+- **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
 - **요청 키**: Spring이 `X-Request-Key` 헤더로 넘기고, FastAPI는 `get_request_key`로 받아 `execution_log.request_key`에 씁니다. 같은 요청을 다시 보낼 때는 같은 키를 씁니다.
 - **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
 - **DB 테이블을 바꿀 때**: `V1__init_schema.sql`은 고치지 말고 `backend/src/main/resources/db/migration/V2__설명.sql`을 새로 추가합니다.
@@ -215,6 +216,11 @@ chore     설정·빌드
 - `.env`는 절대 커밋하지 않습니다. 필요한 키 형식은 `.env.example`에만 적습니다.
 - API 키를 코드나 채팅에 붙여넣지 않습니다.
 - 실제 견적서·대화 캡처는 가게 이름, 연락처 등 식별 정보를 지운 뒤에만 `data/`에 넣습니다.
+
+### 패키지 추가
+
+- Python 패키지는 `ai-server/requirements.txt`에 **버전을 고정해서**(`이름==버전`) 적습니다. 테스트에만 쓰는 것은 `requirements-dev.txt`에 적습니다.
+- PuLP는 4.2.0입니다. 3.x로 만든 PoC 코드와 쓰는 법이 조금 다릅니다(변수는 `prob.add_variable(...)`, `LpStatus` 없음). 3.x는 Apple Silicon Mac에서 기본 풀이기가 돌지 않습니다.
 
 ### 계산 규칙 (연결할 때 어긋나기 쉬운 것)
 
