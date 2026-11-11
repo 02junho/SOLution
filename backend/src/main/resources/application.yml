@@ -1,0 +1,40 @@
+# 값은 환경 변수에서 읽습니다. 로컬 실행(./gradlew bootRun)은 저장소 루트의 .env를 읽고,
+# docker compose 실행은 compose가 넣어 주는 환경 변수를 씁니다.
+spring:
+  application:
+    name: solution-backend
+  config:
+    import: optional:file:../.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:solution}
+    username: ${POSTGRES_USER:solution}
+    password: ${POSTGRES_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 테이블은 Flyway(db/migration)로만 만들고, 엔티티가 테이블과 맞는지만 검사합니다.
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    # API·JSON 필드는 snake_case (Code Convention)
+    property-naming-strategy: SNAKE_CASE
+
+server:
+  port: ${BACKEND_PORT:8080}
+
+ai-server:
+  url: ${AI_SERVER_URL:http://localhost:8000}
+  connect-timeout: 3s
+  # 시뮬레이션 30회 반복처럼 오래 걸리는 호출을 고려한 기본값. 기능별로 더 짧게 잡아도 됩니다.
+  read-timeout: 120s
+
+cors:
+  allowed-origins: ${FRONTEND_ORIGIN:http://localhost:5173}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
