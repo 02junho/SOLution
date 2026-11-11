@@ -1,3 +1,22 @@
-fastapi
-uvicorn[standard]
-pydantic
+# 실행에 필요한 패키지 (버전 고정). 새 패키지를 추가하면 버전까지 적어 PR에 같이 올려 주세요.
+
+# 웹 서버
+fastapi==0.162.4
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.2
+
+# DB (PostgreSQL + pgvector)
+psycopg[binary,pool]==3.3.8
+pgvector==0.5.1
+
+# 에이전트·LLM
+langchain==1.4.10
+langchain-anthropic==1.7.10
+langgraph==1.2.20
+
+# 계산 도구
+# 구매 최적화. PuLP 4는 솔버가 따로 설치되므로 extras(highs, cbc)를 꼭 같이 씀.
+# PuLP 4는 3.x와 API가 다름: 변수는 prob.add_variable("x", lowBound=0, cat="Integer")로 만듦.
+pulp[highs,cbc]==4.2.0
+simpy==4.1.2    # 운영 시뮬레이션
