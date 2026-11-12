@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     # LLM
     anthropic_api_key: str = ""
+    # 모델은 한 곳에서만 정한다 (11.12 결정: Claude Sonnet 5.5). 평가 결과를 다시 낼 수 있게 날짜 없는 ID를 고정해서 쓴다.
+    anthropic_model: str = "claude-sonnet-5-5"
 
     # DB
     db_host: str = "localhost"
