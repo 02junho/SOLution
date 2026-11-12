@@ -16,7 +16,8 @@ class PurchaseItem(BaseModel):
     item_name: str = Field(min_length=1)
     base_unit: BaseUnit
     gross_need: float = Field(ge=0, description="기간 동안 필요한 총량 (견적 정리 결과, 재고 차감 전)")
-    usable_inventory: float | None = Field(ge=0, description="지금 쓸 수 있는 재고. 모르면 null")
+    # 키가 빠져도 null과 같게 본다. 400(Spring에서는 502)이 아니라 사장님께 재고를 묻는다.
+    usable_inventory: float | None = Field(default=None, ge=0, description="지금 쓸 수 있는 재고. 모르면 null 또는 생략")
     safety_stock: float = Field(ge=0, description="기간 끝에 남겨 둘 양. 없으면 0")
     storage_capacity: float | None = Field(default=None, gt=0, description="보관 한도. null이면 제한 없음")
 

@@ -104,14 +104,19 @@ def test_재고가_빈칸이면_needs_input():
     assert payload["message"] == "우유 재고가 지금 얼마나 있나요?"
 
 
-def test_재고_칸을_아예_빼면_400():
+def test_재고_칸을_아예_빼도_needs_input():
     body = copy.deepcopy(REQUEST)
     del body["items"][0]["usable_inventory"]
 
     response = _post(body)
 
-    assert response.status_code == 400
-    assert response.json()["status"] == "error"
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "needs_input"
+    assert payload["data"]["missing_fields"] == [
+        {"path": "items[0].usable_inventory", "item_id": "beans", "label": "원두 재고", "unit": "g"}
+    ]
+    assert payload["message"] == "원두 재고가 지금 얼마나 있나요?"
 
 
 def test_음수_가격은_400():
