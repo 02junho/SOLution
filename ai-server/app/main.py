@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.core.db import check_database, close_pool, open_pool
 from app.core.errors import register_exception_handlers
 from app.core.response import ApiResponse, ok
+from app.tools.purchase.router import router as purchase_router
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ register_exception_handlers(app)
 # 에이전트는 /agent/interpret(분류·입력 추출·검사·질문)와 /agent/explain(결과 설명)
 # 예) from app.tools.labor.router import router as labor_router
 #     app.include_router(labor_router, prefix="/tools/labor")
+app.include_router(purchase_router, prefix="/tools/purchase")
 
 
 @app.get("/health")
