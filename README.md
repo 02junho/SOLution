@@ -9,7 +9,7 @@
 | --- | --- |
 | 화면 | React 19 + TypeScript, Vite |
 | 서버 | Spring Boot 4.1 (Java 21, Gradle) — 세션·대화 기록·확정 저장 |
-| AI·계산 | FastAPI (Python 3.13), LangChain/LangGraph, PuLP 4, SimPy |
+| AI·계산 | FastAPI (Python 3.13), LangChain/LangGraph, Claude Sonnet 5.5, PuLP 4, SimPy |
 | DB | PostgreSQL 16 + pgvector, 테이블은 Flyway로 관리 |
 | 실행 | Docker Compose (DB·Spring·FastAPI) |
 
@@ -160,7 +160,7 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 ```
 
 - **화면은 Spring만 부릅니다.** FastAPI는 Spring이 `AiServerClient`로 부릅니다. 예시는 `common/system/SystemController`에 있습니다.
-- **주소**: Spring은 `/api/v1/...`, FastAPI 도구는 `/tools/quote`·`/tools/purchase`·`/tools/simulation`·`/tools/labor`, 에이전트는 `/agent/...`
+- **주소**: Spring은 `/api/v1/...`, FastAPI 도구는 `/tools/quote`·`/tools/purchase`·`/tools/simulation`·`/tools/labor`, 에이전트는 `/agent/interpret`(분류·입력 추출·검사·질문)와 `/agent/explain`(결과 설명). 둘 사이에 사장님 입력 확인과 도구 계산이 들어갑니다.
 - **응답 모양**은 모든 서버가 같습니다. Spring은 `ApiResponse`, FastAPI는 `app/core/response.py`, 화면은 `src/types/api.ts`를 씁니다.
 
   ```json
@@ -180,6 +180,10 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 - **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
 - **DB 테이블을 바꿀 때**: `V1__init_schema.sql`은 고치지 말고 `backend/src/main/resources/db/migration/V2__설명.sql`을 새로 추가합니다.
 - **RAG 벡터**: `rag_chunk.embedding`은 `vector(1024)`(KURE-v1)이고, 코사인 거리 HNSW 인덱스가 있습니다.
+- **LLM 모델**: Claude Sonnet 5.5(`claude-sonnet-5-5`). 코드에 모델 이름을 직접 쓰지 말고 `get_settings().anthropic_model`(`.env`의 `ANTHROPIC_MODEL`)을 씁니다. 이 모델은 다음을 넣으면 400 오류가 납니다.
+  - 도구 강제 호출(`tool_choice`의 `any`·`tool`): 입력 JSON을 받을 때는 structured outputs(JSON 스키마) 방식이나 `tool_choice` `auto` + `strict` 도구를 씁니다.
+  - `temperature`·`top_p` 값 지정, thinking 끄기(`disabled`), 답 앞부분 미리 채우기(prefill)
+  - 안전 분류기가 거절하면 `stop_reason`이 `refusal`로 옵니다. LLM 실패와 같이 "폼으로 입력" 안내로 처리합니다.
 
 ---
 

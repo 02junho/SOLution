@@ -59,3 +59,10 @@ def test_잘못된_요청은_400_error():
     assert response.status_code == 400
     assert response.json()["status"] == "error"
     assert "hours" in response.json()["message"]
+
+
+def test_LLM_모델_기본값은_팀_공통_모델(monkeypatch):
+    from app.core.config import Settings
+
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    assert Settings(_env_file=None).anthropic_model == "claude-sonnet-5-5"
