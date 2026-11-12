@@ -78,8 +78,8 @@ public class PurchaseRepository {
 				JOIN work_session s ON s.session_id = v.session_id
 				JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_confirmation c ON c.result_id = r.result_id
-				WHERE r.feature_type = 'purchase' AND """ + where + """
-
+				WHERE r.feature_type = 'purchase' AND (""" + where + """
+				)
 				ORDER BY r.created_at DESC
 				LIMIT 1
 				""", PurchaseRepository::mapResult, args);
