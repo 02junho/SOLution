@@ -42,3 +42,13 @@ management:
     web:
       exposure:
         include: health
+
+# API 문서. 화면: http://localhost:8080/docs · 원본 JSON: /v3/api-docs
+# 화면이 부르는 /api/v1/... 주소만 보여 준다. 배포 때 막으려면 SWAGGER_ENABLED=false
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    path: /docs
+  paths-to-match: /api/**

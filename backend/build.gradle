@@ -26,6 +26,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.flywaydb:flyway-database-postgresql'
+	// API 문서 화면 (Swagger UI: /docs). 3.2.0은 Spring Boot 4.1.2 기준으로 만든 버전
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'
