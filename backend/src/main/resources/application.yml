@@ -33,6 +33,10 @@ ai-server:
 cors:
   allowed-origins: ${FRONTEND_ORIGIN:http://localhost:5173}
 
+# 시연용 고정 사용자. store.owner_key와 같아야 그 매장의 업무·결과를 읽고 계산할 수 있다.
+demo:
+  owner-key: ${DEMO_OWNER_KEY:demo-owner}
+
 management:
   endpoints:
     web:

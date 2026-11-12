@@ -42,6 +42,11 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("없는 주소입니다."));
 	}
 
+	@ExceptionHandler(ApiException.class)
+	public ResponseEntity<ApiResponse<Void>> handleApi(ApiException e) {
+		return ResponseEntity.status(e.getStatus()).body(ApiResponse.error(e.getMessage()));
+	}
+
 	@ExceptionHandler(AiServerException.class)
 	public ResponseEntity<ApiResponse<Void>> handleAiServer(AiServerException e) {
 		log.error("AI 서버 호출 실패", e);
