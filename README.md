@@ -160,7 +160,8 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 ```
 
 - **화면은 Spring만 부릅니다.** FastAPI는 Spring이 `AiServerClient`로 부릅니다. 예시는 `common/system/SystemController`에 있습니다.
-- **주소**: Spring은 `/api/v1/...`, FastAPI 도구는 `/tools/quote`·`/tools/purchase`·`/tools/simulation`·`/tools/labor`, 에이전트는 `/agent/interpret`(분류·입력 추출·검사·질문)와 `/agent/explain`(결과 설명). 둘 사이에 사장님 입력 확인과 도구 계산이 들어갑니다.
+- **주소**: Spring은 `/api/v1/...`, FastAPI 도구는 `/tools/quote`·`/tools/purchase`·`/tools/simulation`·`/tools/labor` 4개, 에이전트는 `/agent/interpret`(분류·입력 추출·검사·질문)와 `/agent/explain`(결과 설명). 둘 사이에 사장님 입력 확인과 도구 계산이 들어갑니다.
+  - 한 도구 안에서 하는 일이 여러 개면 `/tools/{도구}/{동작}`으로 나눕니다 (예: `/tools/labor/cost`·`/tools/labor/schedule`, `/tools/simulation/compare`). 동작이 하나면 `/tools/purchase`처럼 그대로 둡니다. 세부 주소는 Spring 안에서만 쓰므로 화면은 바뀌지 않습니다.
 - **응답 모양**은 모든 서버가 같습니다. Spring은 `ApiResponse`, FastAPI는 `app/core/response.py`, 화면은 `src/types/api.ts`를 씁니다.
 
   ```json
@@ -175,6 +176,10 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 | `error` | 400 / 404 / 500 / 502 | 잘못된 요청, 없는 주소, 서버 오류, FastAPI 연결 실패 |
 
 - 기능별 세부 상태(`OPTIMAL` 등)는 `status`를 늘리지 않고 `data` 안에 넣습니다.
+- **기능마다 같은 이름을 쓰는 칸** (화면·확정 API가 기능 구분 없이 같은 방식으로 읽습니다)
+  - 빠진 값(`needs_input`): `data.missing_fields[]`의 기본 칸은 `{path, label, unit}`. `path`는 요청 JSON 안의 위치, `label`은 사장님께 보여 줄 이름, `unit`은 단위(없으면 `null`). 왜 필요한지는 `message`에 씁니다.
+  - 경고: `warnings[]`의 기본 칸은 `{warning_id, message, requires_ack}`. 기능에 따라 칸을 더 붙여도 됩니다(예: 구매의 `choice_keys`). 확정할 때 화면은 확인한 `warning_id`만 보냅니다.
+  - 고를 수 있는 안: `choice_key` (매입 `purchase_1`·`purchase_2`, 운영 `CURRENT`·`ALT_A`·`ALT_C`). 확정 때는 `selected_choice_key`로 저장됩니다.
 - **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
 - **요청 키**: Spring이 `X-Request-Key` 헤더로 넘기고, FastAPI는 `get_request_key`로 받아 `execution_log.request_key`에 씁니다. 같은 요청을 다시 보낼 때는 같은 키를 씁니다.
 - **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
