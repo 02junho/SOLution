@@ -1,7 +1,7 @@
 package com.solution.session.controller;
 
-import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -59,6 +59,30 @@ class WorkSessionControllerTest {
 		mockMvc.perform(post("/api/v1/work-sessions")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"feature_type\": \"purchase\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 제목이_200자면_통과한다() throws Exception {
+		given(workSessionService.create(any())).willReturn(ApiResponse.ok(new WorkSessionResponse(
+				100, 10, "purchase", "agent", "a".repeat(200), 1, "input",
+				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"))));
+
+		String title = "a".repeat(200);
+		mockMvc.perform(post("/api/v1/work-sessions")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"store_id\": 10, \"feature_type\": \"purchase\", \"input_method\": \"agent\", \"title\": \"" + title + "\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ok"));
+	}
+
+	@Test
+	void 제목이_201자면_400() throws Exception {
+		String title = "a".repeat(201);
+		mockMvc.perform(post("/api/v1/work-sessions")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"store_id\": 10, \"feature_type\": \"purchase\", \"input_method\": \"agent\", \"title\": \"" + title + "\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value("error"));
 	}

@@ -2,6 +2,7 @@ package com.solution.session.dto;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 /**
  * POST /api/v1/work-sessions 요청 본문. 업무(세션)를 시작할 때 화면이 보내는 값.
@@ -13,5 +14,6 @@ public record WorkSessionCreateRequest(
 		@NotNull Long storeId,
 		@NotNull @Pattern(regexp = "purchase|operation", message = "purchase 또는 operation이어야 합니다.") String featureType,
 		@NotNull @Pattern(regexp = "agent|form", message = "agent 또는 form이어야 합니다.") String inputMethod,
-		String title) {
+		// DB의 work_session.title은 VARCHAR(200)이다. 길이를 여기서 걸러 500이 아니라 400으로 돌려준다.
+		@Size(max = 200, message = "제목은 200자 이하여야 합니다.") String title) {
 }
