@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit 자동 리뷰 설정. 이 파일은 PR이 향하는 브랜치에 있는 것이 적용됩니다.
+
+# 리뷰 댓글을 한국어로 받습니다.
+language: "ko-KR"
+
+reviews:
+  auto_review:
+    enabled: true
+    # 기본 브랜치(main)로 가는 PR만 리뷰하는 것이 기본값이라, dev로 가는 PR도 리뷰하도록 추가합니다.
+    base_branches:
+      - "dev"
