@@ -1,11 +1,15 @@
 package com.solution.session.controller;
 
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
+import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionCreateRequest;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.WorkSessionService;
@@ -30,5 +34,19 @@ public class WorkSessionController {
 	@PostMapping
 	public ApiResponse<WorkSessionResponse> create(@Valid @RequestBody WorkSessionCreateRequest request) {
 		return workSessionService.create(request);
+	}
+
+	/** 중단했던 업무를 다시 열 때 현재 문맥(입력 버전·단계·최근 결과/확정 유무)을 복원한다(URQ-FLW-007·HW-F01). */
+	@GetMapping("/{sessionId}")
+	public ApiResponse<WorkSessionContextResponse> get(@PathVariable String sessionId) {
+		long parsedSessionId;
+		try {
+			parsedSessionId = Long.parseLong(sessionId);
+		}
+		catch (NumberFormatException e) {
+			// 경로 변환 오류가 공통 예외 처리기의 500으로 넘어가지 않도록 요청 오류로 바꾼다.
+			throw ApiException.badRequest("업무 번호는 정수 범위의 숫자여야 합니다.");
+		}
+		return workSessionService.getContext(parsedSessionId);
 	}
 }
