@@ -1,0 +1,5 @@
+slot_id,start_time,end_time,customer_share_pct,staff_count,source
+morning,07:00,11:00,32.82,,서울시 추정매출
+lunch,11:00,14:00,49.68,,서울시 추정매출
+afternoon,14:00,17:00,14.81,,서울시 추정매출
+evening,17:00,19:00,2.68,,서울시 추정매출
