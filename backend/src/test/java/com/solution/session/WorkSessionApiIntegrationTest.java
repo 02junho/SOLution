@@ -23,8 +23,8 @@ import org.testcontainers.utility.DockerImageName;
  * 업무 세션 시작 API의 통합 테스트.
  * 작성: 엄혜원 (공통 흐름·오케스트레이션 도메인)
  *
- * <p>테스트가 돌 때 Testcontainers가 임시 PostgreSQL을 Docker로 띄우고, Flyway가 V1 스키마를 만든 뒤,
- * 실제 서버 문맥(Spring) + 실제 DB로 API를 호출한다. 즉 컨트롤러·검증·서비스·SQL·DB INSERT까지 끝까지 확인한다.
+ * <p>테스트가 돌 때 임시 PostgreSQL을 Docker로 띄우고(Testcontainers), Flyway가 V1 스키마를 만든 뒤,
+ * 실제 서버 문맥(Spring) + 실제 DB로 API를 호출한다. 컨트롤러·검증·서비스·SQL·DB INSERT까지 끝까지 확인한다.
  * (Docker가 떠 있어야 실행된다. 단위 테스트와 달리 가짜 서비스를 쓰지 않는다.)
  */
 @SpringBootTest(properties = "demo.owner-key=demo-owner")
@@ -32,9 +32,10 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 class WorkSessionApiIntegrationTest {
 
+	// V1 마이그레이션의 vector 확장을 지원하도록 Compose와 같은 DB 이미지를 사용한다.
 	@Container
 	@ServiceConnection
-	static PostgreSQLContainer postgres = new PostgreSQLContainer(
+	static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
 			DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
 
 	@Autowired
@@ -70,7 +71,6 @@ class WorkSessionApiIntegrationTest {
 				.andExpect(jsonPath("$.data.step").value("input"))
 				.andExpect(jsonPath("$.data.current_version").value(1));
 
-		// 실제로 work_session 테이블에 한 줄이 들어갔는지 DB에서 직접 확인한다.
 		Integer count = jdbcTemplate.queryForObject(
 				"SELECT count(*) FROM work_session WHERE store_id = 10 AND step = 'input' AND current_version = 1",
 				Integer.class);
