@@ -2,6 +2,7 @@ package com.solution.session.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -9,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.OffsetDateTime;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -17,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
+import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.WorkSessionService;
 
@@ -98,4 +102,38 @@ class WorkSessionControllerTest {
 				.andExpect(jsonPath("$.status").value("error"))
 				.andExpect(jsonPath("$.message").value("매장을 찾을 수 없습니다."));
 	}
+
+	@Test
+	void 업무_문맥을_복원한다() throws Exception {
+		given(workSessionService.getContext(100L)).willReturn(ApiResponse.ok(new WorkSessionContextResponse(
+				100, 10, "purchase", "agent", "이번 주 매입 준비", 2, 1002L, false, "input",
+				null, false,
+				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"),
+				OffsetDateTime.parse("2026-11-13T10:12:00+09:00"))));
+
+		mockMvc.perform(get("/api/v1/work-sessions/100"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.session_id").value(100))
+				.andExpect(jsonPath("$.data.current_version_id").value(1002))
+				.andExpect(jsonPath("$.data.input_confirmed").value(false))
+				.andExpect(jsonPath("$.data.has_confirmation").value(false));
+	}
+
+	@Test
+	void 없는_업무_조회는_404() throws Exception {
+		given(workSessionService.getContext(999L)).willThrow(ApiException.notFound("업무를 찾을 수 없습니다."));
+
+		mockMvc.perform(get("/api/v1/work-sessions/999"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.status").value("error"))
+				.andExpect(jsonPath("$.message").value("업무를 찾을 수 없습니다."));
+	}
+	@ParameterizedTest
+	@ValueSource(strings = {"not-a-number", "9223372036854775808"})
+	void 업무번호가_long_형식이_아니면_500_대신_400(String sessionId) throws Exception {
+		mockMvc.perform(get("/api/v1/work-sessions/" + sessionId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
 }
