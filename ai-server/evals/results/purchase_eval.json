@@ -1,0 +1,911 @@
+{
+  "meta": {
+    "run_at": "2026-11-16 00:19"
+  },
+  "summary": {
+    "cases": 44,
+    "passed": 44,
+    "oracle_checked": 36,
+    "plans_rechecked": 27,
+    "baseline_valid": 12,
+    "baseline_broken": 9,
+    "saving_pct_mean": 1.17,
+    "saving_pct_max": 11.34,
+    "ms_median": 2.9,
+    "ms_max": 12.7
+  },
+  "cases": [
+    {
+      "id": "E01",
+      "name": "명세 예시 (품목 2 · 거래처 2)",
+      "source": "API 명세 손계산 (11.12)",
+      "status": "ok",
+      "message": null,
+      "ms": 6.4,
+      "problems": [],
+      "p1": 120400,
+      "p2": 138000,
+      "baseline": 135800,
+      "baseline_violations": [],
+      "violations": null,
+      "saving_vs_baseline_krw": 15400,
+      "saving_pct": 11.34,
+      "passed": true
+    },
+    {
+      "id": "E02",
+      "name": "현식 합성 사례 (품목 5 · 거래처 2)",
+      "source": "방현식 블라인드 정답 (10.26)",
+      "status": "ok",
+      "message": null,
+      "ms": 5.3,
+      "problems": [],
+      "p1": 39800,
+      "p2": 40100,
+      "baseline": 40900,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 39800,
+        "p2": 40100
+      },
+      "saving_vs_baseline_krw": 1100,
+      "saving_pct": 2.69,
+      "passed": true
+    },
+    {
+      "id": "E03",
+      "name": "현식 사례 · 배송 한도 1",
+      "source": "방현식 블라인드 정답 (10.26)",
+      "status": "ok",
+      "message": null,
+      "ms": 1.0,
+      "problems": [],
+      "p1": 40100,
+      "p2": "same",
+      "baseline": 40900,
+      "baseline_violations": [
+        "delivery_count"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 40100,
+        "p2": 40100
+      },
+      "passed": true
+    },
+    {
+      "id": "E04",
+      "name": "현식 사례 · 예산이 최적 금액과 같음",
+      "source": "방현식 블라인드 정답 (10.26)",
+      "status": "ok",
+      "message": null,
+      "ms": 6.7,
+      "problems": [],
+      "p1": 39800,
+      "p2": "unavailable",
+      "baseline": 40900,
+      "baseline_violations": [
+        "budget"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 39800,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "E05",
+      "name": "현식 사례 · 예산 1원 부족",
+      "source": "방현식 블라인드 정답 (10.26)",
+      "status": "infeasible",
+      "message": "예산 39,799원으로는 필요한 양을 살 수 없어요. 최소 39,800원이 필요해요.",
+      "ms": 10.2,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "E13",
+      "name": "현식 사례 · 토마토 보관 한도 2,000g",
+      "source": "신준호 손계산 (11.16)",
+      "status": "ok",
+      "message": null,
+      "ms": 2.2,
+      "problems": [],
+      "p1": 39800,
+      "p2": 41200,
+      "baseline": 40900,
+      "baseline_violations": [
+        "storage"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 39800,
+        "p2": 41200
+      },
+      "passed": true
+    },
+    {
+      "id": "E14",
+      "name": "현식 사례 · 토마토 보관 한도 1,999g",
+      "source": "방현식 블라인드 정답 (10.26)",
+      "status": "infeasible",
+      "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
+      "ms": 4.4,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "E06",
+      "name": "시연 자료 초안 (품목 5 · 거래처 4)",
+      "source": "신준호 계산 (11.15), 시연 자료 정경 확인 전",
+      "status": "ok",
+      "message": null,
+      "ms": 10.8,
+      "problems": [],
+      "p1": 125500,
+      "p2": 127500,
+      "baseline": 119500,
+      "baseline_violations": [
+        "delivery_count",
+        "minimum_order"
+      ],
+      "violations": null,
+      "passed": true
+    },
+    {
+      "id": "E07",
+      "name": "폐기 조건 · 우유 한도에 딱 맞음",
+      "source": "API 명세 손계산 (11.16)",
+      "status": "ok",
+      "message": null,
+      "ms": 2.6,
+      "problems": [],
+      "p1": 120400,
+      "p2": "unavailable",
+      "baseline": 135800,
+      "baseline_violations": [
+        "spoilage"
+      ],
+      "violations": null,
+      "passed": true
+    },
+    {
+      "id": "E08",
+      "name": "폐기 조건 · 포장 단위로 못 맞춤",
+      "source": "API 명세 손계산 (11.16)",
+      "status": "infeasible",
+      "message": "기간 끝 재고 한도 조건 때문에 필요한 양을 살 수 없어요.",
+      "ms": 7.9,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "spoilage"
+      ],
+      "passed": true
+    },
+    {
+      "id": "E09",
+      "name": "예산 부족 (명세 예시)",
+      "source": "API 명세 손계산 (11.12)",
+      "status": "infeasible",
+      "message": "예산 100,000원으로는 필요한 양을 살 수 없어요. 최소 120,400원이 필요해요.",
+      "ms": 5.9,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "passed": true
+    },
+    {
+      "id": "E10",
+      "name": "재고 빈칸",
+      "source": "API 명세 (needs_input)",
+      "status": "needs_input",
+      "message": "우유 재고가 지금 얼마나 있나요?",
+      "ms": 0.0,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": null,
+      "passed": true
+    },
+    {
+      "id": "E11",
+      "name": "견적 단위가 품목 단위와 다름",
+      "source": "API 명세 (400)",
+      "status": "error",
+      "message": "quotes[0]의 단위(ml)가 품목 beans의 기준 단위(g)와 다릅니다.",
+      "ms": 0.0,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": null,
+      "passed": true
+    },
+    {
+      "id": "E12",
+      "name": "기간 끝 재고 한도 < 안전재고",
+      "source": "API 명세 (400)",
+      "status": "error",
+      "message": "items[1](milk)의 기간 끝 최대 재고(1,000)가 안전재고(2,000)보다 작습니다.",
+      "ms": 0.0,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": null,
+      "passed": true
+    },
+    {
+      "id": "R01",
+      "name": "무작위 소규모 1",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 20,100원이 필요해요.",
+      "ms": 0.9,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R02",
+      "name": "무작위 소규모 2",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.9,
+      "problems": [],
+      "p1": 25400,
+      "p2": "same",
+      "baseline": 23900,
+      "baseline_violations": [
+        "minimum_order"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 25400,
+        "p2": 25400
+      },
+      "passed": true
+    },
+    {
+      "id": "R03",
+      "name": "무작위 소규모 3",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "배송 1회로는 필요한 양을 살 수 없어요. 최소 2회가 필요해요.",
+      "ms": 6.6,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "delivery_count"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R04",
+      "name": "무작위 소규모 4",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.7,
+      "problems": [],
+      "p1": 30000,
+      "p2": "same",
+      "baseline": 31600,
+      "baseline_violations": [
+        "delivery_count"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 30000,
+        "p2": 30000
+      },
+      "passed": true
+    },
+    {
+      "id": "R05",
+      "name": "무작위 소규모 5",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
+      "ms": 8.2,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R06",
+      "name": "무작위 소규모 6",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 6.4,
+      "problems": [],
+      "p1": 40000,
+      "p2": 41400,
+      "baseline": 40000,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 40000,
+        "p2": 41400
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R07",
+      "name": "무작위 소규모 7",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 33,500원이 필요해요.",
+      "ms": 8.5,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R08",
+      "name": "무작위 소규모 8",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 32,100원이 필요해요.",
+      "ms": 0.8,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R09",
+      "name": "무작위 소규모 9",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 7.1,
+      "problems": [],
+      "p1": 39800,
+      "p2": "same",
+      "baseline": 39800,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 39800,
+        "p2": 39800
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R10",
+      "name": "무작위 소규모 10",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.9,
+      "problems": [],
+      "p1": 15500,
+      "p2": "same",
+      "baseline": 15500,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 15500,
+        "p2": 15500
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R11",
+      "name": "무작위 소규모 11",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
+      "ms": 3.1,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget",
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R12",
+      "name": "무작위 소규모 12",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 11.9,
+      "problems": [],
+      "p1": 9300,
+      "p2": "same",
+      "baseline": 9300,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 9300,
+        "p2": 9300
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R13",
+      "name": "무작위 소규모 13",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
+      "ms": 2.0,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R14",
+      "name": "무작위 소규모 14",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "배송 횟수, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
+      "ms": 12.7,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "delivery_count",
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R15",
+      "name": "무작위 소규모 15",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.6,
+      "problems": [],
+      "p1": 13200,
+      "p2": "same",
+      "baseline": 13200,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 13200,
+        "p2": 13200
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R16",
+      "name": "무작위 소규모 16",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 7.5,
+      "problems": [],
+      "p1": 8400,
+      "p2": "same",
+      "baseline": 8400,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 8400,
+        "p2": 8400
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R17",
+      "name": "무작위 소규모 17",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산, 배송 횟수 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
+      "ms": 9.8,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget",
+        "delivery_count"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R18",
+      "name": "무작위 소규모 18",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 57,600원이 필요해요.",
+      "ms": 1.0,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R19",
+      "name": "무작위 소규모 19",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 31,500원이 필요해요.",
+      "ms": 0.8,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R20",
+      "name": "무작위 소규모 20",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.4,
+      "problems": [],
+      "p1": 8600,
+      "p2": "same",
+      "baseline": 8600,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 8600,
+        "p2": 8600
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R21",
+      "name": "무작위 소규모 21",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 43,100원이 필요해요.",
+      "ms": 0.8,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R22",
+      "name": "무작위 소규모 22",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 8.6,
+      "problems": [],
+      "p1": 27200,
+      "p2": "same",
+      "baseline": 22300,
+      "baseline_violations": [
+        "minimum_order"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 27200,
+        "p2": 27200
+      },
+      "passed": true
+    },
+    {
+      "id": "R23",
+      "name": "무작위 소규모 23",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 1.0,
+      "problems": [],
+      "p1": 28300,
+      "p2": "unavailable",
+      "baseline": 28300,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 28300,
+        "p2": null
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R24",
+      "name": "무작위 소규모 24",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
+      "ms": 2.2,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R25",
+      "name": "무작위 소규모 25",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 7.8,
+      "problems": [],
+      "p1": 24900,
+      "p2": "same",
+      "baseline": 21600,
+      "baseline_violations": [
+        "minimum_order"
+      ],
+      "violations": null,
+      "oracle": {
+        "p1": 24900,
+        "p2": 24900
+      },
+      "passed": true
+    },
+    {
+      "id": "R26",
+      "name": "무작위 소규모 26",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 0.9,
+      "problems": [],
+      "p1": 25500,
+      "p2": "unavailable",
+      "baseline": 25500,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 25500,
+        "p2": null
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R27",
+      "name": "무작위 소규모 27",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
+      "ms": 3.9,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget",
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R28",
+      "name": "무작위 소규모 28",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "ok",
+      "message": null,
+      "ms": 1.2,
+      "problems": [],
+      "p1": 12800,
+      "p2": 13200,
+      "baseline": 12800,
+      "baseline_violations": [],
+      "violations": null,
+      "oracle": {
+        "p1": 12800,
+        "p2": 13200
+      },
+      "saving_vs_baseline_krw": 0,
+      "saving_pct": 0.0,
+      "passed": true
+    },
+    {
+      "id": "R29",
+      "name": "무작위 소규모 29",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "배송 1회로는 필요한 양을 살 수 없어요. 최소 2회가 필요해요.",
+      "ms": 1.2,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "delivery_count"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    },
+    {
+      "id": "R30",
+      "name": "무작위 소규모 30",
+      "source": "독립 전수 열거 (seed 20261116)",
+      "status": "infeasible",
+      "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
+      "ms": 8.5,
+      "problems": [],
+      "p1": null,
+      "p2": null,
+      "baseline": null,
+      "baseline_violations": null,
+      "violations": [
+        "budget",
+        "storage"
+      ],
+      "oracle": {
+        "p1": null,
+        "p2": null
+      },
+      "passed": true
+    }
+  ]
+}
