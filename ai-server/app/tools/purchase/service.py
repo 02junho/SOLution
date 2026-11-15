@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from app.core.response import ApiResponse, infeasible, needs_input, ok
 from app.tools.purchase.optimizer import (
+    RELAXABLE,
     Plan,
     Prepared,
     baseline,
@@ -203,7 +204,8 @@ def _one_delivery_reason(p: Prepared) -> str:
             for i in needed
         )
         return f"한 거래처에서 모든 품목을 살 수 없어요. ({where})"
-    group, _ = diagnose(p, 1)
+    # 배송 1회 안은 배송 횟수를 1로 고정한 것이라, 배송 횟수를 풀어 보는 건 이유가 되지 않는다.
+    group, _ = diagnose(p, 1, tuple(c for c in RELAXABLE if c != "delivery_count"))
     if group == ("budget",):
         return "배송 1회로 사면 예산을 넘어요."
     if group == ("minimum_order",):

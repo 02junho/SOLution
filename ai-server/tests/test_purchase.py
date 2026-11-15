@@ -280,6 +280,11 @@ def test_기간_끝_재고_한도에_딱_맞으면_그대로():
     assert milk["max_end_inventory"] == 5000
     # 기준선은 우유 12L × 2 → 기간 끝 11,000이 남아 한도를 넘는다.
     assert "spoilage" in data["detail"]["baseline"]["constraint_violations"]
+    # 안 2(전부 거래처 A)는 A가 우유를 12L로만 팔아 기간 끝에 11,000이 남으므로 만들 수 없다.
+    assert _choices(data)["purchase_2"] == {
+        "choice_key": "purchase_2", "label": "배송 1회", "available": False, "same_as": None,
+        "unavailable_reason": "배송 1회로 사면 기간 끝에 너무 많이 남아요.",
+    }
 
 
 def test_기간_끝에_너무_많이_남으면_infeasible():

@@ -248,14 +248,19 @@ def baseline_violations(p: Prepared, plan: Plan) -> list[str]:
     return broken
 
 
-def diagnose(p: Prepared, max_delivery_count: int) -> tuple[tuple[str, ...], Plan | None]:
-    """답이 없을 때, 어떤 조건을 풀면 답이 생기는지. (풀어야 하는 조건들, 그때의 구매안)"""
-    for size in (1, 2, len(RELAXABLE)):
-        for group in combinations(RELAXABLE, size):
+def diagnose(
+    p: Prepared, max_delivery_count: int, candidates: tuple[str, ...] = RELAXABLE
+) -> tuple[tuple[str, ...], Plan | None]:
+    """답이 없을 때, 어떤 조건을 풀면 답이 생기는지. (풀어야 하는 조건들, 그때의 구매안)
+
+    candidates: 풀어 볼 조건. 배송 1회 안의 이유를 찾을 때는 배송 횟수를 빼고 본다.
+    """
+    for size in (1, 2, len(candidates)):
+        for group in combinations(candidates, size):
             plan = solve(p, max_delivery_count, relax=group)
             if plan is not None:
                 return group, plan
-    return RELAXABLE, None
+    return candidates, None
 
 
 def quote_label(q: PurchaseQuote) -> str:
