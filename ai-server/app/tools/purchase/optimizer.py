@@ -2,7 +2,8 @@
 
 - 살 양 = max(0, 총필요량 + 안전재고 − 가용재고). 재고 차감은 여기서 한 번만 한다 (URQ-PUR-001).
 - 변수: 견적별 묶음 수(정수), 거래처 사용 여부, 거래처 무료배송 달성 여부.
-- 조건: 필요량 충족, 보관 한도, 거래처 최소 주문금액, 배송 횟수 한도(거래처 1곳 = 배송 1회), 예산.
+- 조건: 필요량 충족, 보관 한도, 기간 끝 재고 한도(폐기 위험), 거래처 최소 주문금액,
+  배송 횟수 한도(거래처 1곳 = 배송 1회), 예산.
 - 목표: 상품값 + 배송비 최소. 금액이 같으면 묶음 수가 적은 쪽.
 - 조건을 지키는 안이 없으면 조건을 하나씩(그다음 둘씩) 풀어 보며 어떤 조건 때문인지 찾는다.
 """
@@ -18,7 +19,7 @@ import pulp
 from app.tools.purchase.schemas import PurchaseItem, PurchaseQuote, PurchaseRequest
 
 TIME_LIMIT_SEC = 5
-RELAXABLE = ("budget", "delivery_count", "minimum_order", "storage")
+RELAXABLE = ("budget", "delivery_count", "minimum_order", "storage", "spoilage")
 # 금액이 같은 안 중 묶음 수가 적은 쪽을 고르기 위한 아주 작은 가중치. 금액(원 단위 정수)에는 영향이 없다.
 _PACK_TIE_BREAK = 1e-4
 
@@ -72,6 +73,11 @@ def prepare(req: PurchaseRequest) -> Prepared:
     if len(set(supplier_ids)) != len(supplier_ids):
         raise InputError("거래처 ID가 겹칩니다.")
     items = {i.item_id: i for i in req.items}
+    for k, i in enumerate(req.items):
+        if i.max_end_inventory is not None and i.max_end_inventory < i.safety_stock:
+            raise InputError(
+                f"items[{k}]({i.item_id})의 기간 끝 최대 재고({_num(i.max_end_inventory)})가 안전재고({_num(i.safety_stock)})보다 작습니다."
+            )
 
     quotes_by_item: dict[str, list[int]] = {i: [] for i in item_ids}
     quotes_by_supplier: dict[str, list[int]] = {s: [] for s in supplier_ids}
@@ -103,6 +109,8 @@ def _upper_bound(p: Prepared, q_idx: int, relax: tuple[str, ...] = ()) -> int:
     ub = math.ceil(p.buy_need[q.item_id] / q.pack_size) + math.ceil(top_up_krw / max(q.pack_price_krw, 1)) + 1
     if item.storage_capacity is not None and "storage" not in relax:
         ub = min(ub, math.floor(storage_room(item) / q.pack_size))
+    if item.max_end_inventory is not None and "spoilage" not in relax:
+        ub = min(ub, math.floor(spoilage_room(item) / q.pack_size))
     return max(0, ub)
 
 
@@ -113,6 +121,13 @@ def storage_room(item: PurchaseItem) -> float:
     return max(0.0, item.storage_capacity - (item.usable_inventory or 0.0))
 
 
+def spoilage_room(item: PurchaseItem) -> float:
+    """기간 끝 재고(재고 + 산 양 − 총필요량)가 한도를 넘지 않게 살 수 있는 최대량. 이미 넘었으면 0."""
+    if item.max_end_inventory is None:
+        return math.inf
+    return max(0.0, item.max_end_inventory + item.gross_need - (item.usable_inventory or 0.0))
+
+
 def bought_of(p: Prepared, plan: Plan, item_id: str) -> float:
     return sum(p.req.quotes[q].pack_size * n for q, n in plan.pack_counts.items() if p.req.quotes[q].item_id == item_id)
 
@@ -120,6 +135,11 @@ def bought_of(p: Prepared, plan: Plan, item_id: str) -> float:
 def over_storage(p: Prepared, plan: Plan) -> list[str]:
     """보관 한도를 넘게 사는 품목 ID."""
     return [i.item_id for i in p.req.items if bought_of(p, plan, i.item_id) > storage_room(i)]
+
+
+def over_spoilage(p: Prepared, plan: Plan) -> list[str]:
+    """기간 끝에 한도보다 많이 남는(버려질 위험이 큰) 품목 ID."""
+    return [i.item_id for i in p.req.items if bought_of(p, plan, i.item_id) > spoilage_room(i)]
 
 
 def solve(p: Prepared, max_delivery_count: int, relax: tuple[str, ...] = ()) -> Plan | None:
@@ -156,6 +176,8 @@ def solve(p: Prepared, max_delivery_count: int, relax: tuple[str, ...] = ()) -> 
             prob += bought >= p.buy_need[item.item_id], f"need_{k}"
         if item.storage_capacity is not None and "storage" not in relax:
             prob += bought <= storage_room(item), f"storage_{k}"
+        if item.max_end_inventory is not None and "spoilage" not in relax:
+            prob += bought <= spoilage_room(item), f"spoilage_{k}"
 
     if "delivery_count" not in relax:
         prob += pulp.lpSum(use.values()) <= max_delivery_count, "delivery_count"
@@ -221,6 +243,8 @@ def baseline_violations(p: Prepared, plan: Plan) -> list[str]:
         broken.append("minimum_order")
     if over_storage(p, plan):
         broken.append("storage")
+    if over_spoilage(p, plan):
+        broken.append("spoilage")
     return broken
 
 

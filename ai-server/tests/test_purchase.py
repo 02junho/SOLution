@@ -268,6 +268,57 @@ def test_보관_한도를_넘으면_infeasible():
     assert payload["data"]["violations"] == [{"constraint": "storage", "label": "보관 한도", "item_ids": ["beans"]}]
 
 
+def test_기간_끝_재고_한도에_딱_맞으면_그대로():
+    body = _req()
+    body["items"][1]["max_end_inventory"] = 5000  # 안 1 우유: 8,000 + 18,000 − 21,000 = 5,000
+
+    data = _post(body).json()["data"]
+
+    assert _choices(data)["purchase_1"]["total_krw"] == 120400
+    assert _choices(data)["purchase_1"]["constraints_met"]["spoilage"] is True
+    milk = next(b for b in data["detail"]["buy_needs"] if b["item_id"] == "milk")
+    assert milk["max_end_inventory"] == 5000
+    # 기준선은 우유 12L × 2 → 기간 끝 11,000이 남아 한도를 넘는다.
+    assert "spoilage" in data["detail"]["baseline"]["constraint_violations"]
+
+
+def test_기간_끝에_너무_많이_남으면_infeasible():
+    body = _req()
+    body["items"][1]["max_end_inventory"] = 4000  # 우유는 15,000~17,000 사이로 사야 하는데 12L·6L로는 못 맞춘다
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "infeasible"
+    assert payload["data"]["violations"] == [{"constraint": "spoilage", "label": "기간 끝 재고 한도", "item_ids": ["milk"]}]
+    assert payload["data"]["suggestions"] == ["더 작은 포장 견적을 추가하거나 기간 끝 재고 한도를 늘리기"]
+    assert payload["message"] == "기간 끝 재고 한도 조건 때문에 필요한 양을 살 수 없어요."
+
+
+def test_작은_포장이_있으면_기간_끝_재고_한도를_지킨다():
+    body = _req()
+    body["items"][1]["max_end_inventory"] = 4000
+    body["quotes"].append(
+        {"supplier_id": "B", "item_id": "milk", "pack_size": 1000, "pack_unit": "ml", "pack_price_krw": 3000, "vat_included": True}
+    )
+
+    data = _post(body).json()["data"]
+
+    detail = next(c for c in data["detail"]["choices"] if c["choice_key"] == "purchase_1")
+    milk = next(s for s in detail["stock_after"] if s["item_id"] == "milk")
+    assert 15000 <= milk["bought"] <= 17000
+    assert milk["end_of_period"] <= 4000
+
+
+def test_기간_끝_재고_한도가_안전재고보다_작으면_400():
+    body = _req()
+    body["items"][1]["max_end_inventory"] = 1000  # 안전재고 2,000
+
+    response = _post(body)
+
+    assert response.status_code == 400
+    assert "안전재고" in response.json()["message"]
+
+
 def test_견적이_없는_품목():
     body = _req()
     body["items"].append(

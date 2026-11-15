@@ -13,6 +13,7 @@ from app.tools.purchase.optimizer import (
     Prepared,
     baseline,
     bought_of,
+    over_spoilage,
     over_storage,
     baseline_violations,
     diagnose,
@@ -23,7 +24,13 @@ from app.tools.purchase.optimizer import (
 from app.tools.purchase.schemas import PurchaseRequest
 
 ASSUMPTIONS = ["거래처 1곳 = 배송 1회"]
-LABELS = {"budget": "예산", "delivery_count": "배송 횟수", "minimum_order": "최소 주문금액", "storage": "보관 한도"}
+LABELS = {
+    "budget": "예산",
+    "delivery_count": "배송 횟수",
+    "minimum_order": "최소 주문금액",
+    "storage": "보관 한도",
+    "spoilage": "기간 끝 재고 한도",
+}
 
 
 def run(req: PurchaseRequest) -> ApiResponse[dict]:
@@ -75,7 +82,7 @@ def run(req: PurchaseRequest) -> ApiResponse[dict]:
             "buy_needs": [
                 {"item_id": i.item_id, "base_unit": i.base_unit, "gross_need": _n(i.gross_need),
                  "usable_inventory": _n(i.usable_inventory), "safety_stock": _n(i.safety_stock),
-                 "buy_need": _n(p.buy_need[i.item_id])}
+                 "max_end_inventory": _n(i.max_end_inventory), "buy_need": _n(p.buy_need[i.item_id])}
                 for i in req.items
             ],
             "choices": detail_choices,
@@ -110,7 +117,8 @@ def _choice_summary(p: Prepared, key: str, label: str, plan: Plan, base: Plan) -
             for sid, g in plan.goods_by_supplier.items()
         ],
         "diff_from_baseline_krw": plan.total_krw - base.total_krw,
-        "constraints_met": {"budget": True, "minimum_order": True, "storage": True, "delivery_count": True},
+        "constraints_met": {"budget": True, "minimum_order": True, "storage": True, "delivery_count": True,
+                            "spoilage": True},
         "warning_ids": [],
     }
 
@@ -202,6 +210,8 @@ def _one_delivery_reason(p: Prepared) -> str:
         return "배송 1회로는 거래처 최소 주문금액을 맞출 수 없어요."
     if group == ("storage",):
         return "배송 1회로 사면 보관 한도를 넘어요."
+    if group == ("spoilage",):
+        return "배송 1회로 사면 기간 끝에 너무 많이 남아요."
     return "배송 1회로는 조건을 지키는 구매안이 없어요."
 
 
@@ -247,6 +257,10 @@ def _infeasible(p: Prepared) -> ApiResponse[dict]:
             if relaxed is not None:
                 v["item_ids"] = over_storage(p, relaxed)
             suggestions.append("보관 한도를 늘리거나 안전재고를 줄이기")
+        elif name == "spoilage":
+            if relaxed is not None:
+                v["item_ids"] = over_spoilage(p, relaxed)
+            suggestions.append("더 작은 포장 견적을 추가하거나 기간 끝 재고 한도를 늘리기")
         violations.append(v)
 
     if group == ("budget",) and relaxed is not None:
