@@ -29,7 +29,8 @@ import org.testcontainers.utility.DockerImageName;
  * 실제 서버 문맥(Spring) + 실제 DB로 API를 호출한다. 컨트롤러·검증·서비스·SQL·DB INSERT까지 끝까지 확인한다.
  * (Docker가 떠 있어야 실행된다. 단위 테스트와 달리 가짜 서비스를 쓰지 않는다.)
  */
-@SpringBootTest(properties = "demo.owner-key=demo-owner")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+		properties = "demo.owner-key=demo-owner")
 @AutoConfigureMockMvc
 @Testcontainers
 class WorkSessionApiIntegrationTest {
@@ -39,6 +40,9 @@ class WorkSessionApiIntegrationTest {
 	@ServiceConnection
 	static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
 			DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
+
+	@org.springframework.boot.test.web.server.LocalServerPort
+	private int port;
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -217,6 +221,131 @@ class WorkSessionApiIntegrationTest {
 				.andExpect(jsonPath("$.data.current_version_id").value(nullValue()))
 				.andExpect(jsonPath("$.data.created_at").isString())
 				.andExpect(jsonPath("$.data.updated_at").isString());
+	}
+
+	@Test
+	void 업무_목록을_최신순으로_실제_DB에서_돌려준다() throws Exception {
+		insertListSession(701, 10, "purchase", "2026-11-13T08:00:00+09:00");
+		insertListSession(702, 10, "operation", "2026-11-13T09:00:00+09:00");
+		insertListSession(703, 10, "purchase", "2026-11-13T10:00:00+09:00");
+		// 남의 매장 업무는 목록에 보이면 안 된다.
+		insertListSession(704, 20, "purchase", "2026-11-13T11:00:00+09:00");
+
+		mockMvc.perform(get("/api/v1/work-sessions"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items.length()").value(3))
+				.andExpect(jsonPath("$.data.items[0].session_id").value(703))
+				.andExpect(jsonPath("$.data.items[2].session_id").value(701))
+				.andExpect(jsonPath("$.data.next_cursor").value(nullValue()));
+	}
+
+	@Test
+	void 목록은_feature_type으로_거른다() throws Exception {
+		insertListSession(701, 10, "purchase", "2026-11-13T08:00:00+09:00");
+		insertListSession(702, 10, "operation", "2026-11-13T09:00:00+09:00");
+
+		mockMvc.perform(get("/api/v1/work-sessions").param("feature_type", "operation"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items.length()").value(1))
+				.andExpect(jsonPath("$.data.items[0].session_id").value(702));
+	}
+
+	@Test
+	void 목록은_size와_커서로_다음_페이지를_준다() throws Exception {
+		insertListSession(701, 10, "purchase", "2026-11-13T08:00:00+09:00");
+		insertListSession(702, 10, "purchase", "2026-11-13T09:00:00+09:00");
+
+		// 첫 페이지: 최신 한 건 + 다음 커서
+		String body = mockMvc.perform(get("/api/v1/work-sessions").param("size", "1"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items.length()").value(1))
+				.andExpect(jsonPath("$.data.items[0].session_id").value(702))
+				.andReturn().getResponse().getContentAsString();
+		String nextCursor = com.jayway.jsonpath.JsonPath.read(body, "$.data.next_cursor");
+		assertThat(nextCursor).isNotNull();
+
+		// 둘째 페이지: 커서 뒤의 더 오래된 한 건
+		mockMvc.perform(get("/api/v1/work-sessions").param("size", "1").param("cursor", nextCursor))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items.length()").value(1))
+				.andExpect(jsonPath("$.data.items[0].session_id").value(701));
+	}
+
+	@Test
+	void 동일_시각과_마이크로초_경계에서도_필터_페이지에_중복이나_누락이_없다() throws Exception {
+		insertListSession(701, 10, "purchase", "2026-11-13T10:00:00.123455+09:00");
+		insertListSession(702, 10, "purchase", "2026-11-13T10:00:00.123456+09:00");
+		insertListSession(703, 10, "purchase", "2026-11-13T10:00:00.123456+09:00");
+		insertListSession(704, 10, "operation", "2026-11-13T11:00:00+09:00");
+		insertListSession(705, 20, "purchase", "2026-11-13T12:00:00+09:00");
+		String cursor = null;
+		for (int expected : new int[] {703, 702, 701}) {
+			var request = get("/api/v1/work-sessions").param("feature_type", "purchase").param("size", "1");
+			if (cursor != null) {
+				request.param("cursor", cursor);
+			}
+			String body = mockMvc.perform(request)
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.items.length()").value(1))
+					.andExpect(jsonPath("$.data.items[0].session_id").value(expected))
+					.andReturn().getResponse().getContentAsString();
+			cursor = com.jayway.jsonpath.JsonPath.read(body, "$.data.next_cursor");
+			if (expected != 701) {
+				assertThat(cursor).isNotBlank();
+			}
+		}
+		assertThat(cursor).isNull();
+	}
+
+	@Test
+	void 업무가_없으면_빈_목록과_null_커서를_반환한다() throws Exception {
+		mockMvc.perform(get("/api/v1/work-sessions"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ok"))
+				.andExpect(jsonPath("$.data.items").isEmpty())
+				.andExpect(jsonPath("$.data.next_cursor").value(nullValue()))
+				.andExpect(jsonPath("$.message").value(nullValue()));
+	}
+
+	@Test
+	void 목록의_잘못된_필터와_커서는_공통_400_응답을_반환한다() throws Exception {
+		for (String[] param : new String[][] {{"feature_type", "delivery"}, {"cursor", "!invalid!"},
+				{"cursor", "bm90LWEtY3Vyc29y"}}) {
+			mockMvc.perform(get("/api/v1/work-sessions").param(param[0], param[1]))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.status").value("error"));
+		}
+	}
+
+	@Test
+	void 실제_HTTP로_목록과_문맥복원_API를_호출한다() throws Exception {
+		insertListSession(701, 10, "purchase", "2026-11-13T10:00:00+09:00");
+		insertListSession(702, 20, "purchase", "2026-11-13T11:00:00+09:00");
+		try (var client = java.net.http.HttpClient.newHttpClient()) {
+			for (String path : new String[] {"/api/v1/work-sessions?feature_type=purchase&size=1",
+					"/api/v1/work-sessions/701"}) {
+				var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://localhost:" + port + path))
+						.GET().build();
+				var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+				assertThat(response.statusCode()).isEqualTo(200);
+				assertThat((String) com.jayway.jsonpath.JsonPath.read(response.body(), "$.status")).isEqualTo("ok");
+				String idPath = path.contains("?") ? "$.data.items[0].session_id" : "$.data.session_id";
+				assertThat(((Number) com.jayway.jsonpath.JsonPath.read(response.body(), idPath)).longValue()).isEqualTo(701);
+				if (path.contains("?")) {
+					assertThat((Object) com.jayway.jsonpath.JsonPath.read(response.body(), "$.data.next_cursor")).isNull();
+				}
+			}
+		}
+	}
+
+	/** 목록 시나리오용 업무를 updated_at까지 지정해 넣는다(정렬·커서 검증). */
+	private void insertListSession(long sessionId, long storeId, String featureType, String updatedAt) {
+		jdbcTemplate.update("""
+				INSERT INTO work_session (session_id, store_id, feature_type, input_method, title,
+				                          current_version, step, created_at, updated_at)
+				VALUES (?, ?, ?, 'agent', '목록 업무', 1, 'input', ?, ?)
+				""", sessionId, storeId, featureType, java.time.OffsetDateTime.parse(updatedAt),
+				java.time.OffsetDateTime.parse(updatedAt));
 	}
 
 	/** 조회 시나리오용 업무를 실제 DB에 넣는다. */

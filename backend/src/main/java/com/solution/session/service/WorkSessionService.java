@@ -1,6 +1,9 @@
 package com.solution.session.service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.Base64;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
@@ -10,8 +13,10 @@ import com.solution.common.id.IdGenerator;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionCreateRequest;
+import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.SessionRepository.SessionContextRow;
+import com.solution.session.service.SessionRepository.SessionSummaryRow;
 
 /**
  * 업무(세션) 시작·문맥 복원 처리. 이 단계에서는 AI·계산을 부르지 않는다.
@@ -26,6 +31,8 @@ public class WorkSessionService {
 	static final String SESSION_NOT_FOUND = "업무를 찾을 수 없습니다.";
 	private static final String STEP_INPUT = "input";
 	private static final int FIRST_VERSION = 1;
+	private static final int DEFAULT_SIZE = 20;
+	private static final int MAX_SIZE = 100;
 
 	private final SessionRepository repository;
 	private final CurrentOwner currentOwner;
@@ -70,6 +77,60 @@ public class WorkSessionService {
 				row.currentVersion(), row.currentVersionId(), row.inputConfirmedAt() != null, row.step(),
 				row.latestResultId(), row.hasConfirmation(), row.createdAt(), row.updatedAt());
 		return ApiResponse.ok(data);
+	}
+
+	/**
+	 * 내 매장의 업무를 최신순(updated_at, session_id DESC)으로 보여준다(URQ-FLW-007).
+	 * keyset 커서로 페이지를 나눈다. 한 건 더 조회해 다음 페이지 유무를 판단하고, 남으면 next_cursor를 만든다.
+	 */
+	public ApiResponse<WorkSessionListResponse> list(String featureType, String cursor, int size) {
+		if (featureType != null && !"purchase".equals(featureType) && !"operation".equals(featureType)) {
+			throw ApiException.badRequest("featureType은 purchase 또는 operation이어야 합니다.");
+		}
+		int limit = size <= 0 ? DEFAULT_SIZE : Math.min(size, MAX_SIZE);
+		Cursor decoded = decodeCursor(cursor);
+		OffsetDateTime cursorUpdatedAt = decoded == null ? null : decoded.updatedAt();
+		Long cursorSessionId = decoded == null ? null : decoded.sessionId();
+
+		// limit + 1을 읽어 다음 페이지가 있는지 본다.
+		List<SessionSummaryRow> rows = repository.findSessions(currentOwner.key(), featureType,
+				cursorUpdatedAt, cursorSessionId, limit + 1);
+
+		boolean hasNext = rows.size() > limit;
+		List<SessionSummaryRow> page = hasNext ? rows.subList(0, limit) : rows;
+
+		List<WorkSessionListResponse.Item> items = page.stream()
+				.map(row -> new WorkSessionListResponse.Item(row.sessionId(), row.featureType(), row.title(),
+						row.step(), row.currentVersion(), row.updatedAt()))
+				.toList();
+
+		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1)) : null;
+		return ApiResponse.ok(new WorkSessionListResponse(items, nextCursor));
+	}
+
+	/** 커서는 (updated_at, session_id)를 UTF-8 문자열로 이어 Base64(URL)로 감싼 불투명 값이다. */
+	private record Cursor(OffsetDateTime updatedAt, long sessionId) {
+	}
+
+	private String encodeCursor(SessionSummaryRow row) {
+		String raw = row.updatedAt().toString() + "," + row.sessionId();
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+	}
+
+	private Cursor decodeCursor(String cursor) {
+		if (cursor == null || cursor.isBlank()) {
+			return null;
+		}
+		try {
+			String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+			int comma = raw.lastIndexOf(',');
+			OffsetDateTime updatedAt = OffsetDateTime.parse(raw.substring(0, comma));
+			long sessionId = Long.parseLong(raw.substring(comma + 1));
+			return new Cursor(updatedAt, sessionId);
+		}
+		catch (RuntimeException e) {
+			throw ApiException.badRequest("커서가 올바르지 않습니다.");
+		}
 	}
 
 	/** 제목을 비워 보내면 기능에 맞는 기본 제목을 넣어 준다. */

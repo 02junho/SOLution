@@ -5,12 +5,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionCreateRequest;
+import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.WorkSessionService;
 
@@ -34,6 +36,18 @@ public class WorkSessionController {
 	@PostMapping
 	public ApiResponse<WorkSessionResponse> create(@Valid @RequestBody WorkSessionCreateRequest request) {
 		return workSessionService.create(request);
+	}
+
+	/**
+	 * 매장의 과거·진행 업무를 최신순으로 보여준다(이어하기·기록 화면, URQ-FLW-007).
+	 * 쿼리 파라미터는 snake_case(feature_type)로 받으므로 이름을 명시한다.
+	 */
+	@GetMapping
+	public ApiResponse<WorkSessionListResponse> list(
+			@RequestParam(name = "feature_type", required = false) String featureType,
+			@RequestParam(name = "cursor", required = false) String cursor,
+			@RequestParam(name = "size", required = false, defaultValue = "20") int size) {
+		return workSessionService.list(featureType, cursor, size);
 	}
 
 	/** 중단했던 업무를 다시 열 때 현재 문맥(입력 버전·단계·최근 결과/확정 유무)을 복원한다(URQ-FLW-007·HW-F01). */
