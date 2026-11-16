@@ -205,4 +205,31 @@ public class SessionRepository {
 				""", sessionId, questionId);
 	}
 
+	/** 입력 확인은 버전의 실제 소속을 따라 권한과 최신 순번을 조회한다. */
+	public record ConfirmationVersionRow(long sessionId, int versionNo, int currentVersion,
+			String ownerKey, String inputConfirmedBy, OffsetDateTime inputConfirmedAt, String step) {
+	}
+
+	public Optional<ConfirmationVersionRow> findConfirmationVersion(long versionId) {
+		return jdbcTemplate.query("""
+				SELECT v.session_id, v.version_no, s.current_version, st.owner_key,
+				       v.input_confirmed_by, v.input_confirmed_at, s.step
+				FROM work_version v
+				JOIN work_session s ON s.session_id = v.session_id
+				JOIN store st ON st.store_id = s.store_id
+				WHERE v.input_version_id = ?
+				""", (rs, i) -> new ConfirmationVersionRow(rs.getLong("session_id"), rs.getInt("version_no"),
+					rs.getInt("current_version"), rs.getString("owner_key"), rs.getString("input_confirmed_by"),
+					rs.getObject("input_confirmed_at", OffsetDateTime.class), rs.getString("step")), versionId)
+				.stream().findFirst();
+	}
+
+	/** 서버 사용자와 DB 시각을 쓰고, 재전송 시 기존 확인 값을 보존한다. */
+	public void confirmVersion(long versionId, String ownerKey) {
+		jdbcTemplate.update("""
+				UPDATE work_version SET input_confirmed_by = ?, input_confirmed_at = now()
+				WHERE input_version_id = ? AND input_confirmed_at IS NULL
+				""", ownerKey, versionId);
+	}
+
 }
