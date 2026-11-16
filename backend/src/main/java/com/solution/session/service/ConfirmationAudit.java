@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,7 +45,8 @@ public class ConfirmationAudit {
 		}
 		catch (RuntimeException e) {
 			// SQL 예외 메시지에는 데이터 원문이 섞일 수 있으므로 예외 자체는 출력하지 않는다.
-			log.warn("확정 감사 기록 실패");
+			log.warn("확정 감사 기록 실패: exception_class={}, cause_class={}", e.getClass().getName(),
+					NestedExceptionUtils.getMostSpecificCause(e).getClass().getName());
 		}
 	}
 }

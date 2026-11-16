@@ -4,9 +4,12 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,8 +61,17 @@ public class WorkResultController {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiResponse<Map<String, Object>>> handleUnexpected(Exception e) {
-		log.error("확정 저장 실패");
-		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiResponse<>(ResponseStatus.ERROR,
+		HttpStatusCode status = HttpStatus.INTERNAL_SERVER_ERROR;
+		if (e instanceof ErrorResponse error) {
+			status = error.getStatusCode();
+			if (!status.is5xxServerError()) {
+				return ResponseEntity.status(status).headers(error.getHeaders()).body(new ApiResponse<>(ResponseStatus.ERROR,
+						Map.of("detail_code", "INVALID_REQUEST"), "요청 값의 형식을 확인해 주세요."));
+			}
+		}
+		log.error("확정 저장 실패: exception_class={}, cause_class={}", e.getClass().getName(),
+				NestedExceptionUtils.getMostSpecificCause(e).getClass().getName());
+		return ResponseEntity.status(status).body(new ApiResponse<>(ResponseStatus.ERROR,
 				Map.of("detail_code", "INTERNAL_ERROR"), "저장 중 오류가 발생했습니다."));
 	}
 
