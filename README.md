@@ -150,7 +150,7 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 
 ### 5. 시연용 기본 데이터 (`DEMO_SEED=true`)
 
-`.env`의 `DEMO_SEED=true`(기본값)이면 Spring이 뜰 때 시연 데이터를 넣습니다. 이미 있으면 건너뜁니다. 내용은 `backend/src/main/resources/db/demo/demo_seed.sql`입니다.
+`.env`에서 `DEMO_SEED=true`로 바꾸면 Spring이 뜰 때 시연 데이터를 넣습니다(`.env.example`의 기본값은 `false`, 배포에서는 끕니다). 이미 있으면 건너뜁니다. CI는 compose 단계에서 켜고 확인합니다. 내용은 `backend/src/main/resources/db/demo/demo_seed.sql`입니다.
 
 | 데이터 | 값 | 계산 실행 결과 |
 | --- | --- | --- |

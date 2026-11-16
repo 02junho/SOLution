@@ -76,6 +76,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-password/' .env
+          sed -i 's/^DEMO_SEED=.*/DEMO_SEED=true/' .env
 
       - name: DB·FastAPI·Spring 띄우기
         run: docker compose up -d --build
@@ -105,7 +106,7 @@ jobs:
           echo "테이블 수: $count"
           test "$count" = "8"
 
-      # 시연용 기본 데이터(.env.example의 DEMO_SEED=true)로 화면이 부르는 주소부터
+      # 시연용 기본 데이터(위에서 켠 DEMO_SEED=true)로 화면이 부르는 주소부터
       # Spring → FastAPI 계산 → DB 저장 → 다시 조회까지 끝까지 확인한다. (정상 1 · 예산 부족 1 · 재고 빈칸 1)
       - name: 구매 시연 흐름 확인
         run: |
