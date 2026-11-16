@@ -7,6 +7,7 @@ Spring 연결 계약: ok에는 parsed_input.input 전체 입력 스냅샷, needs
 질문 ID와 입력 버전 저장은 Spring이 맡는다. 지원하지 않는 변경은 임의로 적용하지 않고 질문한다.
 """
 
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -75,3 +76,45 @@ class InterpretDraft(BaseModel):
     unresolved: list[Unresolved] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)   # 그렇게 해석한 근거(사장님 원문 조각 등)
     reply: str = ""                                     # 사장님에게 보일 한 줄 설명
+
+
+class ExplainRequest(BaseModel):
+    """Spring이 저장된 결과에서 추린 작은 요약. 설명 생성 중 계산·결과 저장은 하지 않는다."""
+
+    store_id: int
+    session_id: int
+    feature_type: Literal["purchase", "operation"]
+    result_id: int
+    result_summary: dict[str, Any] = Field(min_length=1)
+    focus: str | None = None
+
+
+    @field_validator("result_summary")
+    @classmethod
+    def validate_summary(cls, summary):
+        choices = summary.get("choices", [])
+        if not isinstance(choices, list):
+            raise ValueError("choices는 목록이어야 합니다.")
+        keys = set()
+        for choice in choices:
+            if not isinstance(choice, dict) or not isinstance(choice.get("choice_key"), str) or not choice["choice_key"].strip():
+                raise ValueError("각 안에는 choice_key가 필요합니다.")
+            if choice["choice_key"] in keys:
+                raise ValueError("choice_key는 중복될 수 없습니다.")
+            keys.add(choice["choice_key"])
+            if choice.get("label") is not None and not isinstance(choice["label"], str):
+                raise ValueError("안 이름은 문자열이어야 합니다.")
+            for field in ("total_krw", "delivery_count"):
+                value = choice.get(field)
+                if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not Decimal(str(value)).is_finite() or value < 0 or Decimal(str(value)) != Decimal(str(value)).to_integral_value()):
+                    raise ValueError(f"{field}는 0 이상의 정수여야 합니다.")
+        warnings = summary.get("warnings", [])
+        if not isinstance(warnings, list) or any(not isinstance(w, dict) for w in warnings):
+            raise ValueError("warnings는 경고 객체의 목록이어야 합니다.")
+        if any("requires_ack" in w and not isinstance(w["requires_ack"], bool) for w in warnings):
+            raise ValueError("requires_ack는 참/거짓이어야 합니다.")
+        assumptions = summary.get("assumptions", [])
+        if not isinstance(assumptions, list) or any(not isinstance(a, str) for a in assumptions):
+            raise ValueError("assumptions는 문자열 목록이어야 합니다.")
+        return summary
