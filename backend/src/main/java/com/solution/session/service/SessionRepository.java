@@ -232,4 +232,40 @@ public class SessionRepository {
 				""", ownerKey, versionId);
 	}
 
+	// ===== 대화 이력 조회 =====
+
+	public record MessageRow(long messageId, String role, String content, Integer versionNo,
+			String metadataJson, OffsetDateTime createdAt) {
+	}
+
+	public Optional<String> findSessionOwnerKey(long sessionId) {
+		return jdbcTemplate.query("""
+				SELECT st.owner_key FROM work_session s JOIN store st ON st.store_id = s.store_id
+				WHERE s.session_id = ?
+				""", (rs, i) -> rs.getString("owner_key"), sessionId).stream().findFirst();
+	}
+
+	/** ix_message_session(session_id, message_id)를 따라 다음 메시지부터 한 페이지를 읽는다. */
+	public List<MessageRow> findMessages(long sessionId, String ownerKey, Long afterMessageId, int limit) {
+		String sql = """
+				SELECT m.message_id, m.role, m.content, m.version_no, m.metadata_json::text, m.created_at
+				FROM session_message m
+				JOIN work_session s ON s.session_id = m.session_id
+				JOIN store st ON st.store_id = s.store_id
+				WHERE m.session_id = ? AND st.owner_key = ?
+				""";
+		List<Object> args = new ArrayList<>();
+		args.add(sessionId);
+		args.add(ownerKey);
+		if (afterMessageId != null) {
+			sql += " AND m.message_id > ?";
+			args.add(afterMessageId);
+		}
+		sql += " ORDER BY m.message_id ASC LIMIT ?";
+		args.add(limit);
+		return jdbcTemplate.query(sql, (rs, i) -> new MessageRow(rs.getLong("message_id"), rs.getString("role"),
+				rs.getString("content"), (Integer) rs.getObject("version_no"), rs.getString("metadata_json"),
+				rs.getObject("created_at", OffsetDateTime.class)), args.toArray());
+	}
+
 }

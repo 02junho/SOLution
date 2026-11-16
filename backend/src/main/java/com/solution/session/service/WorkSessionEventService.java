@@ -205,11 +205,12 @@ public class WorkSessionEventService {
 				data.put("input_version_id", ctx.currentVersionId());
 				data.put("version_no", ctx.currentVersion());
 				data.put("step", ctx.step());
+				long userMessageId = idGenerator.next();
 				long messageId = idGenerator.next();
 				data.put("message_id", messageId);
 				ApiResponse<Map<String, Object>> response = new ApiResponse<>(ResponseStatus.OK, data,
 						agent.message() == null ? "입력은 바꾸지 않았어요." : maskPii(agent.message()));
-				saveMessages(ctx, ctx.currentVersion(), key, fingerprint, request.eventType(), userContent, messageId, response);
+				saveMessages(ctx, ctx.currentVersion(), key, fingerprint, request.eventType(), userContent, userMessageId, messageId, response);
 				repository.updateSessionProgress(ctx.sessionId(), ctx.currentVersion(), ctx.step());
 				return response;
 			}
@@ -243,10 +244,11 @@ public class WorkSessionEventService {
 			data.put("input_version_id", null);
 		}
 		data.put("session_id", ctx.sessionId());
+		long userMessageId = idGenerator.next();
 		long messageId = idGenerator.next();
 		data.put("message_id", messageId);
 		ApiResponse<Map<String, Object>> response = new ApiResponse<>(status, data, message == null ? "" : maskPii(message));
-		saveMessages(ctx, ctx.currentVersion(), key, fingerprint, source, userContent, messageId, response);
+		saveMessages(ctx, ctx.currentVersion(), key, fingerprint, source, userContent, userMessageId, messageId, response);
 		return response;
 	}
 
@@ -272,6 +274,7 @@ public class WorkSessionEventService {
 					writeJson(input), OffsetDateTime.now());
 		}
 		repository.updateSessionProgress(ctx.sessionId(), versionNo, changed ? "review" : ctx.step());
+		long userMessageId = idGenerator.next();
 		long messageId = idGenerator.next();
 		Map<String, Object> data = new LinkedHashMap<>();
 		data.put("session_id", ctx.sessionId());
@@ -284,12 +287,12 @@ public class WorkSessionEventService {
 		data.put("warnings", warnings);
 		ApiResponse<Map<String, Object>> response = new ApiResponse<>(ResponseStatus.OK, data,
 				changed ? "입력을 저장했어요. 입력을 확인해 주세요." : "바뀐 내용이 없어요. 현재 입력을 유지합니다.");
-		saveMessages(ctx, versionNo, key, fingerprint, source, userContent, messageId, response);
+		saveMessages(ctx, versionNo, key, fingerprint, source, userContent, userMessageId, messageId, response);
 		return response;
 	}
 
 	private void saveMessages(SessionContextRow ctx, int version, String key, String fingerprint, String source,
-			String userContent, long messageId, ApiResponse<Map<String, Object>> response) {
+			String userContent, long userMessageId, long messageId, ApiResponse<Map<String, Object>> response) {
 		Map<String, Object> metadata = new LinkedHashMap<>();
 		metadata.put("request_key", key);
 		metadata.put("fingerprint", fingerprint);
@@ -301,7 +304,7 @@ public class WorkSessionEventService {
 			metadata.put("question", response.data());
 		}
 		OffsetDateTime now = OffsetDateTime.now();
-		repository.insertMessage(idGenerator.next(), ctx.sessionId(), version, "user", userContent, null, now);
+		repository.insertMessage(userMessageId, ctx.sessionId(), version, "user", userContent, null, now);
 		repository.insertMessage(messageId, ctx.sessionId(), version, "assistant", response.message(), writeJson(metadata), now);
 		// 질문만 오간 이벤트도 최근 업무 정렬에 반영한다.
 		if (response.status() != ResponseStatus.OK) {
