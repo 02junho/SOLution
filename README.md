@@ -148,6 +148,25 @@ cd frontend && npm install && npm run dev
 
 http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI → DB`가 모두 `ok`로 나오면 연결이 끝난 것입니다. `/api` 요청은 Vite가 Spring(8080)으로 넘겨 줍니다.
 
+### 5. 시연용 기본 데이터 (`DEMO_SEED=true`)
+
+`.env`의 `DEMO_SEED=true`(기본값)이면 Spring이 뜰 때 시연 데이터를 넣습니다. 이미 있으면 건너뜁니다. 내용은 `backend/src/main/resources/db/demo/demo_seed.sql`입니다.
+
+| 데이터 | 값 | 계산 실행 결과 |
+| --- | --- | --- |
+| 매장 | `store_id` 1, 을지로입구 데모 카페, `owner_key` demo-owner | |
+| 구매 업무 1001 (입력 버전 100101) | API 명세 예시 그대로 | `ok` · 안 1 120,400원 · 안 2 138,000원 |
+| 구매 업무 1002 (입력 버전 100201) | 예산만 100,000원 | `infeasible` · 예산 부족 |
+| 구매 업무 1003 (입력 버전 100301) | 우유 재고 빈칸 | `needs_input` · 우유 재고 질문 |
+
+세 업무 모두 입력 확인이 끝난 상태라, http://localhost:8080/docs 에서 바로 부를 수 있습니다.
+
+```bash
+curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Type: application/json' -d '{"input_version_id": 100101}'
+```
+
+응답의 `result_id`로 `GET /api/v1/purchase/results/{result_id}`를 부르면 상세(거래처별 목록·주문 문구)를 봅니다. CI의 compose 단계도 이 세 건으로 끝까지 확인합니다. 업무 시작(`POST /api/v1/work-sessions`)에는 `store_id` 1을 쓰면 됩니다.
+
 ---
 
 ## 서버 간 호출 규칙
