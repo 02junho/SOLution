@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from app.core.response import ApiResponse, infeasible, needs_input, ok
 from app.tools.purchase.optimizer import (
+    RELAXABLE,
+    already_over_end_limit,
     Plan,
     Prepared,
     baseline,
     bought_of,
+    over_spoilage,
     over_storage,
     baseline_violations,
     diagnose,
@@ -23,7 +26,13 @@ from app.tools.purchase.optimizer import (
 from app.tools.purchase.schemas import PurchaseRequest
 
 ASSUMPTIONS = ["거래처 1곳 = 배송 1회"]
-LABELS = {"budget": "예산", "delivery_count": "배송 횟수", "minimum_order": "최소 주문금액", "storage": "보관 한도"}
+LABELS = {
+    "budget": "예산",
+    "delivery_count": "배송 횟수",
+    "minimum_order": "최소 주문금액",
+    "storage": "보관 한도",
+    "spoilage": "기간 끝 재고 한도",
+}
 
 
 def run(req: PurchaseRequest) -> ApiResponse[dict]:
@@ -58,6 +67,7 @@ def run(req: PurchaseRequest) -> ApiResponse[dict]:
         detail_choices.append(_choice_detail(p, "purchase_2", plan2))
 
     warnings = _vat_warnings(p, {"purchase_1": plan1, **({"purchase_2": plan2} if len(detail_choices) == 2 else {})})
+    warnings += _end_stock_warnings(p, [d["choice_key"] for d in detail_choices])
     for choice in choices:
         if choice.get("available") and choice.get("same_as") is None:
             choice["warning_ids"] = [w["warning_id"] for w in warnings if choice["choice_key"] in w["choice_keys"]]
@@ -75,7 +85,7 @@ def run(req: PurchaseRequest) -> ApiResponse[dict]:
             "buy_needs": [
                 {"item_id": i.item_id, "base_unit": i.base_unit, "gross_need": _n(i.gross_need),
                  "usable_inventory": _n(i.usable_inventory), "safety_stock": _n(i.safety_stock),
-                 "buy_need": _n(p.buy_need[i.item_id])}
+                 "max_end_inventory": _n(i.max_end_inventory), "buy_need": _n(p.buy_need[i.item_id])}
                 for i in req.items
             ],
             "choices": detail_choices,
@@ -110,7 +120,9 @@ def _choice_summary(p: Prepared, key: str, label: str, plan: Plan, base: Plan) -
             for sid, g in plan.goods_by_supplier.items()
         ],
         "diff_from_baseline_krw": plan.total_krw - base.total_krw,
-        "constraints_met": {"budget": True, "minimum_order": True, "storage": True, "delivery_count": True},
+        # 기간 끝 재고 한도는 지금 재고만으로 이미 넘을 수 있어(사지 않아도 넘음) 실제 구매안으로 판정한다.
+        "constraints_met": {"budget": True, "minimum_order": True, "storage": True, "delivery_count": True,
+                            "spoilage": not over_spoilage(p, plan)},
         "warning_ids": [],
     }
 
@@ -156,6 +168,29 @@ def _order_messages(p: Prepared, plan: Plan) -> list[dict]:
     return messages
 
 
+def _end_stock_warnings(p: Prepared, keys: list[str]) -> list[dict]:
+    """지금 재고만으로 기간 끝 재고 한도를 넘는 품목. 사지 않는 것 말고는 방법이 없어 계산은 하고 알려만 준다."""
+    over = already_over_end_limit(p.req)
+    if not over:
+        return []
+    parts = [
+        f"{i.item_name}은(는) 사지 않아도 기간 끝에 {_qty(i.usable_inventory - i.gross_need, i.base_unit)}가 남아 "
+        f"한도 {_qty(i.max_end_inventory, i.base_unit)}를 넘어요"
+        for i in over
+    ]
+    return [{
+        "warning_id": "END_STOCK_OVER_LIMIT",
+        "requires_ack": False,
+        "choice_keys": keys,
+        "message": ". ".join(parts) + ". 이번에는 사지 않고, 먼저 쓰는 방법을 생각해 보세요.",
+    }]
+
+
+def _qty(value: float, unit: str) -> str:
+    unit_label = {"g": "g", "ml": "ml", "ea": "개"}[unit]
+    return f"{_n(value):,}{unit_label}"
+
+
 def _vat_warnings(p: Prepared, plans: dict[str, Plan]) -> list[dict]:
     """부가세 포함 여부를 모르는 견적이 구매안에 쓰이면 경고 (URQ-QUO-004). 계산은 표시 가격 그대로 한다."""
     req = p.req
@@ -195,13 +230,16 @@ def _one_delivery_reason(p: Prepared) -> str:
             for i in needed
         )
         return f"한 거래처에서 모든 품목을 살 수 없어요. ({where})"
-    group, _ = diagnose(p, 1)
+    # 배송 1회 안은 배송 횟수를 1로 고정한 것이라, 배송 횟수를 풀어 보는 건 이유가 되지 않는다.
+    group, _ = diagnose(p, 1, tuple(c for c in RELAXABLE if c != "delivery_count"))
     if group == ("budget",):
         return "배송 1회로 사면 예산을 넘어요."
     if group == ("minimum_order",):
         return "배송 1회로는 거래처 최소 주문금액을 맞출 수 없어요."
     if group == ("storage",):
         return "배송 1회로 사면 보관 한도를 넘어요."
+    if group == ("spoilage",):
+        return "배송 1회로 사면 기간 끝에 너무 많이 남아요."
     return "배송 1회로는 조건을 지키는 구매안이 없어요."
 
 
@@ -247,6 +285,10 @@ def _infeasible(p: Prepared) -> ApiResponse[dict]:
             if relaxed is not None:
                 v["item_ids"] = over_storage(p, relaxed)
             suggestions.append("보관 한도를 늘리거나 안전재고를 줄이기")
+        elif name == "spoilage":
+            if relaxed is not None:
+                v["item_ids"] = over_spoilage(p, relaxed)
+            suggestions.append("더 작은 포장 견적을 추가하거나 기간 끝 재고 한도를 늘리기")
         violations.append(v)
 
     if group == ("budget",) and relaxed is not None:

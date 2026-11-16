@@ -20,6 +20,10 @@ class PurchaseItem(BaseModel):
     usable_inventory: float | None = Field(default=None, ge=0, description="지금 쓸 수 있는 재고. 모르면 null 또는 생략")
     safety_stock: float = Field(ge=0, description="기간 끝에 남겨 둘 양. 없으면 0")
     storage_capacity: float | None = Field(default=None, gt=0, description="보관 한도. null이면 제한 없음")
+    # 유통기한이 짧은 품목(우유 등)이 기간 끝에 너무 많이 남아 버려지지 않게 하는 상한. 안전재고보다 작으면 400.
+    max_end_inventory: float | None = Field(
+        default=None, ge=0, description="기간 끝에 남겨도 되는 최대량 (폐기 위험). null이면 제한 없음"
+    )
 
 
 class PurchaseSupplier(BaseModel):
