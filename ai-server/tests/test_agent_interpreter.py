@@ -7,7 +7,7 @@ import pytest
 
 import app.agent.interpreter as module
 from app.agent.interpreter import LlmInterpreter, LlmUnavailable, _build_user_prompt, _parse
-from app.agent.schemas import InterpretRequest
+from app.agent.schemas import Change, InterpretDraft, InterpretRequest
 from app.core.config import Settings
 
 
@@ -30,23 +30,32 @@ def test_모델은_설정에서_읽고_금지옵션과_SDK재시도를_넣지_�
         def __init__(self, **kwargs):
             captured.update(kwargs)
 
+        def with_structured_output(self, schema, **kwargs):
+            captured["schema"] = schema
+            captured["structured_options"] = kwargs
+            return self
+
         def invoke(self, messages):
             assert messages[-1][0] == "human"
-            return SimpleNamespace(content=[{"type": "text", "text": '{"intent":"smalltalk"}'}], response_metadata={})
+            return {"raw": SimpleNamespace(content=[{"type": "text", "text": '{"intent":"smalltalk"}'}], response_metadata={}),
+                    "parsed": None}
 
     monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Model)
     model_settings = Settings(_env_file=None, anthropic_api_key="local-test-only", anthropic_model="configured-model")
     assert json.loads(LlmInterpreter()._call(model_settings, "system", "user"))["intent"] == "smalltalk"
     assert captured["model"] == "configured-model"
     assert captured["max_retries"] == 0
+    assert captured["schema"] is InterpretDraft
+    assert captured["structured_options"] == {"method": "json_schema", "include_raw": True}
     assert not {"temperature", "top_p", "thinking", "tool_choice"}.intersection(captured)
 
 
 def test_안전분류기_거절은_정상_JSON이_있어도_해석하지_않는다(monkeypatch):
     import langchain_anthropic
 
-    model = SimpleNamespace(invoke=lambda _: SimpleNamespace(content='{"intent":"smalltalk"}',
-                                                            response_metadata={"stop_reason": "refusal"}))
+    model = SimpleNamespace(with_structured_output=lambda *_, **__: SimpleNamespace(invoke=lambda _: {
+        "raw": SimpleNamespace(content='{"intent":"smalltalk"}', response_metadata={"stop_reason": "refusal"}),
+        "parsed": InterpretDraft(intent="smalltalk")}))
     monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
     with pytest.raises(LlmUnavailable) as exc:
         LlmInterpreter()._call(Settings(_env_file=None, anthropic_api_key="local-test-only"), "system", "user")
@@ -143,8 +152,37 @@ def test_SDK_오류는_민감한_내용을_숨기고_재시도_가능여부를_�
     def invoke(_):
         raise error
 
-    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: SimpleNamespace(invoke=invoke))
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: SimpleNamespace(
+        with_structured_output=lambda *_, **__: SimpleNamespace(invoke=invoke)))
     with pytest.raises(LlmUnavailable) as exc:
         LlmInterpreter()._call(Settings(_env_file=None, anthropic_api_key="local-test-only"), "system", "user")
     assert exc.value.retryable is retryable
     assert "private" not in str(exc.value)
+
+
+
+def test_구조화_출력의_검증된_수치와_target_unit을_사용한다(monkeypatch):
+    import langchain_anthropic
+
+    parsed = InterpretDraft(intent="change_input", changes=[Change(
+        field="budget_krw", label="예산", value=120000, target="budget_krw", unit=None)])
+    model = SimpleNamespace(with_structured_output=lambda *_, **__: SimpleNamespace(invoke=lambda _: {
+        "raw": SimpleNamespace(content="unstructured text", response_metadata={}), "parsed": parsed}))
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
+    settings = Settings(_env_file=None, anthropic_api_key="local-test-only")
+    result = json.loads(LlmInterpreter()._call(settings, "system", "user"))
+    assert result["changes"][0]["target"] == "budget_krw"
+    assert result["changes"][0]["unit"] is None
+    assert result["changes"][0]["value"] == 120000
+
+
+
+def test_출력_상한으로_잘린_해석은_파싱돼도_사용하지_않는다(monkeypatch):
+    import langchain_anthropic
+
+    parsed = InterpretDraft(intent="smalltalk")
+    model = SimpleNamespace(with_structured_output=lambda *_, **__: SimpleNamespace(invoke=lambda _: {
+        "raw": SimpleNamespace(content="{}", response_metadata={"stop_reason": "max_tokens"}), "parsed": parsed}))
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
+    with pytest.raises(LlmUnavailable):
+        LlmInterpreter()._call(Settings(_env_file=None, anthropic_api_key="local-test-only"), "system", "user")

@@ -12,7 +12,7 @@ import app.agent.router as agent_router
 import app.main as main
 from app.agent import explain_service
 from app.agent.explain_service import get_explainer
-from app.agent.schemas import ExplainRequest
+from app.agent.schemas import ExplainDraft, ExplainRequest
 
 client = TestClient(main.app)
 
@@ -216,7 +216,8 @@ def test_SDK_실패_거절_잘못된_JSON은_템플릿으로_대체한다(monkey
                 raise result
             return result
 
-        monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: types.SimpleNamespace(invoke=invoke))
+        monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: types.SimpleNamespace(
+            with_structured_output=lambda *_, **__: types.SimpleNamespace(invoke=lambda messages: {"raw": invoke(messages), "parsed": None})))
         response = client.post("/agent/explain", json=REQ)
         assert response.status_code == 200
         assert response.json()["data"]["source"] == "template"
@@ -233,9 +234,14 @@ def test_SDK_옵션과_개인정보_가림(monkeypatch):
         def __init__(self, **kwargs):
             captured.update(kwargs)
 
+        def with_structured_output(self, schema, **kwargs):
+            captured["schema"] = schema
+            captured["structured_options"] = kwargs
+            return self
+
         def invoke(self, messages):
             captured["messages"] = str(messages)
-            return types.SimpleNamespace(content=[{"type": "text", "text": "{}"}], response_metadata={})
+            return {"raw": types.SimpleNamespace(content=[{"type": "text", "text": "{}"}], response_metadata={}), "parsed": None}
 
     monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Model)
     req = copy.deepcopy(REQ)
@@ -243,6 +249,9 @@ def test_SDK_옵션과_개인정보_가림(monkeypatch):
     settings = types.SimpleNamespace(anthropic_api_key="local-test-only", anthropic_model="configured-model")
     explain_service.LlmExplainer()._call(settings, ExplainRequest(**req))
     assert captured["model"] == "configured-model" and captured["max_retries"] == 0
+    assert captured["schema"] is ExplainDraft
+    assert captured["structured_options"] == {"method": "json_schema", "include_raw": True}
+    assert captured["max_tokens"] >= 2048
     assert not {"temperature", "top_p", "thinking", "tool_choice"}.intersection(captured)
     assert all(value not in captured["messages"] for value in ["홍길동", "010-1234-5678", "example@private.test"])
 
@@ -324,9 +333,12 @@ def test_중첩된_키의_개인정보를_SDK_전달전에_가린다(monkeypatch
         def __init__(self, **_):
             pass
 
+        def with_structured_output(self, *_args, **_kwargs):
+            return self
+
         def invoke(self, messages):
             captured["messages"] = str(messages)
-            return types.SimpleNamespace(content="{}", response_metadata={})
+            return {"raw": types.SimpleNamespace(content="{}", response_metadata={}), "parsed": None}
 
     monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Model)
     request = copy.deepcopy(REQ)
@@ -351,3 +363,52 @@ def test_단위가_빠진_문장도_같은_안의_중복_문장을_허용하지_
         {"choice_key": "purchase_1", "text": "120400 2"},
         {"choice_key": "purchase_1", "text": "배송 2회 120400원"}]})
     assert out["source"] == "template"
+
+
+
+@pytest.mark.parametrize("reason", ["max_tokens", "refusal"])
+def test_불완전하거나_거절된_구조화_설명은_파싱돼도_채택하지_않는다(monkeypatch, reason):
+    import langchain_anthropic
+
+    parsed = ExplainDraft(headline="결과", per_choice=[])
+    model = types.SimpleNamespace(with_structured_output=lambda *_, **__: types.SimpleNamespace(invoke=lambda _: {
+        "raw": types.SimpleNamespace(content="{}", response_metadata={"stop_reason": reason}), "parsed": parsed}))
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
+    settings = types.SimpleNamespace(anthropic_api_key="local-test-only", anthropic_model="configured-model")
+    assert explain_service.LlmExplainer()._call(settings, ExplainRequest(**REQ)) is None
+
+
+def test_완성된_구조화_설명은_검증된_필드로_반환한다(monkeypatch):
+    import json
+    import langchain_anthropic
+
+    parsed = ExplainDraft(headline="결과", per_choice=[{"choice_key": "purchase_1", "text": "120400원 배송 2회"}])
+    model = types.SimpleNamespace(with_structured_output=lambda *_, **__: types.SimpleNamespace(invoke=lambda _: {
+        "raw": types.SimpleNamespace(content="not-json", response_metadata={"stop_reason": "end_turn"}), "parsed": parsed}))
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
+    settings = types.SimpleNamespace(anthropic_api_key="local-test-only", anthropic_model="configured-model")
+    result = explain_service.LlmExplainer()._call(settings, ExplainRequest(**REQ))
+    assert json.loads(result)["per_choice"][0]["choice_key"] == "purchase_1"
+
+
+def test_실제_모델호출_상태와_템플릿_선택을_구분해_로그에_기록한다(monkeypatch):
+    logs = []
+    monkeypatch.setattr(agent_router, "write_tool_log", lambda **kwargs: logs.append(kwargs))
+
+    class GuardedExplainer:
+        last_call_status = "success"
+
+        def explain(self, req):
+            return explain_service.build_template(req)
+
+    _use(GuardedExplainer())
+    result = client.post("/agent/explain", json=REQ).json()
+    assert result["data"]["source"] == "template"
+    assert logs[0]["payload"]["llm_call_status"] == "success"
+
+
+def test_키가_없으면_모델_호출을_성공으로_기록하지_않는다(monkeypatch):
+    monkeypatch.setattr(explain_service, "get_settings", lambda: types.SimpleNamespace(anthropic_api_key=""))
+    model = explain_service.LlmExplainer()
+    assert model.explain(ExplainRequest(**REQ))["source"] == "template"
+    assert model.last_call_status == "not_configured"

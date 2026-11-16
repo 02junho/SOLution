@@ -77,11 +77,15 @@ def explain(
         raise HTTPException(status_code=400, detail=f"요청 값이 올바르지 않습니다. {exc}") from exc
 
     data = result.data or {}
-    _log_explain(body, request_key, LOG_STATUS[result.status.value], started, {
+    payload = {
         "response_status": result.status.value,
         "detail_status": data.get("detail_status"),
         "source": data.get("source"),
-    })
+    }
+    call_status = getattr(explainer, "last_call_status", None)
+    if call_status is not None:
+        payload["llm_call_status"] = call_status
+    _log_explain(body, request_key, LOG_STATUS[result.status.value], started, payload)
     return result
 
 

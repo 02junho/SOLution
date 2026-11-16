@@ -118,3 +118,16 @@ class ExplainRequest(BaseModel):
         if not isinstance(assumptions, list) or any(not isinstance(a, str) for a in assumptions):
             raise ValueError("assumptions는 문자열 목록이어야 합니다.")
         return summary
+
+
+class ChoiceExplanation(BaseModel):
+    """LLM이 말투만 다듬는 안별 설명. 수치·단위 검증은 서비스가 별도로 수행한다."""
+
+    choice_key: str
+    text: str
+
+
+class ExplainDraft(BaseModel):
+    headline: str
+    per_choice: list[ChoiceExplanation]
+    caveats: list[str] = Field(default_factory=list)
