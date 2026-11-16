@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
@@ -47,11 +46,6 @@ public class WorkSessionEventService {
 			new ParameterizedTypeReference<>() {};
 	private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
 	private static final TypeReference<ApiResponse<Map<String, Object>>> RESPONSE_TYPE = new TypeReference<>() {};
-	private static final Pattern PHONE = Pattern.compile("(?<!\\d)(?:01[016-9]|02|0[3-6][1-5])[-\\s]?\\d{3,4}[-\\s]?\\d{4}(?!\\d)");
-	private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]+");
-	private static final Pattern NAMED_PERSON = Pattern.compile("((?:담당자|성함|이름)\\s*[:：=]?\\s*)[가-힣]{2,4}");
-	private static final List<String> PRIVATE_FIELDS = List.of("phone", "phone_number", "email", "person_name",
-			"contact_name", "customer_name", "owner_name", "전화번호", "이메일", "담당자", "성함");
 
 	private final SessionRepository repository;
 	private final AiServerClient aiServerClient;
@@ -390,8 +384,7 @@ public class WorkSessionEventService {
 	}
 
 	private String maskPii(String text) {
-		return NAMED_PERSON.matcher(EMAIL.matcher(PHONE.matcher(text).replaceAll("[전화번호]"))
-				.replaceAll("[이메일]")).replaceAll("$1[이름]");
+		return SessionPrivacy.maskPii(text);
 	}
 
 	private Object clean(Object value) {
@@ -402,7 +395,7 @@ public class WorkSessionEventService {
 			Map<String, Object> result = new LinkedHashMap<>();
 			map.forEach((key, item) -> {
 				String name = String.valueOf(key);
-				result.put(name, PRIVATE_FIELDS.contains(name.toLowerCase()) && item != null ? "[개인정보]" : clean(item));
+				result.put(name, SessionPrivacy.isPrivateField(name) && item != null ? "[개인정보]" : clean(item));
 			});
 			return result;
 		}
