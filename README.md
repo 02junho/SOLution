@@ -167,6 +167,34 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 
 응답의 `result_id`로 `GET /api/v1/purchase/results/{result_id}`를 부르면 상세(거래처별 목록·주문 문구)를 봅니다. CI의 compose 단계도 이 세 건으로 끝까지 확인합니다. 업무 시작(`POST /api/v1/work-sessions`)에는 `store_id` 1을 쓰면 됩니다.
 
+### 6. 연결을 하나씩 확인하기
+
+`docker compose up -d --build`로 띄운 뒤 저장소 루트에서 실행합니다. 번호를 주면 그 단계만 돕니다. 비밀번호·키 값은 출력하지 않습니다.
+
+```bash
+./scripts/local-check.sh
+```
+
+```bash
+./scripts/local-check.sh 4
+```
+
+| 단계 | 확인하는 것 |
+| --- | --- |
+| 0 | `.env` 필수 칸, `DEMO_SEED=true` |
+| 1 | 컨테이너 세 개(db · ai-server · backend) |
+| 2 | DB 혼자, Flyway 테이블 8개 |
+| 3 | FastAPI 혼자, FastAPI → DB (`/health`) |
+| 4 | Spring 혼자, Spring → DB, Spring → FastAPI (`/api/v1/system/health`) |
+| 5 | API 문서(`/docs`) |
+| 6 | 시연 데이터 (매장 1, 구매 업무 1001·1002·1003) |
+| 7 | 구매 정상: 계산 → 저장 → 상세 재조회, 주문 문구 |
+| 8 | 구매 실패: 예산 부족(infeasible), 재고 빈칸(needs_input) |
+| 9 | 같은 요청 키로 두 번 보내면 결과 1건 |
+| 10 | FastAPI 실행 기록(`execution_log`) |
+
+실패한 단계는 무엇을 볼지(`docker compose logs backend` 등)를 같이 알려 줍니다. 끝낼 때는 `docker compose down`(데이터 유지) 또는 `docker compose down -v`(로컬 DB까지 삭제).
+
 ---
 
 ## 서버 간 호출 규칙
