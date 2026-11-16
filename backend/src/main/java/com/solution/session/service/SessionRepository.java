@@ -1,6 +1,7 @@
 package com.solution.session.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,6 +28,11 @@ public class SessionRepository {
 			String title, int currentVersion, Long currentVersionId, OffsetDateTime inputConfirmedAt, String step,
 			Long latestResultId, boolean hasConfirmation, OffsetDateTime createdAt, OffsetDateTime updatedAt,
 			String ownerKey) {
+	}
+
+	/** 업무 목록 한 줄. 화면 카드에 필요한 요약만 담는다. */
+	public record SessionSummaryRow(long sessionId, String featureType, String title, String step,
+			int currentVersion, OffsetDateTime updatedAt) {
 	}
 
 	/** 매장의 소유자 식별값. 매장이 없으면 빈 값(→ 서비스가 404). 소유권 비교는 서비스에서 한다. */
@@ -83,5 +89,43 @@ public class SessionRepository {
 				rs.getString("owner_key")),
 				sessionId);
 		return rows.stream().findFirst();
+	}
+
+	/**
+	 * 내 매장의 업무를 최신순으로 읽는다(ix_session_store_feature 정렬에 맞춤).
+	 * 커서가 있으면 (updated_at, session_id)가 그보다 뒤(더 오래된)인 행만 가져와 다음 페이지를 만든다.
+	 * 값은 모두 ?로 넘겨 SQL 주입을 막는다.
+	 */
+	public List<SessionSummaryRow> findSessions(String ownerKey, String featureType,
+			OffsetDateTime cursorUpdatedAt, Long cursorSessionId, int limit) {
+		StringBuilder sql = new StringBuilder("""
+				SELECT s.session_id, s.feature_type, s.title, s.step, s.current_version, s.updated_at
+				FROM work_session s
+				JOIN store st ON st.store_id = s.store_id
+				WHERE st.owner_key = ?
+				""");
+		List<Object> args = new ArrayList<>();
+		args.add(ownerKey);
+		if (featureType != null) {
+			sql.append(" AND s.feature_type = ?\n");
+			args.add(featureType);
+		}
+		if (cursorUpdatedAt != null && cursorSessionId != null) {
+			sql.append(" AND (s.updated_at < ? OR (s.updated_at = ? AND s.session_id < ?))\n");
+			args.add(cursorUpdatedAt);
+			args.add(cursorUpdatedAt);
+			args.add(cursorSessionId);
+		}
+		sql.append(" ORDER BY s.updated_at DESC, s.session_id DESC\n LIMIT ?");
+		args.add(limit);
+
+		return jdbcTemplate.query(sql.toString(), (rs, i) -> new SessionSummaryRow(
+				rs.getLong("session_id"),
+				rs.getString("feature_type"),
+				rs.getString("title"),
+				rs.getString("step"),
+				rs.getInt("current_version"),
+				rs.getObject("updated_at", OffsetDateTime.class)),
+				args.toArray());
 	}
 }

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -23,8 +24,10 @@ import com.solution.common.id.IdGenerator;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionCreateRequest;
+import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.SessionRepository.SessionContextRow;
+import com.solution.session.service.SessionRepository.SessionSummaryRow;
 
 class WorkSessionServiceTest {
 
@@ -130,4 +133,56 @@ class WorkSessionServiceTest {
 				.isInstanceOf(ApiException.class)
 				.hasMessage("업무를 찾을 수 없습니다.");
 	}
+
+	@Test
+	void 목록은_size보다_한_건_더_조회해_다음_커서를_만든다() {
+		given(currentOwner.key()).willReturn("owner-demo");
+		// size=1 → limit+1=2 조회. 두 건이 오면 다음 페이지가 있다는 뜻.
+		given(repository.findSessions("owner-demo", null, null, null, 2)).willReturn(List.of(
+				new SessionSummaryRow(100L, "purchase", "A", "result", 2,
+						OffsetDateTime.parse("2026-11-13T10:12:00+09:00")),
+				new SessionSummaryRow(99L, "purchase", "B", "input", 1,
+						OffsetDateTime.parse("2026-11-13T09:00:00+09:00"))));
+
+		WorkSessionListResponse data = service.list(null, null, 1).data();
+		assertThat(data.items()).hasSize(1);
+		assertThat(data.items().get(0).sessionId()).isEqualTo(100L);
+		assertThat(data.nextCursor()).isNotNull();
+	}
+
+	@Test
+	void 결과가_size_이하면_다음_커서가_없다() {
+		given(currentOwner.key()).willReturn("owner-demo");
+		given(repository.findSessions("owner-demo", null, null, null, 21)).willReturn(List.of(
+				new SessionSummaryRow(100L, "purchase", "A", "result", 2,
+						OffsetDateTime.parse("2026-11-13T10:12:00+09:00"))));
+
+		WorkSessionListResponse data = service.list(null, null, 20).data();
+		assertThat(data.items()).hasSize(1);
+		assertThat(data.nextCursor()).isNull();
+	}
+
+	@Test
+	void 목록_feature_type이_범위밖이면_400() {
+		assertThatThrownBy(() -> service.list("delivery", null, 20))
+				.isInstanceOf(ApiException.class);
+	}
+
+	@Test
+	void 잘못된_커서는_400() {
+		assertThatThrownBy(() -> service.list(null, "!!not-base64!!", 20))
+				.isInstanceOf(ApiException.class);
+	}
+	@Test
+	void 기본_크기와_최대_크기를_적용한다() {
+		given(currentOwner.key()).willReturn("owner-demo");
+		given(repository.findSessions("owner-demo", null, null, null, 21)).willReturn(List.of());
+		given(repository.findSessions("owner-demo", null, null, null, 101)).willReturn(List.of());
+
+		assertThat(service.list(null, null, 0).data().items()).isEmpty();
+		assertThat(service.list(null, null, Integer.MAX_VALUE).data().items()).isEmpty();
+		verify(repository).findSessions("owner-demo", null, null, null, 21);
+		verify(repository).findSessions("owner-demo", null, null, null, 101);
+	}
+
 }

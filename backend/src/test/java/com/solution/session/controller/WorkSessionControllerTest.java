@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkSessionContextResponse;
+import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
 import com.solution.session.service.WorkSessionService;
 
@@ -132,6 +134,41 @@ class WorkSessionControllerTest {
 	@ValueSource(strings = {"not-a-number", "9223372036854775808"})
 	void 업무번호가_long_형식이_아니면_500_대신_400(String sessionId) throws Exception {
 		mockMvc.perform(get("/api/v1/work-sessions/" + sessionId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 업무_목록을_돌려준다() throws Exception {
+		given(workSessionService.list(null, null, 20)).willReturn(ApiResponse.ok(new WorkSessionListResponse(
+				List.of(new WorkSessionListResponse.Item(100, "purchase", "이번 주 매입 준비", "result", 2,
+						OffsetDateTime.parse("2026-11-13T10:12:00+09:00"))),
+				null)));
+
+		mockMvc.perform(get("/api/v1/work-sessions"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ok"))
+				.andExpect(jsonPath("$.data.items[0].session_id").value(100))
+				.andExpect(jsonPath("$.data.items[0].feature_type").value("purchase"))
+				.andExpect(jsonPath("$.data.next_cursor").isEmpty());
+	}
+
+	@Test
+	void 목록은_feature_type_필터와_size를_서비스에_전달한다() throws Exception {
+		given(workSessionService.list("operation", null, 5)).willReturn(ApiResponse.ok(
+				new WorkSessionListResponse(List.of(), null)));
+
+		mockMvc.perform(get("/api/v1/work-sessions")
+				.param("feature_type", "operation")
+				.param("size", "5"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items").isArray());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"abc", "1.5", "2147483648"})
+	void 목록_size가_정수_범위가_아니면_400(String size) throws Exception {
+		mockMvc.perform(get("/api/v1/work-sessions").param("size", size))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value("error"));
 	}
