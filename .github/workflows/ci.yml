@@ -76,6 +76,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-password/' .env
+          sed -i 's/^DEMO_SEED=.*/DEMO_SEED=true/' .env
 
       - name: DB·FastAPI·Spring 띄우기
         run: docker compose up -d --build
@@ -104,6 +105,24 @@ jobs:
             "select count(*) from information_schema.tables where table_schema = 'public' and table_name <> 'flyway_schema_history'")
           echo "테이블 수: $count"
           test "$count" = "8"
+
+      # 시연용 기본 데이터(위에서 켠 DEMO_SEED=true)로 화면이 부르는 주소부터
+      # Spring → FastAPI 계산 → DB 저장 → 다시 조회까지 끝까지 확인한다. (정상 1 · 예산 부족 1 · 재고 빈칸 1)
+      - name: 구매 시연 흐름 확인
+        run: |
+          run() {
+            curl -fsS -X POST "http://localhost:8080/api/v1/purchase/sessions/$1/results" \
+              -H 'Content-Type: application/json' -d "{\"input_version_id\": $2}"
+          }
+          ok=$(run 1001 100101)
+          echo "$ok" | jq .
+          echo "$ok" | jq -e '.status == "ok" and .data.summary.choices[0].total_krw == 120400' > /dev/null
+          id=$(echo "$ok" | jq -r .data.result_id)
+          curl -fsS "http://localhost:8080/api/v1/purchase/results/$id" \
+            | jq -e '.status == "ok" and .data.detail.choices[0].choice_key == "purchase_1"' > /dev/null
+          run 1002 100201 | jq -e '.status == "infeasible" and .data.violations[0].constraint == "budget"' > /dev/null
+          run 1003 100301 | jq -e '.status == "needs_input" and .data.missing_fields[0].path == "items[1].usable_inventory"' > /dev/null
+          echo "구매 시연 흐름 정상 (정상 1 · 예산 부족 1 · 재고 빈칸 1)"
 
       - name: 실패하면 서버 로그 출력
         if: failure()
