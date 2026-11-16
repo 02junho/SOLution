@@ -46,6 +46,8 @@ def apply_changes(request: dict, changes: list[dict]) -> dict:
         if key.startswith("items["):
             index, key = key[len("items["):].split("].")
             target = new["items"][int(index)]
+        if key not in target:  # 요청에 없는 칸을 가리키면 새로 만들지 않고 실패로 돌린다
+            raise KeyError(c["path"])
         target[key] = c["suggested"]
     return new
 
@@ -111,20 +113,31 @@ def evaluate(case: dict) -> dict:
 
     # 4. 조건 수정 후 재계산. 원인이 칸 값을 바꿔서는 못 고치는 것(최소 주문금액 = 거래처 조건, no_quote = 견적을 새로 넣어야 함)이면
     #    제안하지 않아야 하고, 그 밖에는 바꿀 칸을 꼭 제안해야 한다. 제안했다면 그대로 바꿔 다시 계산할 때 구매안이 나와야 한다.
+    #    응답 모양이 틀려도 평가기는 멈추지 않고 문제로 기록한다.
     if status == "infeasible":
         changes = data.get("suggested_changes")
+        well_formed = isinstance(changes, list) and all(
+            isinstance(c, dict) and isinstance(c.get("path"), str) and "suggested" in c for c in changes
+        )
         if not isinstance(changes, list):
             problems.append("infeasible 응답에 suggested_changes 목록이 없습니다")
+        elif not well_formed:
+            problems.append("suggested_changes 항목에 path·suggested가 없습니다")
         elif {"minimum_order", "no_quote"} & set(viol or []):
             if changes:
                 problems.append(f"원인 {viol}은 칸 값으로 못 고치는데 바꿀 칸을 제안했습니다")
         elif not changes:
             problems.append(f"원인 {viol}은 사장님이 바꿀 수 있는데 바꿀 칸 제안이 비었습니다")
-    if status == "infeasible" and data.get("suggested_changes"):
-        again, _, again_msg = call_tool(apply_changes(req, data["suggested_changes"]))
-        row["recalculated"] = again
-        if again != "ok":
-            problems.append(f"제안대로 바꿔 다시 계산했는데 {again} ({again_msg})")
+        if well_formed and changes:
+            try:
+                changed = apply_changes(req, changes)
+            except (KeyError, IndexError, ValueError, TypeError) as exc:
+                problems.append(f"suggested_changes의 path를 요청에 적용하지 못했습니다 ({exc!r})")
+            else:
+                again, _, again_msg = call_tool(changed)
+                row["recalculated"] = again
+                if again != "ok":
+                    problems.append(f"제안대로 바꿔 다시 계산했는데 {again} ({again_msg})")
 
     if status == "ok" and base is not None and not base_viol:
         row["saving_vs_baseline_krw"] = base - p1
