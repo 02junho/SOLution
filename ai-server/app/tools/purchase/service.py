@@ -10,6 +10,7 @@ from __future__ import annotations
 from app.core.response import ApiResponse, infeasible, needs_input, ok
 from app.tools.purchase.optimizer import (
     RELAXABLE,
+    already_over_end_limit,
     Plan,
     Prepared,
     baseline,
@@ -66,6 +67,7 @@ def run(req: PurchaseRequest) -> ApiResponse[dict]:
         detail_choices.append(_choice_detail(p, "purchase_2", plan2))
 
     warnings = _vat_warnings(p, {"purchase_1": plan1, **({"purchase_2": plan2} if len(detail_choices) == 2 else {})})
+    warnings += _end_stock_warnings(p, [d["choice_key"] for d in detail_choices])
     for choice in choices:
         if choice.get("available") and choice.get("same_as") is None:
             choice["warning_ids"] = [w["warning_id"] for w in warnings if choice["choice_key"] in w["choice_keys"]]
@@ -118,8 +120,9 @@ def _choice_summary(p: Prepared, key: str, label: str, plan: Plan, base: Plan) -
             for sid, g in plan.goods_by_supplier.items()
         ],
         "diff_from_baseline_krw": plan.total_krw - base.total_krw,
+        # 기간 끝 재고 한도는 지금 재고만으로 이미 넘을 수 있어(사지 않아도 넘음) 실제 구매안으로 판정한다.
         "constraints_met": {"budget": True, "minimum_order": True, "storage": True, "delivery_count": True,
-                            "spoilage": True},
+                            "spoilage": not over_spoilage(p, plan)},
         "warning_ids": [],
     }
 
@@ -163,6 +166,29 @@ def _order_messages(p: Prepared, plan: Plan) -> list[dict]:
         ])
         messages.append({"supplier_id": sid, "text": text})
     return messages
+
+
+def _end_stock_warnings(p: Prepared, keys: list[str]) -> list[dict]:
+    """지금 재고만으로 기간 끝 재고 한도를 넘는 품목. 사지 않는 것 말고는 방법이 없어 계산은 하고 알려만 준다."""
+    over = already_over_end_limit(p.req)
+    if not over:
+        return []
+    parts = [
+        f"{i.item_name}은(는) 사지 않아도 기간 끝에 {_qty(i.usable_inventory - i.gross_need, i.base_unit)}가 남아 "
+        f"한도 {_qty(i.max_end_inventory, i.base_unit)}를 넘어요"
+        for i in over
+    ]
+    return [{
+        "warning_id": "END_STOCK_OVER_LIMIT",
+        "requires_ack": False,
+        "choice_keys": keys,
+        "message": ". ".join(parts) + ". 이번에는 사지 않고, 먼저 쓰는 방법을 생각해 보세요.",
+    }]
+
+
+def _qty(value: float, unit: str) -> str:
+    unit_label = {"g": "g", "ml": "ml", "ea": "개"}[unit]
+    return f"{_n(value):,}{unit_label}"
 
 
 def _vat_warnings(p: Prepared, plans: dict[str, Plan]) -> list[dict]:
