@@ -47,7 +47,7 @@ public class WorkSessionEventService {
 			new ParameterizedTypeReference<>() {};
 	private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
 	private static final TypeReference<ApiResponse<Map<String, Object>>> RESPONSE_TYPE = new TypeReference<>() {};
-	private static final Pattern PHONE = Pattern.compile("(?:01[016-9]|02|0[3-6][1-5])[-\\s]?\\d{3,4}[-\\s]?\\d{4}");
+	private static final Pattern PHONE = Pattern.compile("(?<!\\d)(?:01[016-9]|02|0[3-6][1-5])[-\\s]?\\d{3,4}[-\\s]?\\d{4}(?!\\d)");
 	private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]+");
 	private static final Pattern NAMED_PERSON = Pattern.compile("((?:담당자|성함|이름)\\s*[:：=]?\\s*)[가-힣]{2,4}");
 	private static final List<String> PRIVATE_FIELDS = List.of("phone", "phone_number", "email", "person_name",
@@ -217,7 +217,14 @@ public class WorkSessionEventService {
 					|| !(parsed.get("input") instanceof Map<?, ?> input) || input.isEmpty()) {
 				throw new AiServerException("AI 해석 결과에 전체 입력 스냅샷(parsed_input.input)이 없습니다.");
 			}
-			return saveInput(ctx, key, fingerprint, request.eventType(), userContent, cleanMap(input),
+			Map<String, Object> snapshot = cleanMap(input);
+			try {
+				validateInput(snapshot);
+			}
+			catch (ApiException e) {
+				throw new AiServerException("AI 해석 결과의 입력 스냅샷이 올바르지 않습니다.", e);
+			}
+			return saveInput(ctx, key, fingerprint, request.eventType(), userContent, snapshot,
 					cleanMap(parsed), list(data.get("assumptions")), list(data.get("warnings")));
 		}
 		return saveResponse(ctx, key, fingerprint, request.eventType(), userContent, agent.status(), data, agent.message());

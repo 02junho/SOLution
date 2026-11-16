@@ -547,6 +547,25 @@ class WorkSessionApiIntegrationTest {
 	}
 
 	@Test
+	void AI_입력스냅샷의_계약위반은_400이_아닌_502이고_저장하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		List<Map<String, Object>> inputs = List.of(
+				Map.of("budget_krw", -1), Map.of("planning_days", 1.5),
+				Map.of("max_delivery_count", 0), Map.of("budget_krw", "돈"),
+				Map.of("items", List.of(Map.of("base_unit", "L"))),
+				Map.of("items", List.of(Map.of("safety_stock", 10, "max_end_inventory", 5))));
+		for (int i = 0; i < inputs.size(); i++) {
+			org.mockito.Mockito.doReturn(ApiResponse.ok(Map.of("parsed_input", Map.of("input", inputs.get(i)))))
+					.when(aiServerClient).post(anyString(), any(), anyString(), any());
+			postEvent("invalid-ai-snapshot-" + i, "{\"event_type\":\"message\",\"content\":\"입력 변경\"}")
+					.andExpect(status().isBadGateway())
+					.andExpect(jsonPath("$.status").value("error"));
+		}
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class)).isZero();
+	}
+
+	@Test
 	void 지난_폼_기준버전으로_최신조건을_덮어쓰지_않는다() throws Exception {
 		insertSession(500, 10, 2);
 		insertVersion(1001, 500, 1, true);

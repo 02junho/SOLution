@@ -23,6 +23,8 @@ import org.springframework.transaction.support.TransactionCallback;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -160,4 +162,31 @@ class WorkSessionEventServiceTest {
 				.isEqualTo(objectMapper.readTree(objectMapper.writeValueAsString(first)));
 		verify(repository, times(1)).insertVersion(anyLong(), anyLong(), anyInt(), anyString(), any(), anyString(), any());
 	}
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+			"01012345678|[전화번호]",
+			"010-1234-5678|[전화번호]",
+			"010 123 4567|[전화번호]",
+			"02-123-4567|[전화번호]",
+			"02 1234 5678|[전화번호]",
+			"0311234567|[전화번호]",
+			"031-1234-5678|[전화번호]",
+			"번호:010-1234-5678입니다|번호:[전화번호]입니다",
+			"901012345678|901012345678",
+			"010123456789|010123456789",
+			"9010123456789|9010123456789",
+			"9021234567|9021234567",
+			"031123456789|031123456789"
+	})
+	void 전화번호만_가리고_긴_숫자열_내부는_변경하지_않는다(String value, String expected) {
+		given(currentOwner.key()).willReturn("owner-demo");
+		given(repository.findSessionContext(100L)).willReturn(Optional.of(ctx(1, null, "owner-demo")));
+		WorkSessionEventRequest request = new WorkSessionEventRequest("form", null, null,
+				Map.of("note", value), null, null);
+
+		ApiResponse<Map<String, Object>> response = service.handleEvent(100L, "phone-boundary", request);
+		Map<?, ?> parsed = (Map<?, ?>) response.data().get("parsed_input");
+		assertThat(((Map<?, ?>) parsed.get("input")).get("note")).isEqualTo(expected);
+	}
+
 }
