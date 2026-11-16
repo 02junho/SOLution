@@ -1,23 +1,63 @@
 """POST /tools/purchase — 구매 최적화 (PuLP + HiGHS).
 
-- 재고가 빈칸(null 또는 생략)인 품목이 있으면 needs_input으로 빠진 칸을 알려준다. 0으로 채우지 않는다.
-- 요청 안의 값끼리 맞지 않으면(없는 거래처·품목, 단위 불일치) 400.
+- 계산에 필요한 칸이 비어 있으면(키 없음·null·빈 목록) needs_input으로 빈 칸을 알려준다. 0으로 채우지 않는다.
+  재고 빈칸도 같은 방식이다. 폼·대화로 입력이 덜 쌓인 버전을 계산해도 오류(Spring 502)가 아니라 질문이 된다.
+- 값이 틀리면(음수·없는 단위, 없는 거래처·품목, 단위 불일치) 400. Spring이 넣는 store_id 등이 비어도 400.
 - 조건을 지키는 안이 없으면 infeasible + 어떤 조건 때문인지.
 - 화면은 이 주소를 직접 부르지 않는다. Spring이 AiServerClient로 부른다.
 """
 
+import json
 import time
+from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from app.core.execution_log import LOG_STATUS, write_tool_log
-from app.core.request_key import get_request_key
-from app.core.response import ApiResponse
-from app.tools.purchase import service
+from app.core.request_key import REQUEST_KEY_HEADER, get_request_key
+from app.core.response import ApiResponse, needs_input
+from app.tools.purchase import missing, service
 from app.tools.purchase.optimizer import InputError
 from app.tools.purchase.schemas import PurchaseRequest
 
-router = APIRouter()
+
+class _BlankFieldsRoute(APIRoute):
+    """요청 검사에서 '빈 칸'만 걸리면 400 대신 needs_input(200)으로 돌려준다. 틀린 값은 그대로 400."""
+
+    def get_route_handler(self) -> Callable:
+        handler = super().get_route_handler()
+
+        async def route(request: Request) -> Response:
+            started = time.perf_counter()
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                try:
+                    raw = json.loads(await request.body())
+                except ValueError:
+                    raise exc from None
+                fields = missing.blank_fields(raw, list(exc.errors()))
+                if fields is None:
+                    raise
+                result = needs_input({"detail_status": "NEEDS_INPUT", "missing_fields": fields}, missing.message(fields))
+                write_tool_log(
+                    name="purchase",
+                    session_id=raw.get("session_id"),
+                    input_version_id=raw.get("input_version_id"),
+                    request_key=request.headers.get(REQUEST_KEY_HEADER) or get_request_key(None),
+                    status=LOG_STATUS["needs_input"],
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    payload={"response_status": "needs_input", "detail_status": "NEEDS_INPUT", "blank_field_count": len(fields)},
+                )
+                return JSONResponse(result.model_dump(mode="json"))
+
+        return route
+
+
+router = APIRouter(route_class=_BlankFieldsRoute)
 
 
 @router.post("")

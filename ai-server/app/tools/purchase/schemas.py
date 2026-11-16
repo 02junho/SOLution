@@ -1,6 +1,6 @@
 """POST /tools/purchase 요청 모양. 노션 API 명세서 "구매 최적화"와 같은 필드다.
 
-모르는 값은 null로 받는다. 0으로 바꾸지 않는다(계산에 꼭 필요한 값이 null이면 needs_input).
+모르는 값은 null로 받는다. 0으로 바꾸지 않는다(계산에 꼭 필요한 칸이 비어 있으면 needs_input, missing.py).
 음수·잘못된 형식은 Pydantic 검사에서 걸러져 400으로 나간다.
 """
 
@@ -40,7 +40,8 @@ class PurchaseQuote(BaseModel):
     pack_size: float = Field(gt=0)
     pack_unit: BaseUnit
     pack_price_krw: int = Field(ge=0)
-    vat_included: bool | None
+    # 키가 빠져도 null(모름)과 같게 본다. 계산은 하고 "부가세 미확인" 경고를 붙인다.
+    vat_included: bool | None = None
 
 
 class PurchaseRequest(BaseModel):

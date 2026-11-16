@@ -22,7 +22,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app.tools.purchase import service
+from app.tools.purchase import missing, service
 from app.tools.purchase.optimizer import InputError
 from app.tools.purchase.schemas import PurchaseRequest
 from evals.purchase import oracle
@@ -30,10 +30,18 @@ from evals.purchase.cases import all_cases
 
 
 def call_tool(request: dict) -> tuple[str, dict | None, str | None]:
-    """(응답 상태, data, message). 요청 오류(400)는 status "error"."""
+    """(응답 상태, data, message). 요청 오류(400)는 status "error".
+
+    빈 칸만 걸린 검사 오류는 router와 같은 규칙(missing.blank_fields)으로 needs_input이 된다.
+    """
     try:
         res = service.run(PurchaseRequest.model_validate(request))
-    except (ValidationError, InputError) as exc:
+    except ValidationError as exc:
+        fields = missing.blank_fields(request, exc.errors())
+        if fields is not None:
+            return "needs_input", {"detail_status": "NEEDS_INPUT", "missing_fields": fields}, missing.message(fields)
+        return "error", None, str(exc).splitlines()[0]
+    except InputError as exc:
         return "error", None, str(exc).splitlines()[0]
     return res.status.value, res.data, res.message
 
