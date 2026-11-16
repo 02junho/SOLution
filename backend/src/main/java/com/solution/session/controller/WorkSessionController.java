@@ -1,9 +1,12 @@
 package com.solution.session.controller;
 
+import java.util.Map;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,8 +15,10 @@ import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionCreateRequest;
+import com.solution.session.dto.WorkSessionEventRequest;
 import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
+import com.solution.session.service.WorkSessionEventService;
 import com.solution.session.service.WorkSessionService;
 
 import jakarta.validation.Valid;
@@ -27,9 +32,12 @@ import jakarta.validation.Valid;
 public class WorkSessionController {
 
 	private final WorkSessionService workSessionService;
+	private final WorkSessionEventService workSessionEventService;
 
-	public WorkSessionController(WorkSessionService workSessionService) {
+	public WorkSessionController(WorkSessionService workSessionService,
+			WorkSessionEventService workSessionEventService) {
 		this.workSessionService = workSessionService;
+		this.workSessionEventService = workSessionEventService;
 	}
 
 	/** 매입·운영 업무 한 건을 시작한다. 최초 AI 호출보다 먼저 work_session을 만든다(URQ-FLW-001·002·007). */
@@ -62,5 +70,23 @@ public class WorkSessionController {
 			throw ApiException.badRequest("업무 번호는 정수 범위의 숫자여야 합니다.");
 		}
 		return workSessionService.getContext(parsedSessionId);
+	}
+
+	/**
+	 * 사장님의 한 번의 입력(대화/폼/질문답변)을 처리한다 — 흐름의 핵심(URQ-FLW-002·003·005·006).
+	 * X-Request-Key로 같은 이벤트의 중복 처리를 막는다(없으면 서버가 만든다).
+	 */
+	@PostMapping("/{sessionId}/events")
+	public ApiResponse<Map<String, Object>> events(@PathVariable String sessionId,
+			@RequestHeader(name = "X-Request-Key", required = false) String requestKey,
+			@Valid @RequestBody WorkSessionEventRequest request) {
+		long parsedSessionId;
+		try {
+			parsedSessionId = Long.parseLong(sessionId);
+		}
+		catch (NumberFormatException e) {
+			throw ApiException.badRequest("업무 번호는 정수 범위의 숫자여야 합니다.");
+		}
+		return workSessionEventService.handleEvent(parsedSessionId, requestKey, request);
 	}
 }
