@@ -89,7 +89,7 @@ class LlmExplainer:
                 or not isinstance(caveats, list) or any(not isinstance(c, str) for c in caveats)):
             return None
         allowed = _numbers_in(template) | _numbers_in(req.result_summary)
-        text = " ".join([headline, *caveats])
+        text = headline
         if not _safe_text(text, allowed):
             return None
         # 금액·배송 횟수는 각 안에 속한 값이어야 한다. 다른 안의 숫자를 옮겨 쓰지 않는다.
@@ -99,12 +99,27 @@ class LlmExplainer:
         if (not _unit_numbers(text, "원") <= amounts
                 or not _unit_numbers(text, "%") <= _percentages(req.result_summary)):
             return None
+        verified_caveats = []
+        for caveat in caveats:
+            if (not _safe_text(caveat, allowed)
+                    or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)):
+                continue
+            money = _unit_numbers(caveat, "원")
+            if money:
+                owners = [c for key, c in choices.items() if _mentions_choice(caveat, key)]
+                if len(owners) != 1 or owners[0].get("total_krw") is None:
+                    continue
+                if money != {str(int(owners[0]["total_krw"]))}:
+                    continue
+            verified_caveats.append(caveat)
         refined = {}
+        seen = set()
         for item in per_choice:
             if (not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip()
                     or not isinstance(item.get("choice_key"), str) or item["choice_key"] not in choices
-                    or item["choice_key"] in refined):
+                    or item["choice_key"] in seen):
                 return None
+            seen.add(item["choice_key"])
             choice = choices[item["choice_key"]]
             if not _safe_text(item["text"], _numbers_in(choice)):
                 return None
@@ -112,20 +127,19 @@ class LlmExplainer:
             expected_delivery = {str(int(choice["delivery_count"]))} if choice.get("delivery_count") is not None else set()
             if (not _unit_numbers(item["text"], "원") <= expected_amount
                     or not _unit_numbers(item["text"], "회") <= expected_delivery
-                    or not _unit_numbers(item["text"], "%") <= _percentages(choice)):
+                    or not _unit_numbers(item["text"].replace("퍼센트", "%"), "%") <= _percentages(choice)):
                 return None
-            refined[item["choice_key"]] = sanitize(item["text"])
-        if not refined and not caveats:
+            if (expected_amount <= _unit_numbers(item["text"], "원")
+                    and expected_delivery <= _unit_numbers(item["text"], "회")):
+                refined[item["choice_key"]] = sanitize(item["text"])
+        if not refined and not verified_caveats:
             return None
         output = deepcopy(template)
         output["source"] = "llm"
         for item in output["explanation"]["per_choice"]:
-            extra = refined.get(item["choice_key"])
-            if extra:
-                # 빠뜨린 사실이나 대안은 원래 템플릿으로 유지한다.
-                required = _numbers(item["text"])
-                item["text"] = extra if required <= _numbers(extra) else item["text"] + " · " + extra
-        output["explanation"]["caveats"] += [sanitize(c) for c in caveats
+            # 금액·배송 횟수를 각 단위와 함께 보존한 문장만 템플릿을 대체한다.
+            item["text"] = refined.get(item["choice_key"], item["text"])
+        output["explanation"]["caveats"] += [sanitize(c) for c in verified_caveats
             if sanitize(c) not in output["explanation"]["caveats"]]
         # 핵심 비교·숫자·경고·모의 조건은 LLM이 바꾸지 않는다.
         return output
@@ -194,6 +208,12 @@ def _unit_numbers(text: str, unit: str) -> set[str]:
             if text[match.end():].lstrip().startswith(unit)}
 
 
+def _mentions_choice(text: str, key: str) -> bool:
+    # 자유 문장의 별칭은 추정하지 않고 명시된 choice_key만 귀속 근거로 삼는다.
+    word = r"[A-Za-z0-9_]" if key.isascii() and not key.isdecimal() else r"\w"
+    return bool(re.search(r"(?<!" + word + r")" + re.escape(key) + r"(?!" + word + r")", text))
+
+
 def _percentages(obj) -> set[str]:
     if isinstance(obj, dict):
         found = set()
@@ -204,7 +224,7 @@ def _percentages(obj) -> set[str]:
         return found
     if isinstance(obj, list):
         return set().union(*(_percentages(v) for v in obj)) if obj else set()
-    return _unit_numbers(obj, "%") if isinstance(obj, str) else set()
+    return _unit_numbers(obj.replace("퍼센트", "%"), "%") if isinstance(obj, str) else set()
 
 
 def _safe_text(text: str, allowed: set[str]) -> bool:

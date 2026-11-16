@@ -14,8 +14,16 @@ def sanitize(value: Any) -> Any:
     if isinstance(value, str):
         return _PERSON.sub(r"\1[이름]", _EMAIL.sub("[이메일]", _PHONE.sub("[전화번호]", value)))
     if isinstance(value, dict):
-        return {key: "[개인정보]" if str(key).lower() in _PRIVATE_FIELDS and item is not None else sanitize(item)
-                for key, item in value.items()}
+        result = {}
+        for key, item in value.items():
+            masked_key = sanitize(key) if isinstance(key, str) else key
+            safe_key = masked_key
+            suffix = 2
+            while safe_key in result:  # 서로 다른 민감한 키가 같은 마스킹 값이 되어도 항목을 보존한다.
+                safe_key = f"{masked_key}_{suffix}"
+                suffix += 1
+            result[safe_key] = "[개인정보]" if str(key).lower() in _PRIVATE_FIELDS and item is not None else sanitize(item)
+        return result
     if isinstance(value, list):
         return [sanitize(item) for item in value]
     return value

@@ -265,3 +265,89 @@ def test_지수나_숫자열이_비정상적으로_커도_숫자검사가_메모
 
 def test_잘못된_숫자형식은_입력에도_있더라도_허용하지_않는다():
     assert not explain_service._safe_text("12,34", {"INVALID_NUMBER"})
+
+
+@pytest.mark.parametrize("caveat,keep", [
+    ("purchase_1은 138,000원입니다.", False),
+    ("purchase_1은 120,400원입니다.", True),
+    ("purchase_2은 138,000원입니다.", True),
+    ("총액은 120,400원입니다.", False),
+    ("purchase_1과 purchase_2의 총액은 120,400원입니다.", False),
+    ("purchase_1과purchase_2의 총액은 120,400원입니다.", False),
+    ("purchase_10은 120,400원입니다.", False),
+])
+def test_caveat_금액은_명시된_단일_안의_금액과_일치할때만_남긴다(monkeypatch, caveat, keep):
+    out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
+        {"choice_key": "purchase_1", "text": "배송 2회 120,400원입니다."}],
+        "caveats": [caveat, "부가세 포함 여부를 확인해 주세요."]})
+    assert out["source"] == "llm"
+    assert (caveat in out["explanation"]["caveats"]) is keep
+    assert "부가세 포함 여부를 확인해 주세요." in out["explanation"]["caveats"]
+
+
+@pytest.mark.parametrize("text", ["120400 2", "120400원 배송 2", "배송 2회 비용 120400"])
+def test_필수_금액과_배송횟수의_단위가_없으면_템플릿_문장을_유지한다(monkeypatch, text):
+    out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
+        {"choice_key": "purchase_1", "text": text}]})
+    template = explain_service.build_template(ExplainRequest(**REQ))
+    assert out["explanation"]["per_choice"][0] == template["explanation"]["per_choice"][0]
+
+
+def test_필수_사실과_단위를_모두_포함하면_모델_문장을_채택한다(monkeypatch):
+    text = "배송 2회이며 총액은 120,400원입니다."
+    out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
+        {"choice_key": "purchase_1", "text": text}]})
+    assert out["source"] == "llm"
+    assert out["explanation"]["per_choice"][0]["text"] == text
+
+
+@pytest.mark.parametrize("allowed", [False, True])
+def test_퍼센트_표기도_해당_안의_비율과_비교한다(monkeypatch, allowed):
+    import copy
+
+    request = copy.deepcopy(REQ)
+    if allowed:
+        request["result_summary"]["choices"][0]["saving_pct"] = 2
+    text = "배송 2회 120400원이며 비율은 2퍼센트입니다."
+    out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
+        {"choice_key": "purchase_1", "text": text}]}, request)
+    assert (out["source"] == "llm") is allowed
+
+
+def test_중첩된_키의_개인정보를_SDK_전달전에_가린다(monkeypatch):
+    import copy
+    import langchain_anthropic
+
+    captured = {}
+
+    class Model:
+        def __init__(self, **_):
+            pass
+
+        def invoke(self, messages):
+            captured["messages"] = str(messages)
+            return types.SimpleNamespace(content="{}", response_metadata={})
+
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Model)
+    request = copy.deepcopy(REQ)
+    request["result_summary"]["metadata"] = {
+        "example@private.test": [{"010-1234-5678": {"담당자 홍길동": "연락처"}}]}
+    settings = types.SimpleNamespace(anthropic_api_key="local-test-only", anthropic_model="configured-model")
+    explain_service.LlmExplainer()._call(settings, ExplainRequest(**request))
+    assert all(value not in captured["messages"] for value in ["example@private.test", "010-1234-5678", "홍길동"])
+
+
+def test_마스킹으로_같아진_키도_원문_노출없이_항목을_보존한다():
+    from app.agent.privacy import sanitize
+
+    result = sanitize({"first@private.test": "first", "second@private.test": "second"})
+    assert len(result) == 2 and set(result.values()) == {"first", "second"}
+    assert all("private.test" not in key for key in result)
+
+
+
+def test_단위가_빠진_문장도_같은_안의_중복_문장을_허용하지_않는다(monkeypatch):
+    out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
+        {"choice_key": "purchase_1", "text": "120400 2"},
+        {"choice_key": "purchase_1", "text": "배송 2회 120400원"}]})
+    assert out["source"] == "template"
