@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -30,6 +32,7 @@ import com.solution.common.client.AiServerClient;
 import com.solution.common.client.AiServerException;
 import com.solution.common.exception.ApiException;
 import com.solution.common.id.IdGenerator;
+import com.solution.common.lock.RequestKeyLock;
 import com.solution.common.response.ApiResponse;
 import com.solution.common.response.ResponseStatus;
 import com.solution.purchase.service.PurchaseRepository.SessionVersion;
@@ -49,14 +52,16 @@ class PurchaseServiceTest {
 	private final ObjectMapper objectMapper = JsonMapper.builder().build();
 	private PurchaseRepository repository;
 	private AiServerClient aiServerClient;
+	private RequestKeyLock requestKeyLock;
 	private PurchaseService service;
 
 	@BeforeEach
 	void setUp() {
 		repository = mock(PurchaseRepository.class);
 		aiServerClient = mock(AiServerClient.class);
+		requestKeyLock = mock(RequestKeyLock.class);
 		service = new PurchaseService(repository, aiServerClient, new CurrentOwner(OWNER), new IdGenerator(),
-				objectMapper, new TransactionTemplate(mock(PlatformTransactionManager.class)));
+				requestKeyLock, objectMapper, new TransactionTemplate(mock(PlatformTransactionManager.class)));
 	}
 
 	private static SessionVersion source(String featureType, String owner, int currentVersion, Integer versionNo,
@@ -143,6 +148,26 @@ class PurchaseServiceTest {
 		verify(repository, never()).insertResult(anyLong(), any(), anyString(), anyString(), any(), any(), any(),
 				any());
 		assertThat(response.data()).containsEntry("result_id", 2001L);
+	}
+
+	@Test
+	void 같은_요청키가_동시에_와서_먼저_저장된_결과가_있으면_새로_저장하지_않는다() {
+		givenSource(source("purchase", OWNER, 1, 1, CONFIRMED));
+		// 처음 확인할 때는 없었는데, 계산하는 사이 같은 키의 다른 요청이 먼저 저장했다.
+		given(repository.findByRequestKey(1001, "key-1")).willReturn(Optional.empty(), Optional.of(new StoredResult(
+				2003, 1001, 100, 1, "purchase", "ok", "OPTIMAL", "{\"choices\": []}", "{}", CONFIRMED, 1, OWNER,
+				null)));
+		givenTool(ApiResponse.ok(okData()));
+
+		ApiResponse<Map<String, Object>> response = service.run(100, 1001, "key-1");
+
+		InOrder order = inOrder(requestKeyLock, repository);
+		order.verify(requestKeyLock).lock("purchase", 1001, "key-1");
+		order.verify(repository).findByRequestKey(1001, "key-1");
+		verify(repository, never()).insertResult(anyLong(), any(), anyString(), anyString(), any(), any(), any(),
+				any());
+		verify(repository, never()).markSessionResult(anyLong());
+		assertThat(response.data()).containsEntry("result_id", 2003L);
 	}
 
 	@Test

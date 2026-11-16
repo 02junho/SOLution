@@ -14,6 +14,7 @@ import com.solution.common.client.AiServerClient;
 import com.solution.common.client.AiServerException;
 import com.solution.common.exception.ApiException;
 import com.solution.common.id.IdGenerator;
+import com.solution.common.lock.RequestKeyLock;
 import com.solution.common.response.ApiResponse;
 import com.solution.common.response.ResponseStatus;
 import com.solution.purchase.service.PurchaseRepository.SessionVersion;
@@ -47,15 +48,18 @@ public class PurchaseService {
 	private final AiServerClient aiServerClient;
 	private final CurrentOwner currentOwner;
 	private final IdGenerator idGenerator;
+	private final RequestKeyLock requestKeyLock;
 	private final ObjectMapper objectMapper;
 	private final TransactionTemplate transactionTemplate;
 
 	public PurchaseService(PurchaseRepository repository, AiServerClient aiServerClient, CurrentOwner currentOwner,
-			IdGenerator idGenerator, ObjectMapper objectMapper, TransactionTemplate transactionTemplate) {
+			IdGenerator idGenerator, RequestKeyLock requestKeyLock, ObjectMapper objectMapper,
+			TransactionTemplate transactionTemplate) {
 		this.repository = repository;
 		this.aiServerClient = aiServerClient;
 		this.currentOwner = currentOwner;
 		this.idGenerator = idGenerator;
+		this.requestKeyLock = requestKeyLock;
 		this.objectMapper = objectMapper;
 		this.transactionTemplate = transactionTemplate;
 	}
@@ -109,18 +113,26 @@ public class PurchaseService {
 		long resultId = idGenerator.next();
 		OffsetDateTime createdAt = OffsetDateTime.now();
 		String detailStatus = data.get("detail_status") == null ? null : String.valueOf(data.get("detail_status"));
-		transactionTemplate.executeWithoutResult(status -> {
+		String summaryJson = writeJson(summary);
+		String detailJson = detail == null ? null : writeJson(detail);
+		// 같은 요청 키가 동시에 두 번 오면 둘 다 계산까지는 갈 수 있다(같은 입력이면 결과도 같다).
+		// work_result.request_key에는 UQ가 없으므로(ERD) 저장 직전에 잠그고 다시 확인해 결과를 하나만 남긴다 (RequestKeyLock).
+		StoredResult saved = transactionTemplate.execute(status -> {
+			requestKeyLock.lock("purchase", source.inputVersionId(), requestKey);
+			var stored = repository.findByRequestKey(source.inputVersionId(), requestKey);
+			if (stored.isPresent()) {
+				return stored.get();
+			}
 			repository.insertResult(resultId, source, requestKey, tool.status().getValue(), detailStatus,
-					writeJson(summary), detail == null ? null : writeJson(detail), createdAt);
+					summaryJson, detailJson, createdAt);
 			if (ok) {
 				repository.markSessionResult(source.sessionId());
 			}
+			return new StoredResult(resultId, source.inputVersionId(), source.sessionId(), source.versionNo(),
+					"purchase", tool.status().getValue(), detailStatus, summaryJson, detailJson, createdAt,
+					source.currentVersion(), source.ownerKey(), null);
 		});
-
-		return runResponse(new StoredResult(resultId, source.inputVersionId(), source.sessionId(),
-				source.versionNo(), "purchase", tool.status().getValue(), detailStatus, writeJson(summary),
-				detail == null ? null : writeJson(detail), createdAt, source.currentVersion(), source.ownerKey(),
-				null));
+		return runResponse(saved);
 	}
 
 	public ApiResponse<Map<String, Object>> detail(long resultId) {
