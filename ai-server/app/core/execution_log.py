@@ -40,6 +40,7 @@ def write_tool_log(
     status: str,
     latency_ms: int,
     payload: dict,
+    log_type: str = "tool",
 ) -> None:
     try:
         with get_pool().connection(timeout=1) as conn:
@@ -47,9 +48,9 @@ def write_tool_log(
                 """
                 INSERT INTO execution_log
                     (log_id, session_id, input_version_id, log_type, request_key, name, status, latency_ms, payload_json)
-                VALUES (%s, %s, %s, 'tool', %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (_next_id(), session_id, input_version_id, request_key, name, status, latency_ms, Jsonb(payload)),
+                (_next_id(), session_id, input_version_id, log_type, request_key, name, status, latency_ms, Jsonb(payload)),
             )
     except Exception as exc:  # 기록 실패로 계산 결과를 막지 않는다.
         logger.warning("execution_log 기록 실패 (%s): %s", name, exc)
