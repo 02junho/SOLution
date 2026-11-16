@@ -13,6 +13,7 @@ ai-server 폴더에서:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import statistics
 import time
@@ -35,6 +36,18 @@ def call_tool(request: dict) -> tuple[str, dict | None, str | None]:
     except (ValidationError, InputError) as exc:
         return "error", None, str(exc).splitlines()[0]
     return res.status.value, res.data, res.message
+
+
+def apply_changes(request: dict, changes: list[dict]) -> dict:
+    """실패 응답의 suggested_changes(path: budget_krw, items[1].storage_capacity …)대로 바꾼 새 요청."""
+    new = copy.deepcopy(request)
+    for c in changes:
+        target, key = new, c["path"]
+        if key.startswith("items["):
+            index, key = key[len("items["):].split("].")
+            target = new["items"][int(index)]
+        target[key] = c["suggested"]
+    return new
 
 
 def evaluate(case: dict) -> dict:
@@ -96,6 +109,13 @@ def evaluate(case: dict) -> dict:
             rechecked += 1
     row["plans_rechecked"] = rechecked
 
+    # 4. 조건 수정 후 재계산: 바꿀 칸을 제안했다면 그대로 바꿔 다시 계산할 때 구매안이 나와야 한다.
+    if status == "infeasible" and data.get("suggested_changes"):
+        again, _, again_msg = call_tool(apply_changes(req, data["suggested_changes"]))
+        row["recalculated"] = again
+        if again != "ok":
+            problems.append(f"제안대로 바꿔 다시 계산했는데 {again} ({again_msg})")
+
     if status == "ok" and base is not None and not base_viol:
         row["saving_vs_baseline_krw"] = base - p1
         row["saving_pct"] = round((base - p1) / base * 100, 2) if base else None
@@ -112,6 +132,7 @@ def summarize(rows: list[dict]) -> dict:
         "passed": sum(r["passed"] for r in rows),
         "oracle_checked": sum("oracle" in r for r in rows),
         "plans_rechecked": sum(r.get("plans_rechecked", 0) for r in rows),
+        "recalculated_ok": sum(r.get("recalculated") == "ok" for r in rows),
         "baseline_valid": len(savings),
         "baseline_broken": sum(bool(r["baseline_violations"]) for r in ok_rows),
         "saving_pct_mean": round(statistics.mean(savings), 2) if savings else None,
@@ -143,6 +164,7 @@ def to_markdown(rows: list[dict], summary: dict, meta: dict) -> str:
         f"| 독립 전수 열거와 대조한 사례 | {summary['oracle_checked']} |",
         f"| 다시 합산해 조건을 확인한 구매안 | {summary['plans_rechecked']} |",
         f"| 기준선이 조건을 어긴 사례 | {summary['baseline_broken']} |",
+        f"| 실패 사례에서 제안대로 바꿔 다시 계산해 구매안이 나온 수 | {summary['recalculated_ok']} |",
         f"| 기준선이 유효한 사례의 안 1 절감률 (평균 / 최대) | {_fmt(summary['saving_pct_mean'])}% / {_fmt(summary['saving_pct_max'])}% |",
         f"| 한 번 실행 시간 (중앙값 / 최대) | {summary['ms_median']}ms / {summary['ms_max']}ms |",
         "",

@@ -458,3 +458,92 @@ def test_단위는_g_ml_ea만_받는다():
     body["items"][0]["base_unit"] = "kg"
 
     assert _post(body).status_code == 400
+
+
+# ── 조건 수정 후 재계산: 실패 응답의 suggested_changes ─────────────────
+
+
+def _apply(body: dict, changes: list[dict]) -> dict:
+    """suggested_changes의 path(예: budget_krw, items[1].storage_capacity)대로 값을 바꾼 새 요청."""
+    new = copy.deepcopy(body)
+    for c in changes:
+        target, key = new, c["path"]
+        if key.startswith("items["):
+            index, key = key[len("items["):].split("].")
+            target = new["items"][int(index)]
+        assert target[key] == c["current"]
+        target[key] = c["suggested"]
+    return new
+
+
+def _three_conditions_request() -> dict:
+    body = _req(
+        max_delivery_count=1,
+        items=[
+            {"item_id": "beans", "item_name": "원두", "base_unit": "g", "gross_need": 1, "usable_inventory": 0, "safety_stock": 0, "max_end_inventory": 0},
+            {"item_id": "milk", "item_name": "우유", "base_unit": "ml", "gross_need": 1, "usable_inventory": 0, "safety_stock": 0, "storage_capacity": 1},
+        ],
+        quotes=[
+            {"supplier_id": "A", "item_id": "beans", "pack_size": 2, "pack_unit": "g", "pack_price_krw": 100, "vat_included": True},
+            {"supplier_id": "B", "item_id": "milk", "pack_size": 2, "pack_unit": "ml", "pack_price_krw": 100, "vat_included": True},
+        ],
+    )
+    for s in body["suppliers"]:
+        s["minimum_order_krw"] = 0
+    return body
+
+
+def test_예산_부족이면_예산을_얼마로_바꿀지_알려준다():
+    data = _post(_req(budget_krw=100000)).json()["data"]
+
+    assert data["suggested_changes"] == [
+        {"path": "budget_krw", "label": "예산", "unit": "원", "current": 100000, "suggested": 120400}
+    ]
+
+
+def test_조건_세_개가_원인이면_세_칸을_모두_알려준다():
+    data = _post(_three_conditions_request()).json()["data"]
+
+    assert [c["path"] for c in data["suggested_changes"]] == [
+        "max_delivery_count", "items[0].max_end_inventory", "items[1].storage_capacity"
+    ]
+    # 배송 2회, 원두는 2g 한 봉을 사서 1g이 남음, 우유는 2ml 한 팩이 들어감
+    assert [c["suggested"] for c in data["suggested_changes"]] == [2, 1, 2]
+
+
+def test_최소_주문금액이_원인이면_바꿀_칸을_제안하지_않는다():
+    body = _req()
+    for s in body["suppliers"]:
+        s["minimum_order_krw"] = 500000  # 예산보다 커서 어느 거래처도 최소 주문금액을 못 채운다
+
+    data = _post(body).json()["data"]
+
+    assert "minimum_order" in [v["constraint"] for v in data["violations"]]
+    assert data["suggested_changes"] == []
+
+
+def test_제안대로_바꿔_다시_계산하면_구매안이_나온다():
+    def spoiled(body):
+        body["items"][1]["max_end_inventory"] = 4000
+        return body
+
+    def stored(body):
+        body["items"][0]["storage_capacity"] = 2500
+        return body
+
+    cases = {
+        "예산": _req(budget_krw=100000),
+        "배송 횟수": _req(max_delivery_count=1, quotes=[q for q in REQUEST["quotes"] if not (q["supplier_id"] == "A" and q["item_id"] == "milk")]),
+        "보관 한도": stored(_req()),
+        "기간 끝 재고 한도": spoiled(_req()),
+        "세 조건": _three_conditions_request(),
+    }
+    for name, body in cases.items():
+        first = _post(body).json()
+        assert first["status"] == "infeasible", name
+        changes = first["data"]["suggested_changes"]
+        assert changes, name
+
+        again = _post(_apply(body, changes)).json()
+
+        assert again["status"] == "ok", (name, again["message"])

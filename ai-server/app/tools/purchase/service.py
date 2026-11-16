@@ -15,6 +15,7 @@ from app.tools.purchase.optimizer import (
     Prepared,
     baseline,
     bought_of,
+    end_of_period,
     over_spoilage,
     over_storage,
     baseline_violations,
@@ -299,7 +300,42 @@ def _infeasible(p: Prepared) -> ApiResponse[dict]:
         message = f"{LABELS[group[0]]} 조건 때문에 필요한 양을 살 수 없어요."
     else:
         message = f"{', '.join(LABELS[g] for g in group)} 조건이 함께 맞지 않아 구매안을 만들 수 없어요."
-    return infeasible({"detail_status": "INFEASIBLE", "violations": violations, "suggestions": suggestions}, message)
+    return infeasible(
+        {"detail_status": "INFEASIBLE", "violations": violations, "suggestions": suggestions,
+         "suggested_changes": _suggested_changes(p, group, relaxed)},
+        message,
+    )
+
+
+def _suggested_changes(p: Prepared, group: tuple[str, ...], relaxed: Plan | None) -> list[dict]:
+    """사장님이 바꿀 칸과 값. 이대로 바꿔 새 입력 버전으로 다시 계산하면 원인 찾기에서 찾은 안(relaxed)이 조건을 지킨다.
+
+    path는 요청 JSON 안의 위치(missing_fields와 같은 방식). 거래처 최소 주문금액은 사장님이 바꿀 수 없어서,
+    원인에 있으면 칸을 제안하지 않는다(빈 목록, 문장 제안만).
+    """
+    if relaxed is None or "minimum_order" in group:
+        return []
+    req = p.req
+    changes: list[dict] = []
+    if "budget" in group:
+        changes.append({"path": "budget_krw", "label": "예산", "unit": "원",
+                        "current": req.budget_krw, "suggested": relaxed.total_krw})
+    if "delivery_count" in group:
+        changes.append({"path": "max_delivery_count", "label": "배송 횟수", "unit": "회",
+                        "current": req.max_delivery_count, "suggested": len(relaxed.suppliers)})
+    for k, item in enumerate(req.items):
+        bought = bought_of(p, relaxed, item.item_id)
+        if "storage" in group and item.storage_capacity is not None:
+            needed = (item.usable_inventory or 0.0) + bought
+            if needed > item.storage_capacity:
+                changes.append({"path": f"items[{k}].storage_capacity", "label": f"{item.item_name} 보관 한도",
+                                "unit": item.base_unit, "current": _n(item.storage_capacity), "suggested": _n(needed)})
+        if "spoilage" in group and item.max_end_inventory is not None:
+            end = end_of_period(item, bought)
+            if end > item.max_end_inventory:
+                changes.append({"path": f"items[{k}].max_end_inventory", "label": f"{item.item_name} 기간 끝 재고 한도",
+                                "unit": item.base_unit, "current": _n(item.max_end_inventory), "suggested": _n(end)})
+    return changes
 
 
 def _n(value: float | None):
