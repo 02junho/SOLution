@@ -134,6 +134,8 @@ uvicorn app.main:app --reload --port 8000
 cd backend && ./gradlew test
 ```
 
+이름이 `…IntegrationTest`인 테스트는 임시 PostgreSQL을 Docker로 띄워 실제 DB로 확인합니다(Testcontainers). Docker Desktop이 켜져 있어야 돌고, `@Testcontainers(disabledWithoutDocker = true)`를 붙이면 Docker가 없을 때 실패 대신 건너뜁니다. CI에서는 항상 돕니다.
+
 ```bash
 cd ai-server && pytest
 ```
@@ -182,6 +184,7 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
   - 고를 수 있는 안: `choice_key` (매입 `purchase_1`·`purchase_2`, 운영 `CURRENT`·`ALT_A`·`ALT_C`). 확정 때는 `selected_choice_key`로 저장됩니다.
 - **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
 - **요청 키**: Spring이 `X-Request-Key` 헤더로 넘기고, FastAPI는 `get_request_key`로 받아 `execution_log.request_key`에 씁니다. 같은 요청을 다시 보낼 때는 같은 키를 씁니다.
+  - `work_result.request_key`에는 UQ가 없습니다(ERD). `work_result`에 쓰는 API(구매·운영 계산 실행)는 저장하는 트랜잭션 안에서 `RequestKeyLock.lock(기능, 입력버전, 요청키)`를 먼저 걸고, 같은 결과가 이미 있는지 다시 확인한 뒤 없을 때만 저장합니다. 확정(`work_confirmation`)은 `confirm_request_key` UQ가 있어 잠금이 필요 없습니다.
 - **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
 - **DB 테이블을 바꿀 때**: `V1__init_schema.sql`은 고치지 말고 `backend/src/main/resources/db/migration/V2__설명.sql`을 새로 추가합니다.
 - **RAG 벡터**: `rag_chunk.embedding`은 `vector(1024)`(KURE-v1)이고, 코사인 거리 HNSW 인덱스가 있습니다.
