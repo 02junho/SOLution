@@ -82,7 +82,9 @@ def evaluate(case: dict) -> dict:
             if base != oracle.baseline_total(req):
                 problems.append(f"기준선 {base} ≠ 다시 계산 {oracle.baseline_total(req)}")
 
-    # 3. 돌려준 안 검산. 쓸 수 있고 다른 안과 같지 않은 안마다 상세가 꼭 하나 있어야 한다.
+    # 3. 돌려준 안 검산. ok면 안 1은 언제나 쓸 수 있어야 하고, 쓸 수 있고 다른 안과 같지 않은 안마다 상세가 꼭 하나 있어야 한다.
+    if status == "ok" and not choices.get("purchase_1", {}).get("available"):
+        problems.append("ok인데 안 1을 쓸 수 없다고 나옵니다")
     detail_keys = [c["choice_key"] for c in data["detail"]["choices"]] if status == "ok" else []
     need_detail = [k for k, c in choices.items() if c.get("available") and not c.get("same_as")]
     if sorted(detail_keys) != sorted(need_detail):
