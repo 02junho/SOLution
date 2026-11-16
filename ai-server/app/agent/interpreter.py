@@ -47,6 +47,10 @@ _SYSTEM = (
     "3) 수량 단위는 g/ml/ea(개), 금액은 원. 2L는 2000ml로 환산해도 되지만 어느 칸인지 모르면 역시 되묻는다.\n"
     "4) 실제 발주·결제·문자 전송 같은 요청은 intent=unsupported로 둔다.\n"
     "5) 모르는 값은 0이 아니라 비워 둔다. 품목 변경은 입력에 있는 item_id를 명시한다.\n"
+    "6) field와 target에는 실제 입력 키를 쓴다. 예산은 budget_krw, 기간은 planning_days, "
+    "배송 횟수는 max_delivery_count이다. 금액·기간·횟수의 unit은 반드시 null이다.\n"
+    "7) 품목 수치의 target은 gross_need/usable_inventory/safety_stock/storage_capacity/max_end_inventory이며 "
+    "unit은 해당 품목의 base_unit(g/ml/ea)이다. 어느 칸인지 불명확하면 changes 대신 unresolved로 질문한다.\n"
     "JSON 스키마: {intent: change_input|ask|unsupported|smalltalk, "
     "changes:[{field,label,value,unit,target,item_id}], unresolved:[{question_key,text,choices}], "
     "evidence:[string], reply:string}"
@@ -100,7 +104,10 @@ class LlmInterpreter:
                 max_tokens=1024,
                 timeout=20,
             )
-            result = model.invoke([("system", system), ("human", user)])
+            response = model.with_structured_output(
+                InterpretDraft, method="json_schema", include_raw=True,
+            ).invoke([("system", system), ("human", user)])
+            result = response["raw"]
         except Exception as exc:
             status = getattr(exc, "status_code", None)
             retryable = isinstance(exc, (APIConnectionError, TimeoutError, ConnectionError)) or status == 429 or (
@@ -108,6 +115,11 @@ class LlmInterpreter:
             raise LlmUnavailable("LLM 호출에 실패했습니다.", retryable=retryable) from exc
         if result.response_metadata.get("stop_reason") == "refusal":
             raise LlmUnavailable("LLM이 요청을 거절했습니다.", refused=True)
+        if result.response_metadata.get("stop_reason") == "max_tokens":
+            raise LlmUnavailable("AI 해석 응답이 완성되지 않았습니다.")
+        parsed = response.get("parsed")
+        if isinstance(parsed, InterpretDraft):
+            return parsed.model_dump_json()
         content = result.content
         if isinstance(content, list):  # langchain이 블록 배열로 줄 때는 텍스트만 모은다.
             content = "".join(part["text"] for part in content

@@ -10,7 +10,7 @@ import re
 from typing import Protocol
 
 from app.agent.privacy import sanitize
-from app.agent.schemas import ExplainRequest
+from app.agent.schemas import ExplainDraft, ExplainRequest
 from app.core.config import get_settings
 from app.core.response import ApiResponse
 from app.core.status import ResponseStatus
@@ -72,13 +72,18 @@ def _headline(choices: list[dict]) -> str:
 
 
 class LlmExplainer:
+    def __init__(self):
+        self.last_call_status = "not_called"
+
     def explain(self, req: ExplainRequest) -> dict:
+        self.last_call_status = "not_called"
         template = build_template(req)
         return self._refine(req, template) or template
 
     def _refine(self, req: ExplainRequest, template: dict) -> dict | None:
         settings = get_settings()
         if not settings.anthropic_api_key:
+            self.last_call_status = "not_configured"
             return None
         raw = self._call(settings, req)
         parsed = _parse(raw) if isinstance(raw, str) else None
@@ -148,28 +153,44 @@ class LlmExplainer:
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError:  # pragma: no cover
+            self.last_call_status = "unavailable"
             return None
         system = (
             "카페 계산 결과를 쉬운 한국어로 설명한다. 제공한 수치와 사실만 그대로 사용하고 "
             "원인·효과·보장을 지어내지 않는다. 발주·결제를 권하지 않는다. "
-            "운영은 모의 조건임을 명시한다. JSON만 출력한다: "
+            "운영은 모의 조건임을 명시한다. 안마다 짧은 한 문장으로 설명한다. "
+            "total_krw와 delivery_count가 있으면 각각 원·회 단위를 붙인 아라비아 숫자로 빠짐없이 쓴다. "
+            "다른 안의 수치를 섞거나 차액·비율을 새로 계산하지 않는다. headline은 짧은 안내로 쓰고 "
+            "caveats는 숫자 없는 문장이나 빈 배열로 둔다. JSON만 출력한다: "
             "{headline:string, per_choice:[{choice_key,text}], caveats:[string]}"
         )
         summary = json.dumps(sanitize(req.result_summary), ensure_ascii=False)
         if len(summary) > 6000:
+            self.last_call_status = "skipped_large_input"
             return None  # 전체 대용량 결과를 모델에 넘기지 않고 템플릿으로 설명한다.
         user = "요약: " + summary
         if req.focus:
             user += "\n궁금한 점: " + sanitize(req.focus)[:1000]
         try:
             model = ChatAnthropic(model=settings.anthropic_model, api_key=settings.anthropic_api_key,
-                                  max_tokens=1024, timeout=20, max_retries=0)
-            result = model.invoke([("system", system), ("human", user)])
+                                  max_tokens=4096, timeout=20, max_retries=0)
+            response = model.with_structured_output(
+                ExplainDraft, method="json_schema", include_raw=True,
+            ).invoke([("system", system), ("human", user)])
+            result = response["raw"]
         except Exception:
+            self.last_call_status = "failed"
             logger.warning("LLM 설명 호출 실패: 템플릿으로 대체합니다.")
             return None
-        if getattr(result, "response_metadata", {}).get("stop_reason") == "refusal":
+        stop_reason = getattr(result, "response_metadata", {}).get("stop_reason")
+        if stop_reason in {"refusal", "max_tokens"}:
+            self.last_call_status = "refused" if stop_reason == "refusal" else "truncated"
             return None
+        # 모델 응답 수신과 최종 문장 채택(source)은 구분한다. 안전 검증은 아래 단계에서 수행한다.
+        self.last_call_status = "success"
+        parsed = response.get("parsed")
+        if isinstance(parsed, ExplainDraft):
+            return parsed.model_dump_json()
         content = result.content
         if isinstance(content, list):
             content = "".join(p["text"] for p in content if isinstance(p, dict) and isinstance(p.get("text"), str))
