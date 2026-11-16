@@ -461,6 +461,106 @@ def test_단위는_g_ml_ea만_받는다():
     assert _post(body).status_code == 400
 
 
+# ── 덜 채운 입력: 빈 칸은 400이 아니라 needs_input ─────────────────
+
+
+def test_예산과_견적이_아직_없으면_빈_칸을_묻는다(tool_logs):
+    body = _req()
+    del body["budget_krw"]
+    body["quotes"] = []
+
+    response = _post(body)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "needs_input"
+    assert payload["data"]["detail_status"] == "NEEDS_INPUT"
+    assert payload["data"]["missing_fields"] == [
+        {"path": "budget_krw", "label": "예산", "unit": None},
+        {"path": "quotes", "label": "견적", "unit": None},
+    ]
+    assert payload["message"] == "계산하려면 예산, 견적이 필요해요."
+    assert tool_logs[0]["status"] == "incomplete"
+    assert tool_logs[0]["session_id"] == REQUEST["session_id"]
+
+
+def test_품목_칸이_null이면_품목_이름과_단위로_묻는다():
+    body = _req()
+    body["items"][1]["gross_need"] = None
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "needs_input"
+    assert payload["data"]["missing_fields"] == [
+        {"path": "items[1].gross_need", "label": "우유 필요량", "unit": "ml", "item_id": "milk"}
+    ]
+    assert payload["message"] == "계산하려면 우유 필요량이 필요해요."
+
+
+def test_다른_빈_칸과_재고_빈칸을_한_번에_묻는다():
+    body = _req()
+    body["items"][0]["usable_inventory"] = None
+    del body["suppliers"][0]["delivery_fee_krw"]
+
+    paths = [f["path"] for f in _post(body).json()["data"]["missing_fields"]]
+
+    assert paths == ["items[0].usable_inventory", "suppliers[0].delivery_fee_krw"]
+
+
+def test_견적_칸이_비면_거래처와_품목_이름으로_묻는다():
+    body = _req()
+    del body["quotes"][0]["pack_price_krw"]
+
+    field = _post(body).json()["data"]["missing_fields"][0]
+
+    assert field["path"] == "quotes[0].pack_price_krw"
+    assert field["label"].endswith("견적 묶음 가격")
+    assert "원두" in field["label"]
+
+
+def test_부가세_칸이_없으면_모름으로_보고_계산한다():
+    body = _req()
+    for q in body["quotes"]:
+        del q["vat_included"]
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "ok"
+    assert any(w["warning_id"] == "VAT_UNKNOWN" for w in payload["data"]["summary"]["warnings"])
+
+
+def test_숫자_칸이_빈_문자열이어도_빈_칸으로_묻는다():
+    body = _req(budget_krw="")
+    body["quotes"][0]["pack_price_krw"] = "  "
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "needs_input"
+    assert [f["path"] for f in payload["data"]["missing_fields"]] == ["budget_krw", "quotes[0].pack_price_krw"]
+
+
+def test_숫자_칸에_숫자가_아닌_글자는_400():
+    assert _post(_req(budget_krw="많이")).status_code == 400
+
+
+def test_빈_칸과_틀린_값이_섞이면_400():
+    body = _req()
+    del body["budget_krw"]
+    body["quotes"][0]["pack_price_krw"] = -1
+
+    assert _post(body).status_code == 400
+
+
+def test_Spring이_넣는_칸이_비면_400():
+    body = _req()
+    del body["input_version_id"]
+
+    response = _post(body)
+
+    assert response.status_code == 400
+    assert response.json()["status"] == "error"
+
+
 # ── 조건 수정 후 재계산: 실패 응답의 suggested_changes ─────────────────
 
 
