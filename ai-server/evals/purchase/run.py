@@ -109,7 +109,17 @@ def evaluate(case: dict) -> dict:
             rechecked += 1
     row["plans_rechecked"] = rechecked
 
-    # 4. 조건 수정 후 재계산: 바꿀 칸을 제안했다면 그대로 바꿔 다시 계산할 때 구매안이 나와야 한다.
+    # 4. 조건 수정 후 재계산. 원인이 칸 값을 바꿔서는 못 고치는 것(최소 주문금액 = 거래처 조건, no_quote = 견적을 새로 넣어야 함)이면
+    #    제안하지 않아야 하고, 그 밖에는 바꿀 칸을 꼭 제안해야 한다. 제안했다면 그대로 바꿔 다시 계산할 때 구매안이 나와야 한다.
+    if status == "infeasible":
+        changes = data.get("suggested_changes")
+        if not isinstance(changes, list):
+            problems.append("infeasible 응답에 suggested_changes 목록이 없습니다")
+        elif {"minimum_order", "no_quote"} & set(viol or []):
+            if changes:
+                problems.append(f"원인 {viol}은 칸 값으로 못 고치는데 바꿀 칸을 제안했습니다")
+        elif not changes:
+            problems.append(f"원인 {viol}은 사장님이 바꿀 수 있는데 바꿀 칸 제안이 비었습니다")
     if status == "infeasible" and data.get("suggested_changes"):
         again, _, again_msg = call_tool(apply_changes(req, data["suggested_changes"]))
         row["recalculated"] = again
