@@ -314,6 +314,59 @@ def test_작은_포장이_있으면_기간_끝_재고_한도를_지킨다():
     assert milk["end_of_period"] <= 4000
 
 
+def test_지금_재고만으로_기간_끝_한도를_넘으면_사지_않고_경고한다():
+    body = _req()
+    body["items"][1].update(gross_need=1000, usable_inventory=8000, safety_stock=0, max_end_inventory=5000)
+
+    data = _post(body).json()["data"]
+
+    choice = _choices(data)["purchase_1"]
+    assert choice["constraints_met"]["spoilage"] is False
+    assert "END_STOCK_OVER_LIMIT" in choice["warning_ids"]
+    warning = next(w for w in data["summary"]["warnings"] if w["warning_id"] == "END_STOCK_OVER_LIMIT")
+    assert warning["requires_ack"] is False
+    assert warning["message"].startswith("우유은(는) 사지 않아도 기간 끝에 7,000ml가 남아 한도 5,000ml를 넘어요")
+    detail = next(c for c in data["detail"]["choices"] if c["choice_key"] == "purchase_1")
+    assert all(line["item_id"] != "milk" for line in detail["lines"])
+
+
+def test_소수_수량도_포장_단위로_딱_맞게_산다():
+    body = _req(quotes=[
+        {"supplier_id": "A", "item_id": "beans", "pack_size": 1000, "pack_unit": "g", "pack_price_krw": 22000, "vat_included": True},
+        {"supplier_id": "B", "item_id": "milk", "pack_size": 0.1, "pack_unit": "ml", "pack_price_krw": 1000, "vat_included": True},
+    ])
+    body["suppliers"][1]["minimum_order_krw"] = 0
+    body["items"][1].update(gross_need=0.7, usable_inventory=0, safety_stock=0, storage_capacity=None, max_end_inventory=0)
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "ok"  # 0.7 / 0.1 = 6.999… 이어도 7묶음까지 살 수 있어야 한다
+    detail = next(c for c in payload["data"]["detail"]["choices"] if c["choice_key"] == "purchase_1")
+    milk = next(line for line in detail["lines"] if line["item_id"] == "milk")
+    assert milk["pack_count"] == 7
+
+
+def test_조건_세_개를_함께_풀어야_하면_그_세_개만_원인으로_알려준다():
+    body = _req(
+        max_delivery_count=1,
+        items=[
+            {"item_id": "beans", "item_name": "원두", "base_unit": "g", "gross_need": 1, "usable_inventory": 0, "safety_stock": 0, "max_end_inventory": 0},
+            {"item_id": "milk", "item_name": "우유", "base_unit": "ml", "gross_need": 1, "usable_inventory": 0, "safety_stock": 0, "storage_capacity": 1},
+        ],
+        quotes=[
+            {"supplier_id": "A", "item_id": "beans", "pack_size": 2, "pack_unit": "g", "pack_price_krw": 100, "vat_included": True},
+            {"supplier_id": "B", "item_id": "milk", "pack_size": 2, "pack_unit": "ml", "pack_price_krw": 100, "vat_included": True},
+        ],
+    )
+    for s in body["suppliers"]:
+        s["minimum_order_krw"] = 0
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "infeasible"
+    assert sorted(v["constraint"] for v in payload["data"]["violations"]) == ["delivery_count", "spoilage", "storage"]
+
+
 def test_기간_끝_재고_한도가_안전재고보다_작으면_400():
     body = _req()
     body["items"][1]["max_end_inventory"] = 1000  # 안전재고 2,000
