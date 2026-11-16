@@ -529,6 +529,20 @@ def test_부가세_칸이_없으면_모름으로_보고_계산한다():
     assert any(w["warning_id"] == "VAT_UNKNOWN" for w in payload["data"]["summary"]["warnings"])
 
 
+def test_숫자_칸이_빈_문자열이어도_빈_칸으로_묻는다():
+    body = _req(budget_krw="")
+    body["quotes"][0]["pack_price_krw"] = "  "
+
+    payload = _post(body).json()
+
+    assert payload["status"] == "needs_input"
+    assert [f["path"] for f in payload["data"]["missing_fields"]] == ["budget_krw", "quotes[0].pack_price_krw"]
+
+
+def test_숫자_칸에_숫자가_아닌_글자는_400():
+    assert _post(_req(budget_krw="많이")).status_code == 400
+
+
 def test_빈_칸과_틀린_값이_섞이면_400():
     body = _req()
     del body["budget_krw"]

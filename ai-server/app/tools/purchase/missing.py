@@ -49,13 +49,14 @@ _SECTIONS = ["planning_days", "budget_krw", "max_delivery_count", "items", "supp
 
 
 def _is_blank_error(err: dict) -> bool:
+    """오류 종류와 상관없이 값이 비어 있으면 빈 칸. 숫자 칸의 ""(int_parsing 등)도 여기에 든다."""
     kind = err.get("type", "")
     value = err.get("input")
     if kind == "missing" or value is None:
         return True
-    if kind == "too_short" and isinstance(value, list) and not value:
+    if isinstance(value, str) and not value.strip():
         return True
-    return kind == "string_too_short" and isinstance(value, str) and not value.strip()
+    return kind == "too_short" and isinstance(value, list) and not value
 
 
 def _get(rows: Any, index: int) -> dict:

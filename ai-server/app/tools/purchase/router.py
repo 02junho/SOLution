@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from starlette.concurrency import run_in_threadpool
 
 from app.core.execution_log import LOG_STATUS, write_tool_log
 from app.core.request_key import REQUEST_KEY_HEADER, get_request_key
@@ -43,7 +44,9 @@ class _BlankFieldsRoute(APIRoute):
                 if fields is None:
                     raise
                 result = needs_input({"detail_status": "NEEDS_INPUT", "missing_fields": fields}, missing.message(fields))
-                write_tool_log(
+                # 기록은 DB를 동기로 쓰므로 이벤트 루프를 막지 않게 스레드풀에서 한다. 실패해도 응답은 그대로 (write_tool_log가 삼킴).
+                await run_in_threadpool(
+                    write_tool_log,
                     name="purchase",
                     session_id=raw.get("session_id"),
                     input_version_id=raw.get("input_version_id"),
