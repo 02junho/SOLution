@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -24,6 +26,7 @@ import com.solution.common.id.IdGenerator;
 import com.solution.common.lock.RequestKeyLock;
 import com.solution.session.dto.ConfirmResultRequest;
 import com.solution.session.service.ConfirmationRepository.Source;
+import com.solution.session.service.ConfirmationRepository.Stored;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -34,7 +37,7 @@ class WorkResultConfirmServiceTest {
 	private final TransactionTemplate transactions = mock(TransactionTemplate.class);
 	private final WorkResultConfirmService service = new WorkResultConfirmService(repository, sessions,
 			new CurrentOwner("demo-owner"), mock(IdGenerator.class), mock(RequestKeyLock.class),
-			JsonMapper.builder().build(), transactions);
+			JsonMapper.builder().build(), transactions, mock(ConfirmationAudit.class));
 	private final ConfirmResultRequest request = new ConfirmResultRequest(1002L, "purchase_1", List.of("VAT_UNKNOWN"));
 
 	@BeforeEach
@@ -80,6 +83,45 @@ class WorkResultConfirmServiceTest {
 		assertThatThrownBy(() -> service.confirm(2001, "key", request))
 				.isInstanceOfSatisfying(ResultConfirmException.class, e -> assertThat(e.getDetailCode()).isEqualTo("STALE_RESULT"));
 		verify(repository, never()).hasVersionConfirmation(anyLong());
+	}
+
+	@Test
+	void INSERT의_UNIQUE_경합은_버전중복으로_반환한다() {
+		given(repository.findSource(2001)).willReturn(Optional.of(readySource()));
+		given(repository.findByKey("key")).willReturn(Optional.empty());
+		given(repository.hasVersionConfirmation(1002)).willReturn(false, true);
+		assertThatThrownBy(() -> service.confirm(2001, "key", request))
+				.isInstanceOfSatisfying(ResultConfirmException.class,
+						e -> assertThat(e.getDetailCode()).isEqualTo("VERSION_ALREADY_CONFIRMED"));
+		verify(sessions, never()).updateSessionProgress(anyLong(), anyInt(), anyString());
+	}
+
+	@Test
+	void INSERT_경합에서_같은_키의_다른내용은_키재사용_오류다() {
+		given(repository.findSource(2001)).willReturn(Optional.of(readySource()));
+		given(repository.findByKey("key")).willReturn(Optional.empty(), Optional.of(stored("different")));
+		assertThatThrownBy(() -> service.confirm(2001, "key", request))
+				.isInstanceOfSatisfying(ResultConfirmException.class,
+						e -> assertThat(e.getDetailCode()).isEqualTo("IDEMPOTENCY_KEY_REUSED"));
+	}
+
+	@Test
+	void INSERT_경합에서_같은_키의_같은내용은_재전송_응답이다() {
+		given(repository.findSource(2001)).willReturn(Optional.of(readySource()));
+		String hash = service.fingerprint("demo-owner", 2001, request, List.of("VAT_UNKNOWN"));
+		given(repository.findByKey("key")).willReturn(Optional.empty(), Optional.of(stored(hash)));
+		assertThat(service.confirm(2001, "key", request).data().isNew()).isFalse();
+		verify(sessions, never()).updateSessionProgress(anyLong(), anyInt(), anyString());
+	}
+
+	private Source readySource() {
+		return new Source(2001, 1002, 500, 10, 2, 2, "purchase", "demo-owner", OffsetDateTime.now(), "ok",
+				"{\"choices\":[{\"choice_key\":\"purchase_1\"}],\"warnings\":[{\"warning_id\":\"VAT_UNKNOWN\",\"requires_ack\":true}]}",
+				null, "result");
+	}
+
+	private Stored stored(String fingerprint) {
+		return new Stored(3001, 2001, 1002, 500, 10, 2, "purchase", "purchase_1", "demo-owner", OffsetDateTime.now(), fingerprint);
 	}
 
 	private Source source(String owner, int currentVersion) {

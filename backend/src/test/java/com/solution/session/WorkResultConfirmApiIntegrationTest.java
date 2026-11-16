@@ -89,6 +89,7 @@ class WorkResultConfirmApiIntegrationTest {
 				.andExpect(jsonPath("$.data.is_new").value(true))
 				.andExpect(jsonPath("$.data.is_current_version").value(true))
 				.andExpect(jsonPath("$.data.confirmed_by").value("demo-owner"))
+				.andExpect(jsonPath("$.message").value("구매안을 저장했어요."))
 				.andExpect(jsonPath("$.data.step").value("saved"));
 		var row = jdbc.queryForMap("SELECT * FROM work_confirmation");
 		assertThat(row.get("request_fingerprint").toString()).matches("[0-9a-f]{64}");
@@ -279,13 +280,118 @@ class WorkResultConfirmApiIntegrationTest {
 		jdbc.execute("CREATE TRIGGER reject_saved BEFORE UPDATE ON work_session FOR EACH ROW EXECUTE FUNCTION reject_saved()");
 		try {
 			confirm(2001, "rollback", body("purchase_1", "[\"VAT_UNKNOWN\"]"))
-					.andExpect(status().isInternalServerError());
+					.andExpect(status().isInternalServerError())
+					.andExpect(jsonPath("$.data.detail_code").value("INTERNAL_ERROR"))
+					.andExpect(jsonPath("$.message").value("저장 중 오류가 발생했습니다."));
 			assertThat(count()).isZero();
+			assertThat(jdbc.queryForObject("SELECT payload_json->>'detail_code' FROM execution_log WHERE name='confirm'", String.class))
+					.isEqualTo("INTERNAL_ERROR");
 		}
 		finally {
 			jdbc.execute("DROP TRIGGER reject_saved ON work_session");
 			jdbc.execute("DROP FUNCTION reject_saved()");
 		}
+	}
+
+	@Test
+	void 완료된_운영안은_모의조건_경고_확인_후_저장한다() throws Exception {
+		operationSummary("true");
+		String body = "{\"expected_input_version_id\":1002,\"selected_choice_key\":\"CURRENT\","
+				+ "\"acknowledged_warning_ids\":[\"SIMULATED_CONDITIONS\"]}";
+		confirm(2001, "operation", body).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.feature_type").value("operation"))
+				.andExpect(jsonPath("$.message").value("운영안을 저장했어요."));
+		assertThat(count()).isEqualTo(1);
+	}
+
+	@ParameterizedTest @ValueSource(strings = {"false", "null", "1", "\"true\""})
+	void 운영_완료_필드가_참이_아니면_거절한다(String complete) throws Exception {
+		operationSummary(complete);
+		confirm(2001, "operation", "{\"expected_input_version_id\":1002,\"selected_choice_key\":\"CURRENT\"}")
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("RESULT_NOT_READY"));
+		assertThat(count()).isZero();
+	}
+
+	@Test
+	void 운영_완료라도_모의조건_경고를_확인해야_한다() throws Exception {
+		operationSummary("true");
+		confirm(2001, "operation", "{\"expected_input_version_id\":1002,\"selected_choice_key\":\"CURRENT\"}")
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("WARNINGS_NOT_ACKNOWLEDGED"));
+		jdbc.update("UPDATE work_result SET summary_json=jsonb_set(summary_json, '{warnings}', '[]') WHERE result_id=2001");
+		confirm(2001, "operation", "{\"expected_input_version_id\":1002,\"selected_choice_key\":\"CURRENT\"}")
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("RESULT_NOT_READY"));
+	}
+
+	@Test
+	void 새_참고_경고는_필수확인_없이_저장한다() throws Exception {
+		jdbc.update("UPDATE work_result SET summary_json=jsonb_set(summary_json, '{warnings}', "
+				+ "summary_json->'warnings' || '[{\"warning_id\":\"END_STOCK_OVER_LIMIT\",\"requires_ack\":false}]'::jsonb) WHERE result_id=2001");
+		confirm(2001, "reference-warning", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+	}
+
+	@Test
+	void 스냅샷의_중첩_키와_문자열을_가리고_금액과_긴_식별자를_보존한다() throws Exception {
+		jdbc.update("UPDATE work_result SET summary_json=jsonb_set(summary_json, '{assumptions}', "
+				+ "'[\"담당자: 김영희 010-1234-5678 owner@example.test\"]'), detail_json=?::jsonb WHERE result_id=2001", """
+				{"choices":[{"choice_key":"purchase_1","supplier":{"owner@example.test":"010-1234-5678",
+				"email":"owner@example.test","phone_number":1012345678,"contact_name":"박민수","total_krw":120400,"reference":"1010123456789123"}}]}
+				""");
+		confirm(2001, "privacy", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+		String stored = jdbc.queryForObject("SELECT selected_snapshot_json::text FROM work_confirmation", String.class);
+		assertThat(stored).doesNotContain("010-1234-5678", "owner@example.test", "김영희", "1012345678,", "박민수")
+				.contains("[전화번호]", "[이메일]", "120400", "1010123456789123");
+		assertThat(jdbc.queryForObject("SELECT selected_snapshot_json->'choice'->>'total_krw' FROM work_confirmation", String.class))
+				.isEqualTo("120400");
+	}
+
+	@Test
+	void 가림_후_키가_충돌하면_스냅샷을_조용히_덮어쓰지_않는다() throws Exception {
+		jdbc.update("UPDATE work_result SET detail_json=?::jsonb WHERE result_id=2001", """
+				{"choices":[{"choice_key":"purchase_1","a@example.test":1,"b@example.test":2}]}
+				""");
+		confirm(2001, "collision", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isBadRequest());
+		assertThat(count()).isZero();
+	}
+
+	@Test
+	void 감사로그는_성공과_차단_코드만_별도로_기록한다() throws Exception {
+		confirm(2001, "caller@example.test", body("purchase_1", "[]")).andExpect(status().isBadRequest());
+		confirm(2001, "caller@example.test", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+		var logs = jdbc.queryForList("SELECT status, payload_json::text, request_key FROM execution_log WHERE name='confirm' ORDER BY log_id");
+		assertThat(logs).hasSize(2);
+		assertThat(logs.get(0).get("status")).isEqualTo("refused");
+		assertThat(logs.get(1).get("status")).isEqualTo("success");
+		assertThat(logs.toString()).contains("policy_version", "WARNINGS_NOT_ACKNOWLEDGED", "CONFIRMED")
+				.doesNotContain("caller@example.test", "120400");
+	}
+
+	@Test
+	void 감사로그_실패가_확정과_멱등_재전송을_막지_않는다() throws Exception {
+		jdbc.execute("CREATE FUNCTION reject_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit failure'; END $$");
+		jdbc.execute("CREATE TRIGGER reject_audit BEFORE INSERT ON execution_log FOR EACH ROW EXECUTE FUNCTION reject_audit()");
+		try {
+			confirm(2001, "audit-failure", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+			confirm(2001, "audit-failure", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.is_new").value(false));
+			assertThat(count()).isEqualTo(1);
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM execution_log", Integer.class)).isZero();
+		}
+		finally {
+			jdbc.execute("DROP TRIGGER reject_audit ON execution_log");
+			jdbc.execute("DROP FUNCTION reject_audit()");
+		}
+	}
+
+	@ParameterizedTest @ValueSource(strings = {"not-a-uuid", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"})
+	void 비_UUID와_정확히100자_요청키를_허용한다(String key) throws Exception {
+		confirm(2001, key, body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+	}
+
+	private void operationSummary(String complete) {
+		jdbc.update("UPDATE work_session SET feature_type='operation' WHERE session_id=500");
+		jdbc.update("UPDATE work_result SET detail_json=NULL, summary_json=?::jsonb WHERE result_id=2001",
+				"{\"complete\":" + complete + ",\"choices\":[{\"choice_key\":\"CURRENT\"}],"
+				+ "\"warnings\":[{\"warning_id\":\"SIMULATED_CONDITIONS\",\"requires_ack\":true}]}");
 	}
 
 	private void insertResult(long result, long version, long session, int versionNo) {

@@ -56,14 +56,15 @@ public class ConfirmationRepository {
 				"SELECT EXISTS (SELECT 1 FROM work_confirmation WHERE input_version_id = ?)", Boolean.class, versionId));
 	}
 
-	public void insert(long id, Source source, String choice, String actor, String key, String fingerprint,
+	public boolean insert(long id, Source source, String choice, String actor, String key, String fingerprint,
 			String acknowledgedJson, String snapshotJson) {
-		jdbc.update("""
+		return jdbc.update("""
 				INSERT INTO work_confirmation (confirmation_id, result_id, input_version_id, session_id, store_id,
 				    version_no, feature_type, selected_choice_key, confirmed_by, confirm_request_key,
 				    request_fingerprint, acknowledged_warnings_json, selected_snapshot_json)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
+				ON CONFLICT DO NOTHING
 				""", id, source.resultId(), source.inputVersionId(), source.sessionId(), source.storeId(),
-				source.versionNo(), source.featureType(), choice, actor, key, fingerprint, acknowledgedJson, snapshotJson);
+				source.versionNo(), source.featureType(), choice, actor, key, fingerprint, acknowledgedJson, snapshotJson) == 1;
 	}
 }

@@ -17,6 +17,7 @@ import com.solution.common.auth.CurrentOwner;
 import com.solution.common.id.IdGenerator;
 import com.solution.common.lock.RequestKeyLock;
 import com.solution.common.response.ApiResponse;
+import com.solution.common.response.ResponseStatus;
 import com.solution.session.dto.ConfirmResultRequest;
 import com.solution.session.dto.ConfirmResultResponse;
 import com.solution.session.service.ConfirmationRepository.Source;
@@ -36,9 +37,10 @@ public class WorkResultConfirmService {
 	private final RequestKeyLock keyLock;
 	private final ObjectMapper json;
 	private final TransactionTemplate transactions;
+	private final ConfirmationAudit audit;
 
 	public WorkResultConfirmService(ConfirmationRepository repository, SessionRepository sessions, CurrentOwner owner,
-			IdGenerator ids, RequestKeyLock keyLock, ObjectMapper json, TransactionTemplate transactions) {
+			IdGenerator ids, RequestKeyLock keyLock, ObjectMapper json, TransactionTemplate transactions, ConfirmationAudit audit) {
 		this.repository = repository;
 		this.sessions = sessions;
 		this.owner = owner;
@@ -46,11 +48,32 @@ public class WorkResultConfirmService {
 		this.keyLock = keyLock;
 		this.json = json;
 		this.transactions = transactions;
+		this.audit = audit;
 	}
 
 	public ApiResponse<ConfirmResultResponse> confirm(long resultId, String key, ConfirmResultRequest request) {
 		String actor = owner.key();
-		Source initial = owned(resultId, actor);
+		Source initial = null;
+		long started = System.nanoTime();
+		try {
+			initial = owned(resultId, actor);
+			ApiResponse<ConfirmResultResponse> result = confirmOwned(initial, actor, key, request);
+			audit.record(initial, "success", result.data().isNew() ? "CONFIRMED" : "REPLAYED", started);
+			return result;
+		}
+		catch (ResultConfirmException e) {
+			audit.record(initial, "refused", e.getDetailCode(), started);
+			throw e;
+		}
+		catch (RuntimeException e) {
+			audit.record(initial, "failed", "INTERNAL_ERROR", started);
+			throw e;
+		}
+	}
+
+	private ApiResponse<ConfirmResultResponse> confirmOwned(Source initial, String actor, String key,
+			ConfirmResultRequest request) {
+		long resultId = initial.resultId();
 		if (key == null || key.isBlank() || key.length() > 100) {
 			throw error("INVALID_REQUEST", "Idempotency-Key는 1~100자의 요청 키여야 합니다.");
 		}
@@ -78,16 +101,29 @@ public class WorkResultConfirmService {
 			if (!"ok".equals(source.responseStatus())) {
 				throw error("RESULT_NOT_READY", "계산이 완료된 결과만 확정할 수 있습니다.");
 			}
-			// 운영 결과/30회 판정 스키마는 아직 구현되지 않았다. 확인되지 않은 모의 결과는 확정하지 않는다.
-			if (!"purchase".equals(source.featureType())) {
-				throw error("RESULT_NOT_READY", "운영 결과의 확정 조건이 아직 준비되지 않았습니다.");
+			if ("operation".equals(source.featureType())
+					&& !Boolean.TRUE.equals(json.readValue(source.summaryJson(), MAP).get("complete"))) {
+				throw error("RESULT_NOT_READY", "운영 시뮬레이션 30회 집계가 완료된 결과만 확정할 수 있습니다.");
 			}
 			Map<String, Object> snapshot = snapshot(source, request.selectedChoiceKey(), acknowledged);
 			if (repository.hasVersionConfirmation(source.inputVersionId())) {
 				throw error("VERSION_ALREADY_CONFIRMED", "이미 확정한 입력 버전입니다.");
 			}
-			repository.insert(ids.next(), source, request.selectedChoiceKey(), actor, key, fingerprint,
-					json.writeValueAsString(acknowledged), json.writeValueAsString(snapshot));
+			if (!repository.insert(ids.next(), source, request.selectedChoiceKey(), actor, key, fingerprint,
+					json.writeValueAsString(acknowledged), serializeSnapshot(snapshot))) {
+				// 외부 쓰기와 UNIQUE가 경합해도 트랜잭션을 깨뜨리지 않고 실제 충돌 종류를 구분한다.
+				var existing = repository.findByKey(key);
+				if (existing.isPresent()) {
+					if (!fingerprint.equals(existing.get().fingerprint())) {
+						throw error("IDEMPOTENCY_KEY_REUSED", "같은 요청 키를 다른 확정 내용에 사용할 수 없습니다.");
+					}
+					return response(existing.get(), source, false);
+				}
+				if (repository.hasVersionConfirmation(source.inputVersionId())) {
+					throw error("VERSION_ALREADY_CONFIRMED", "이미 확정한 입력 버전입니다.");
+				}
+				throw new IllegalStateException("확정 식별자 충돌");
+			}
 			sessions.updateSessionProgress(source.sessionId(), source.currentVersion(), "saved");
 			return response(repository.findByKey(key).orElseThrow(), source, true);
 		});
@@ -99,10 +135,22 @@ public class WorkResultConfirmService {
 	}
 
 	private ApiResponse<ConfirmResultResponse> response(Stored stored, Source source, boolean isNew) {
-		return ApiResponse.ok(new ConfirmResultResponse(stored.confirmationId(), stored.resultId(),
+		return new ApiResponse<>(ResponseStatus.OK, new ConfirmResultResponse(stored.confirmationId(), stored.resultId(),
 				stored.inputVersionId(), stored.sessionId(), stored.storeId(), stored.versionNo(), stored.featureType(),
 				stored.selectedChoiceKey(), stored.confirmedBy(), stored.confirmedAt(), isNew,
-				stored.versionNo() == source.currentVersion(), isNew ? "saved" : source.step()));
+				stored.versionNo() == source.currentVersion(), isNew ? "saved" : source.step()),
+				"operation".equals(stored.featureType()) ? "운영안을 저장했어요." : "구매안을 저장했어요.");
+	}
+
+	private String serializeSnapshot(Map<String, Object> snapshot) {
+		// JSON 문자열 전체를 치환하면 금액 등 숫자 리터럴을 훼손할 수 있어 키·문자열 값만 가린다.
+		Object masked = SessionPrivacy.maskSnapshot(snapshot);
+		String encoded = json.writeValueAsString(masked);
+		Object decoded = json.readValue(encoded, Object.class);
+		if (!decoded.equals(SessionPrivacy.maskSnapshot(decoded))) {
+			throw notReady();
+		}
+		return encoded;
 	}
 
 	/** 고정 필드 순서의 compact UTF-8 JSON. 경고 ID는 중복 제거 후 오름차순으로 정렬한다. */
@@ -175,6 +223,11 @@ public class WorkResultConfirmService {
 				}
 			}
 		}
+		if ("operation".equals(source.featureType()) && applicable.stream().noneMatch(warning ->
+				"SIMULATED_CONDITIONS".equals(warning.get("warning_id")) && Boolean.TRUE.equals(warning.get("requires_ack")))) {
+			throw notReady();
+		}
+
 		if (!known.containsAll(acknowledged)) {
 			throw error("INVALID_REQUEST", "결과에 없는 경고 ID가 포함되어 있습니다.");
 		}
