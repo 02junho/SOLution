@@ -252,6 +252,8 @@ def _no_quote(p: Prepared) -> ApiResponse[dict]:
             "detail_status": "INFEASIBLE",
             "violations": [{"constraint": "no_quote", "label": "견적이 없는 품목", "item_ids": list(p.no_quote_items)}],
             "suggestions": [f"{joined} 견적을 추가하기"],
+            # 칸 값을 바꿔서는 못 고치고 견적을 새로 넣어야 한다. 실패 응답 모양을 맞추려고 빈 목록을 둔다.
+            "suggested_changes": [],
         },
         f"{joined} 견적이 없어서 구매안을 만들 수 없어요.",
     )

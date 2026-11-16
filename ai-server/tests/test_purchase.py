@@ -388,6 +388,7 @@ def test_견적이_없는_품목():
     assert payload["status"] == "infeasible"
     assert payload["data"]["violations"] == [{"constraint": "no_quote", "label": "견적이 없는 품목", "item_ids": ["syrup"]}]
     assert payload["message"] == "시럽 견적이 없어서 구매안을 만들 수 없어요."
+    assert payload["data"]["suggested_changes"] == []  # 칸을 바꿔서는 못 고치고 견적을 넣어야 한다
 
 
 # ── 입력 확인 ─────────────────────────────────────────────
