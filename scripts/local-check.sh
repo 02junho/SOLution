@@ -18,10 +18,23 @@ if [ ! -f .env ]; then
   echo "저장소 루트에 .env가 없습니다. cp .env.example .env 후 값을 채워 주세요."
   exit 1
 fi
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# .env를 bash로 실행하지 않고 필요한 칸만 글자로 읽는다. Compose의 .env 문법은 bash와 달라서,
+# 실행하면 괄호 같은 문자가 든 값에서 오류가 나고 오류 메시지에 값이 찍힐 수 있다.
+env_get() {
+  local v
+  v=$(grep -E "^[[:space:]]*$1[[:space:]]*=" .env | tail -1 | cut -d= -f2-)
+  v="${v#"${v%%[![:space:]]*}"}"   # 앞 공백
+  v="${v%"${v##*[![:space:]]}"}"   # 뒤 공백
+  if [[ "$v" == \"*\" || "$v" == \'*\' ]]; then v="${v:1:${#v}-2}"; fi
+  printf '%s' "$v"
+}
+POSTGRES_DB=$(env_get POSTGRES_DB)
+POSTGRES_USER=$(env_get POSTGRES_USER)
+POSTGRES_PASSWORD=$(env_get POSTGRES_PASSWORD)
+ANTHROPIC_API_KEY=$(env_get ANTHROPIC_API_KEY)
+DEMO_SEED=$(env_get DEMO_SEED)
+BACKEND_PORT=$(env_get BACKEND_PORT)
+AI_SERVER_PORT=$(env_get AI_SERVER_PORT)
 SPRING="http://localhost:${BACKEND_PORT:-8080}"
 FASTAPI="http://localhost:${AI_SERVER_PORT:-8000}"
 
