@@ -66,7 +66,9 @@ def evaluate(case: dict) -> dict:
     if "baseline_violations" in expect and base_viol is not None and sorted(base_viol) != sorted(expect["baseline_violations"]):
         problems.append(f"기준선 위반 {base_viol} ≠ 기대 {expect['baseline_violations']}")
 
-    # 2. 독립 전수 열거
+    # 2. 독립 전수 열거. 정답이 있는 입력이므로 error·needs_input이 나오면 그것부터 실패다.
+    if expect.get("oracle") and status not in ("ok", "infeasible"):
+        problems.append(f"전수 열거 사례인데 상태가 {status}입니다 ({message})")
     if expect.get("oracle") and status in ("ok", "infeasible"):
         o1 = oracle.best_total(req, req["max_delivery_count"])
         o2 = oracle.best_total(req, 1)
@@ -80,9 +82,17 @@ def evaluate(case: dict) -> dict:
             if base != oracle.baseline_total(req):
                 problems.append(f"기준선 {base} ≠ 다시 계산 {oracle.baseline_total(req)}")
 
-    # 3. 돌려준 안 검산
-    for key, detail in details.items():
-        problems.extend(oracle.check_plan(req, choices[key], detail))
+    # 3. 돌려준 안 검산. 쓸 수 있고 다른 안과 같지 않은 안마다 상세가 꼭 하나 있어야 한다.
+    detail_keys = [c["choice_key"] for c in data["detail"]["choices"]] if status == "ok" else []
+    need_detail = [k for k, c in choices.items() if c.get("available") and not c.get("same_as")]
+    if sorted(detail_keys) != sorted(need_detail):
+        problems.append(f"상세 구매안 {detail_keys} ≠ 요약에서 쓸 수 있는 안 {need_detail}")
+    rechecked = 0
+    for key in need_detail:
+        if key in details:
+            problems.extend(oracle.check_plan(req, choices[key], details[key]))
+            rechecked += 1
+    row["plans_rechecked"] = rechecked
 
     if status == "ok" and base is not None and not base_viol:
         row["saving_vs_baseline_krw"] = base - p1
@@ -99,7 +109,7 @@ def summarize(rows: list[dict]) -> dict:
         "cases": len(rows),
         "passed": sum(r["passed"] for r in rows),
         "oracle_checked": sum("oracle" in r for r in rows),
-        "plans_rechecked": sum(1 + (r["p2"] not in ("same", "unavailable", None)) for r in ok_rows),
+        "plans_rechecked": sum(r.get("plans_rechecked", 0) for r in rows),
         "baseline_valid": len(savings),
         "baseline_broken": sum(bool(r["baseline_violations"]) for r in ok_rows),
         "saving_pct_mean": round(statistics.mean(savings), 2) if savings else None,

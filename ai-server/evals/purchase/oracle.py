@@ -18,6 +18,8 @@ import itertools
 import math
 
 MAX_COMBINATIONS = 2_000_000
+# 소수 수량(0.7 / 0.1 = 6.999…)의 부동소수점 오차를 넘기는 허용 오차.
+EPS = 1e-9
 
 
 class TooLarge(ValueError):
@@ -54,7 +56,7 @@ def best_total(req: dict, max_delivery_count: int) -> int | None:
         for k in idxs:
             q = quotes[k]
             by_budget = req["budget_krw"] // q["pack_price_krw"] if q["pack_price_krw"] > 0 else math.inf
-            by_room = math.floor(cap / q["pack_size"]) if cap != math.inf else math.inf
+            by_room = math.floor(cap / q["pack_size"] + EPS) if cap != math.inf else math.inf
             top = min(by_budget, by_room)
             if top == math.inf:
                 raise TooLarge(f"{item['item_id']} 견적 {k}의 상한이 없습니다.")
@@ -63,7 +65,7 @@ def best_total(req: dict, max_delivery_count: int) -> int | None:
         for counts in itertools.product(*domains):
             bought = sum(quotes[k]["pack_size"] * n for k, n in zip(idxs, counts))
             cost = sum(quotes[k]["pack_price_krw"] * n for k, n in zip(idxs, counts))
-            if bought >= need and bought <= cap and cost <= req["budget_krw"]:
+            if bought >= need - EPS and bought <= cap + EPS and cost <= req["budget_krw"]:
                 options.append(dict(zip(idxs, counts)))
         if not options:
             return None
@@ -130,11 +132,15 @@ def check_plan(req: dict, summary: dict, detail: dict) -> list[str]:
         goods[line["supplier_id"]] = goods.get(line["supplier_id"], 0) + line["pack_price_krw"] * n
         bought[line["item_id"]] += line["pack_size"] * n
 
-    total = sum(_supplier_cost(suppliers[sid], g) for sid, g in goods.items())
+    goods_total = sum(goods.values())
+    fee_total = sum(_supplier_cost(suppliers[sid], g) - g for sid, g in goods.items())
+    total = goods_total + fee_total
     if total != summary["total_krw"]:
         problems.append(f"{key}: 다시 합산한 총액 {total:,}원 ≠ 돌려준 총액 {summary['total_krw']:,}원")
-    if summary["goods_krw"] + summary["delivery_fee_krw"] != summary["total_krw"]:
-        problems.append(f"{key}: 상품값 + 배송비 ≠ 총액")
+    if goods_total != summary["goods_krw"]:
+        problems.append(f"{key}: 다시 합산한 상품값 {goods_total:,}원 ≠ 돌려준 상품값 {summary['goods_krw']:,}원")
+    if fee_total != summary["delivery_fee_krw"]:
+        problems.append(f"{key}: 다시 계산한 배송비 {fee_total:,}원 ≠ 돌려준 배송비 {summary['delivery_fee_krw']:,}원")
     if total > req["budget_krw"]:
         problems.append(f"{key}: 예산 초과")
     if len(goods) != summary["delivery_count"]:
@@ -146,14 +152,20 @@ def check_plan(req: dict, summary: dict, detail: dict) -> list[str]:
         if g < suppliers[sid]["minimum_order_krw"]:
             problems.append(f"{key}: {sid} 최소 주문금액 미달")
     for iid, item in items.items():
-        if bought[iid] < buy_need(item):
+        if bought[iid] < buy_need(item) - EPS:
             problems.append(f"{key}: {iid} 필요량 부족")
-        if bought[iid] > room(item):
+        if bought[iid] > room(item) + EPS:
             problems.append(f"{key}: {iid} 보관 한도 또는 기간 끝 재고 한도 초과")
+    stock_ids = [row["item_id"] for row in detail["stock_after"]]
+    if sorted(stock_ids) != sorted(items):
+        problems.append(f"{key}: 입고 후 재고 줄의 품목 {stock_ids}이 요청 품목 {sorted(items)}과 다릅니다")
+    message_ids = [msg["supplier_id"] for msg in detail["order_messages"]]
+    if sorted(message_ids) != sorted(goods):
+        problems.append(f"{key}: 주문 문구의 거래처 {message_ids}가 주문한 거래처 {sorted(goods)}와 다릅니다")
     for row in detail["stock_after"]:
         item = items[row["item_id"]]
         after = item["usable_inventory"] + bought[row["item_id"]]
-        if row["after_delivery"] != after or row["end_of_period"] != after - item["gross_need"]:
+        if abs(row["after_delivery"] - after) > EPS or abs(row["end_of_period"] - (after - item["gross_need"])) > EPS:
             problems.append(f"{key}: {row['item_id']} 입고 후·기간 끝 재고 숫자가 맞지 않습니다")
     for msg in detail["order_messages"]:
         g = goods.get(msg["supplier_id"])

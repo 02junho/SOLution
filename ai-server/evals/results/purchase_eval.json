@@ -1,6 +1,6 @@
 {
   "meta": {
-    "run_at": "2026-11-16 00:19"
+    "run_at": "2026-11-16 09:13"
   },
   "summary": {
     "cases": 44,
@@ -11,8 +11,8 @@
     "baseline_broken": 9,
     "saving_pct_mean": 1.17,
     "saving_pct_max": 11.34,
-    "ms_median": 2.9,
-    "ms_max": 12.7
+    "ms_median": 2.8,
+    "ms_max": 13.1
   },
   "cases": [
     {
@@ -21,13 +21,14 @@
       "source": "API 명세 손계산 (11.12)",
       "status": "ok",
       "message": null,
-      "ms": 6.4,
+      "ms": 6.9,
       "problems": [],
       "p1": 120400,
       "p2": 138000,
       "baseline": 135800,
       "baseline_violations": [],
       "violations": null,
+      "plans_rechecked": 2,
       "saving_vs_baseline_krw": 15400,
       "saving_pct": 11.34,
       "passed": true
@@ -38,7 +39,7 @@
       "source": "방현식 블라인드 정답 (10.26)",
       "status": "ok",
       "message": null,
-      "ms": 5.3,
+      "ms": 5.2,
       "problems": [],
       "p1": 39800,
       "p2": 40100,
@@ -49,6 +50,7 @@
         "p1": 39800,
         "p2": 40100
       },
+      "plans_rechecked": 2,
       "saving_vs_baseline_krw": 1100,
       "saving_pct": 2.69,
       "passed": true
@@ -59,7 +61,7 @@
       "source": "방현식 블라인드 정답 (10.26)",
       "status": "ok",
       "message": null,
-      "ms": 1.0,
+      "ms": 0.9,
       "problems": [],
       "p1": 40100,
       "p2": "same",
@@ -72,6 +74,7 @@
         "p1": 40100,
         "p2": 40100
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -80,7 +83,7 @@
       "source": "방현식 블라인드 정답 (10.26)",
       "status": "ok",
       "message": null,
-      "ms": 6.7,
+      "ms": 6.8,
       "problems": [],
       "p1": 39800,
       "p2": "unavailable",
@@ -93,6 +96,7 @@
         "p1": 39800,
         "p2": null
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -101,7 +105,7 @@
       "source": "방현식 블라인드 정답 (10.26)",
       "status": "infeasible",
       "message": "예산 39,799원으로는 필요한 양을 살 수 없어요. 최소 39,800원이 필요해요.",
-      "ms": 10.2,
+      "ms": 10.3,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -114,6 +118,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -122,7 +127,7 @@
       "source": "신준호 손계산 (11.16)",
       "status": "ok",
       "message": null,
-      "ms": 2.2,
+      "ms": 2.3,
       "problems": [],
       "p1": 39800,
       "p2": 41200,
@@ -135,6 +140,7 @@
         "p1": 39800,
         "p2": 41200
       },
+      "plans_rechecked": 2,
       "passed": true
     },
     {
@@ -143,7 +149,7 @@
       "source": "방현식 블라인드 정답 (10.26)",
       "status": "infeasible",
       "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
-      "ms": 4.4,
+      "ms": 4.2,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -156,6 +162,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -164,7 +171,7 @@
       "source": "신준호 계산 (11.15), 시연 자료 정경 확인 전",
       "status": "ok",
       "message": null,
-      "ms": 10.8,
+      "ms": 11.2,
       "problems": [],
       "p1": 125500,
       "p2": 127500,
@@ -174,6 +181,7 @@
         "minimum_order"
       ],
       "violations": null,
+      "plans_rechecked": 2,
       "passed": true
     },
     {
@@ -182,7 +190,7 @@
       "source": "API 명세 손계산 (11.16)",
       "status": "ok",
       "message": null,
-      "ms": 2.6,
+      "ms": 2.4,
       "problems": [],
       "p1": 120400,
       "p2": "unavailable",
@@ -191,6 +199,7 @@
         "spoilage"
       ],
       "violations": null,
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -199,7 +208,7 @@
       "source": "API 명세 손계산 (11.16)",
       "status": "infeasible",
       "message": "기간 끝 재고 한도 조건 때문에 필요한 양을 살 수 없어요.",
-      "ms": 7.9,
+      "ms": 7.2,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -208,6 +217,7 @@
       "violations": [
         "spoilage"
       ],
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -216,7 +226,7 @@
       "source": "API 명세 손계산 (11.12)",
       "status": "infeasible",
       "message": "예산 100,000원으로는 필요한 양을 살 수 없어요. 최소 120,400원이 필요해요.",
-      "ms": 5.9,
+      "ms": 5.8,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -225,6 +235,7 @@
       "violations": [
         "budget"
       ],
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -240,6 +251,7 @@
       "baseline": null,
       "baseline_violations": null,
       "violations": null,
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -255,6 +267,7 @@
       "baseline": null,
       "baseline_violations": null,
       "violations": null,
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -270,6 +283,7 @@
       "baseline": null,
       "baseline_violations": null,
       "violations": null,
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -278,7 +292,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 20,100원이 필요해요.",
-      "ms": 0.9,
+      "ms": 0.8,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -291,6 +305,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -312,6 +327,7 @@
         "p1": 25400,
         "p2": 25400
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -320,7 +336,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "배송 1회로는 필요한 양을 살 수 없어요. 최소 2회가 필요해요.",
-      "ms": 6.6,
+      "ms": 6.5,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -333,6 +349,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -341,7 +358,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 0.7,
+      "ms": 0.6,
       "problems": [],
       "p1": 30000,
       "p2": "same",
@@ -354,6 +371,7 @@
         "p1": 30000,
         "p2": 30000
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -362,7 +380,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
-      "ms": 8.2,
+      "ms": 8.6,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -375,6 +393,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -383,7 +402,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 6.4,
+      "ms": 6.2,
       "problems": [],
       "p1": 40000,
       "p2": 41400,
@@ -394,6 +413,7 @@
         "p1": 40000,
         "p2": 41400
       },
+      "plans_rechecked": 2,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -404,7 +424,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산 20,000원으로는 필요한 양을 살 수 없어요. 최소 33,500원이 필요해요.",
-      "ms": 8.5,
+      "ms": 8.8,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -417,6 +437,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -438,6 +459,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -446,7 +468,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 7.1,
+      "ms": 6.8,
       "problems": [],
       "p1": 39800,
       "p2": "same",
@@ -457,6 +479,7 @@
         "p1": 39800,
         "p2": 39800
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -467,7 +490,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 0.9,
+      "ms": 0.8,
       "problems": [],
       "p1": 15500,
       "p2": "same",
@@ -478,6 +501,7 @@
         "p1": 15500,
         "p2": 15500
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -488,7 +512,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
-      "ms": 3.1,
+      "ms": 3.2,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -502,6 +526,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -510,7 +535,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 11.9,
+      "ms": 12.0,
       "problems": [],
       "p1": 9300,
       "p2": "same",
@@ -521,6 +546,7 @@
         "p1": 9300,
         "p2": 9300
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -544,6 +570,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -552,7 +579,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "배송 횟수, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
-      "ms": 12.7,
+      "ms": 13.1,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -566,6 +593,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -574,7 +602,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 0.6,
+      "ms": 0.5,
       "problems": [],
       "p1": 13200,
       "p2": "same",
@@ -585,6 +613,7 @@
         "p1": 13200,
         "p2": 13200
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -606,6 +635,7 @@
         "p1": 8400,
         "p2": 8400
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -616,7 +646,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산, 배송 횟수 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
-      "ms": 9.8,
+      "ms": 10.7,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -630,6 +660,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -651,6 +682,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -672,6 +704,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -691,6 +724,7 @@
         "p1": 8600,
         "p2": 8600
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -714,6 +748,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -722,7 +757,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 8.6,
+      "ms": 10.0,
       "problems": [],
       "p1": 27200,
       "p2": "same",
@@ -735,6 +770,7 @@
         "p1": 27200,
         "p2": 27200
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -743,7 +779,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 1.0,
+      "ms": 0.8,
       "problems": [],
       "p1": 28300,
       "p2": "unavailable",
@@ -754,6 +790,7 @@
         "p1": 28300,
         "p2": null
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -764,7 +801,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "보관 한도 조건 때문에 필요한 양을 살 수 없어요.",
-      "ms": 2.2,
+      "ms": 2.0,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -777,6 +814,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -785,7 +823,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 7.8,
+      "ms": 8.0,
       "problems": [],
       "p1": 24900,
       "p2": "same",
@@ -798,6 +836,7 @@
         "p1": 24900,
         "p2": 24900
       },
+      "plans_rechecked": 1,
       "passed": true
     },
     {
@@ -817,6 +856,7 @@
         "p1": 25500,
         "p2": null
       },
+      "plans_rechecked": 1,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -827,7 +867,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
-      "ms": 3.9,
+      "ms": 3.8,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -841,6 +881,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -849,7 +890,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "ok",
       "message": null,
-      "ms": 1.2,
+      "ms": 1.0,
       "problems": [],
       "p1": 12800,
       "p2": 13200,
@@ -860,6 +901,7 @@
         "p1": 12800,
         "p2": 13200
       },
+      "plans_rechecked": 2,
       "saving_vs_baseline_krw": 0,
       "saving_pct": 0.0,
       "passed": true
@@ -883,6 +925,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     },
     {
@@ -891,7 +934,7 @@
       "source": "독립 전수 열거 (seed 20261116)",
       "status": "infeasible",
       "message": "예산, 보관 한도 조건이 함께 맞지 않아 구매안을 만들 수 없어요.",
-      "ms": 8.5,
+      "ms": 8.9,
       "problems": [],
       "p1": null,
       "p2": null,
@@ -905,6 +948,7 @@
         "p1": null,
         "p2": null
       },
+      "plans_rechecked": 0,
       "passed": true
     }
   ]
