@@ -35,6 +35,10 @@ public class SessionRepository {
 			int currentVersion, OffsetDateTime updatedAt) {
 	}
 
+	/** 한 입력 버전의 식별자·순번·입력 스냅샷(JSON 문자열). 변경 여부 비교에 쓴다. */
+	public record CurrentVersionRow(long inputVersionId, int versionNo, String inputJson) {
+	}
+
 	/** 매장의 소유자 식별값. 매장이 없으면 빈 값(→ 서비스가 404). 소유권 비교는 서비스에서 한다. */
 	public Optional<String> findStoreOwnerKey(long storeId) {
 		List<String> rows = jdbcTemplate.query("SELECT owner_key FROM store WHERE store_id = ?",
@@ -128,4 +132,77 @@ public class SessionRepository {
 				rs.getObject("updated_at", OffsetDateTime.class)),
 				args.toArray());
 	}
+
+	// ===== events(대화·폼·질문답변) 처리용 =====
+
+	/** 업무의 한 입력 버전(순번으로)을 읽는다. 없으면 빈 값(아직 입력 버전이 없는 세션). */
+	public Optional<CurrentVersionRow> findVersion(long sessionId, int versionNo) {
+		List<CurrentVersionRow> rows = jdbcTemplate.query("""
+				SELECT input_version_id, version_no, input_json::text AS input_json
+				FROM work_version WHERE session_id = ? AND version_no = ?
+				""", (rs, i) -> new CurrentVersionRow(
+				rs.getLong("input_version_id"), rs.getInt("version_no"), rs.getString("input_json")),
+				sessionId, versionNo);
+		return rows.stream().findFirst();
+	}
+
+	/** 새 입력 버전 한 행을 넣는다. 확인자·확인시각은 NULL(미확인)로 시작한다(URQ-FLW-005). */
+	public void insertVersion(long inputVersionId, long sessionId, int versionNo, String schemaVersion,
+			String rawRequest, String inputJson, OffsetDateTime createdAt) {
+		jdbcTemplate.update("""
+				INSERT INTO work_version (input_version_id, session_id, version_no, schema_version, raw_request,
+				                          input_json, input_confirmed_by, input_confirmed_at, created_at)
+				VALUES (?, ?, ?, ?, ?, ?::jsonb, NULL, NULL, ?)
+				""", inputVersionId, sessionId, versionNo, schemaVersion, rawRequest, inputJson, createdAt);
+	}
+
+	/** 현재 입력 버전 번호와 진행 단계를 갱신한다(updated_at은 DB now()로). */
+	public void updateSessionProgress(long sessionId, int currentVersion, String step) {
+		jdbcTemplate.update(
+				"UPDATE work_session SET current_version = ?, step = ?, updated_at = now() WHERE session_id = ?",
+				currentVersion, step, sessionId);
+	}
+
+	/** 대화 한 줄을 넣는다(사용자·AI 메시지). version_no는 입력 전 대화면 NULL일 수 있다. */
+	public void insertMessage(long messageId, long sessionId, Integer versionNo, String role, String content,
+			String metadataJson, OffsetDateTime createdAt) {
+		jdbcTemplate.update("""
+				INSERT INTO session_message (message_id, session_id, version_no, role, content, metadata_json, created_at)
+				VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)
+				""", messageId, sessionId, versionNo, role, content, metadataJson, createdAt);
+	}
+
+	/** 같은 세션의 입력 변경과 요청키 확인을 한 트랜잭션 안에서 직렬화한다. */
+	public void lockSession(long sessionId) {
+		jdbcTemplate.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE",
+				rs -> {}, sessionId);
+	}
+
+	/** 재전송 시 현재 상태가 아니라 처음 저장한 이벤트 응답을 그대로 반환한다. */
+	public Optional<String> findEventMetadata(long sessionId, String requestKey) {
+		return jdbcTemplate.query("""
+				SELECT metadata_json::text FROM session_message
+				WHERE session_id = ? AND role = 'assistant' AND metadata_json->>'request_key' = ?
+				ORDER BY message_id DESC LIMIT 1
+				""", (rs, i) -> rs.getString(1), sessionId, requestKey).stream().findFirst();
+	}
+
+	/** 질문 ID는 해당 세션에서 서버가 발급·저장한 질문만 인정한다. */
+	public Optional<String> findQuestionMetadata(long sessionId, String questionId) {
+		return jdbcTemplate.query("""
+				SELECT metadata_json::text FROM (
+				    SELECT metadata_json FROM session_message
+				    WHERE session_id = ? AND role = 'assistant' AND metadata_json->>'question_id' IS NOT NULL
+				    ORDER BY message_id DESC LIMIT 1
+				) latest WHERE metadata_json->>'question_id' = ?
+				""", (rs, i) -> rs.getString(1), sessionId, questionId).stream().findFirst();
+	}
+
+	public void markQuestionAnswered(long sessionId, String questionId) {
+		jdbcTemplate.update("""
+				UPDATE session_message SET metadata_json = metadata_json || '{"answered":true}'::jsonb
+				WHERE session_id = ? AND role = 'assistant' AND metadata_json->>'question_id' = ?
+				""", sessionId, questionId);
+	}
+
 }

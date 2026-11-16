@@ -1,6 +1,7 @@
 package com.solution.session.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,9 +23,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
+import com.solution.common.response.ResponseStatus;
 import com.solution.session.dto.WorkSessionContextResponse;
 import com.solution.session.dto.WorkSessionListResponse;
 import com.solution.session.dto.WorkSessionResponse;
+import com.solution.session.service.WorkSessionEventService;
 import com.solution.session.service.WorkSessionService;
 
 @WebMvcTest(WorkSessionController.class)
@@ -34,6 +38,9 @@ class WorkSessionControllerTest {
 
 	@MockitoBean
 	private WorkSessionService workSessionService;
+
+	@MockitoBean
+	private WorkSessionEventService workSessionEventService;
 
 	@Test
 	void 업무_시작은_snake_case_본문을_받아_세션을_돌려준다() throws Exception {
@@ -171,6 +178,42 @@ class WorkSessionControllerTest {
 		mockMvc.perform(get("/api/v1/work-sessions").param("size", size))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 폼_이벤트는_입력검토를_돌려준다() throws Exception {
+		given(workSessionEventService.handleEvent(anyLong(), any(), any())).willReturn(new ApiResponse<>(
+				ResponseStatus.OK, Map.of("session_id", 100, "version_no", 1, "step", "review"),
+				"입력을 저장했어요. 입력을 확인해 주세요."));
+
+		mockMvc.perform(post("/api/v1/work-sessions/100/events")
+				.header("X-Request-Key", "key-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"form\", \"form_input\": {\"budget_krw\": 100000}}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ok"))
+				.andExpect(jsonPath("$.data.step").value("review"));
+	}
+
+	@Test
+	void 이벤트타입이_범위밖이면_400() throws Exception {
+		mockMvc.perform(post("/api/v1/work-sessions/100/events")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"delete\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 없는_업무에_이벤트를_보내면_404() throws Exception {
+		given(workSessionEventService.handleEvent(anyLong(), any(), any()))
+				.willThrow(ApiException.notFound("업무를 찾을 수 없습니다."));
+
+		mockMvc.perform(post("/api/v1/work-sessions/999/events")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"form\", \"form_input\": {\"a\": 1}}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.message").value("업무를 찾을 수 없습니다."));
 	}
 
 }

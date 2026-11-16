@@ -1,6 +1,17 @@
 package com.solution.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+
+import com.solution.common.client.AiServerClient;
+import com.solution.common.client.AiServerException;
+import com.solution.common.response.ApiResponse;
+import com.solution.common.response.ResponseStatus;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import java.util.Map;
+import java.util.List;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -50,9 +61,15 @@ class WorkSessionApiIntegrationTest {
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
 
+	@MockitoBean
+	private AiServerClient aiServerClient;
+
 	/** 매 테스트 전에 깨끗이 비우고, 시연 사용자(demo-owner) 소유 매장과 남의 매장을 하나씩 넣는다. */
 	@BeforeEach
 	void seed() {
+		given(aiServerClient.post(anyString(), any(), anyString(), any()))
+				.willThrow(new AiServerException("테스트용 AI 연결 실패"));
+		jdbcTemplate.update("DELETE FROM session_message");
 		jdbcTemplate.update("DELETE FROM work_confirmation");
 		jdbcTemplate.update("DELETE FROM work_result");
 		jdbcTemplate.update("DELETE FROM work_version");
@@ -336,6 +353,404 @@ class WorkSessionApiIntegrationTest {
 				}
 			}
 		}
+	}
+
+	@Test
+	void 폼_이벤트가_실제_DB에_미확인_입력버전을_만든다() throws Exception {
+		insertSession(500, 10, 1);
+
+		mockMvc.perform(post("/api/v1/work-sessions/500/events")
+				.header("X-Request-Key", "evt-form-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"form\", \"form_input\": {\"budget_krw\": 100000}}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ok"))
+				.andExpect(jsonPath("$.data.step").value("review"))
+				.andExpect(jsonPath("$.data.version_no").value(1));
+
+		// 새 입력 버전이 생겼고, 아직 "입력 확인" 전(확인자 NULL)이어야 한다(URQ-FLW-005).
+		Integer versions = jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM work_version WHERE session_id = 500 AND input_confirmed_by IS NULL",
+				Integer.class);
+		assertThat(versions).isEqualTo(1);
+		// 세션 단계가 review로 바뀌어야 한다.
+		String step = jdbcTemplate.queryForObject(
+				"SELECT step FROM work_session WHERE session_id = 500", String.class);
+		assertThat(step).isEqualTo("review");
+		// 사용자·AI 메시지 두 줄이 남아야 한다(URQ-FLW-006).
+		Integer messages = jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class);
+		assertThat(messages).isEqualTo(2);
+	}
+
+	@Test
+	void 같은_요청키로_폼_이벤트를_두_번_보내도_버전은_하나만_생긴다() throws Exception {
+		insertSession(500, 10, 1);
+		String body = "{\"event_type\": \"form\", \"form_input\": {\"budget_krw\": 100000}}";
+		for (int i = 0; i < 2; i++) {
+			mockMvc.perform(post("/api/v1/work-sessions/500/events")
+					.header("X-Request-Key", "evt-dup")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(body))
+					.andExpect(status().isOk());
+		}
+		Integer versions = jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class);
+		assertThat(versions).isEqualTo(1);
+	}
+
+	@Test
+	void 대화_이벤트는_AI서버_미연결이면_502이고_DB에_쓰지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+
+		// AI 클라이언트가 연결 실패를 반환하면 공통 처리기에서 502로 바꾼다.
+		mockMvc.perform(post("/api/v1/work-sessions/500/events")
+				.header("X-Request-Key", "evt-msg-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"message\", \"content\": \"우유를 2L로 바꿔줘\"}"))
+				.andExpect(status().isBadGateway())
+				.andExpect(jsonPath("$.status").value("error"));
+
+		// 호출이 실패했으므로 대화·버전이 저장되면 안 된다(저장은 성공 응답 뒤에만 한다).
+		Integer messages = jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class);
+		assertThat(messages).isEqualTo(0);
+	}
+
+	@Test
+	void 없는_업무에_이벤트를_보내면_404() throws Exception {
+		mockMvc.perform(post("/api/v1/work-sessions/999999/events")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"form\", \"form_input\": {\"a\": 1}}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 이벤트타입이_범위_밖이면_400() throws Exception {
+		insertSession(500, 10, 1);
+		mockMvc.perform(post("/api/v1/work-sessions/500/events")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\": \"delete\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value("error"));
+	}
+
+	@Test
+	void 실제_HTTP로_폼_이벤트를_보내고_문맥을_다시_복원한다() throws Exception {
+		insertSession(500, 10, 1);
+		try (var client = java.net.http.HttpClient.newHttpClient()) {
+			var request = java.net.http.HttpRequest.newBuilder(
+					java.net.URI.create("http://localhost:" + port + "/api/v1/work-sessions/500/events"))
+					.header("Content-Type", "application/json")
+					.header("X-Request-Key", "http-form-1")
+					.POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+							"{\"event_type\":\"form\",\"form_input\":{\"budget_krw\":100000}}"))
+					.build();
+			var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+			assertThat(response.statusCode()).isEqualTo(200);
+			assertThat((String) com.jayway.jsonpath.JsonPath.read(response.body(), "$.data.step")).isEqualTo("review");
+		}
+		mockMvc.perform(get("/api/v1/work-sessions/500"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.current_version").value(1))
+				.andExpect(jsonPath("$.data.current_version_id").isNumber())
+				.andExpect(jsonPath("$.data.input_confirmed").value(false));
+	}
+
+	@Test
+	void 변경된_폼은_기존_확정입력을_보존하고_새_미확인_버전을_만든다() throws Exception {
+		insertSession(500, 10, 1);
+		insertVersion(1001, 500, 1, true);
+		var before = jdbcTemplate.queryForMap("SELECT * FROM work_version WHERE input_version_id = 1001");
+		mockMvc.perform(post("/api/v1/work-sessions/500/events")
+				.header("X-Request-Key", "form-change")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\":\"form\",\"base_version_id\":1001,\"form_input\":{\"budget_krw\":100000}}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.version_no").value(2));
+		assertThat(jdbcTemplate.queryForMap("SELECT * FROM work_version WHERE input_version_id = 1001"))
+				.isEqualTo(before);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500 "
+				+ "AND version_no = 2 AND input_confirmed_by IS NULL AND input_confirmed_at IS NULL", Integer.class))
+				.isEqualTo(1);
+	}
+
+	@Test
+	void 동일한_폼은_새_버전을_만들거나_입력확인을_해제하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		insertVersion(1001, 500, 1, true);
+		jdbcTemplate.update("UPDATE work_version SET input_json = '{\"budget_krw\":100000}'::jsonb "
+				+ "WHERE input_version_id = 1001");
+		mockMvc.perform(post("/api/v1/work-sessions/500/events")
+				.header("X-Request-Key", "form-same")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\":\"form\",\"form_input\":{\"budget_krw\":100000}}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.input_version_id").value(1001));
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class))
+				.isEqualTo(1);
+		assertThat(jdbcTemplate.queryForObject("SELECT input_confirmed_at IS NOT NULL FROM work_version "
+				+ "WHERE input_version_id = 1001", Boolean.class)).isTrue();
+	}
+
+	@Test
+	void 다른_매장의_업무에_이벤트를_보내면_404이고_저장하지_않는다() throws Exception {
+		insertSession(600, 20, 1);
+		mockMvc.perform(post("/api/v1/work-sessions/600/events")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"event_type\":\"form\",\"form_input\":{\"budget_krw\":100000}}"))
+				.andExpect(status().isNotFound());
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 600", Integer.class))
+				.isZero();
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 600", Integer.class))
+				.isZero();
+	}
+
+	@Test
+	void 종류별_필수값이_없으면_400이고_저장하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		for (String body : new String[] {"{\"event_type\":\"form\"}",
+				"{\"event_type\":\"message\",\"content\":\" \"}", "{\"event_type\":\"question_reply\"}"}) {
+			mockMvc.perform(post("/api/v1/work-sessions/500/events")
+					.contentType(MediaType.APPLICATION_JSON).content(body))
+					.andExpect(status().isBadRequest());
+		}
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class))
+				.isZero();
+	}
+
+	@Test
+	void AI_해석_성공은_새_입력버전을_저장하고_개인정보를_대화에_남기지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(agentInput(120000)).when(aiServerClient).post(anyString(), any(), anyString(), any());
+		postEvent("agent-success", "{\"event_type\":\"message\",\"content\":\"담당자 홍길동 010-1234-5678 a@b.com 예산을 바꿔줘\"}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.message_id").isNumber())
+				.andExpect(jsonPath("$.data.input_version_id").isNumber());
+		assertThat(jdbcTemplate.queryForObject("SELECT input_json->>'budget_krw' FROM work_version "
+				+ "WHERE session_id = 500 AND version_no = 1", String.class)).isEqualTo("120000");
+		String content = jdbcTemplate.queryForObject("SELECT content FROM session_message WHERE session_id = 500 "
+				+ "AND role = 'user'", String.class);
+		assertThat(content).doesNotContain("홍길동", "010-1234-5678", "a@b.com");
+	}
+
+	@Test
+	void AI가_설명만_주고_입력스냅샷을_주지_않으면_성공으로_저장하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(ApiResponse.ok(Map.of("parsed_input", Map.of("changed", List.of("budget_krw")))))
+				.when(aiServerClient).post(anyString(), any(), anyString(), any());
+		postEvent("bad-agent", "{\"event_type\":\"message\",\"content\":\"예산 바꿔줘\"}")
+				.andExpect(status().isBadGateway());
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class))
+				.isZero();
+	}
+
+	@Test
+	void AI_입력스냅샷의_계약위반은_400이_아닌_502이고_저장하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		List<Map<String, Object>> inputs = List.of(
+				Map.of("budget_krw", -1), Map.of("planning_days", 1.5),
+				Map.of("max_delivery_count", 0), Map.of("budget_krw", "돈"),
+				Map.of("items", List.of(Map.of("base_unit", "L"))),
+				Map.of("items", List.of(Map.of("safety_stock", 10, "max_end_inventory", 5))));
+		for (int i = 0; i < inputs.size(); i++) {
+			org.mockito.Mockito.doReturn(ApiResponse.ok(Map.of("parsed_input", Map.of("input", inputs.get(i)))))
+					.when(aiServerClient).post(anyString(), any(), anyString(), any());
+			postEvent("invalid-ai-snapshot-" + i, "{\"event_type\":\"message\",\"content\":\"입력 변경\"}")
+					.andExpect(status().isBadGateway())
+					.andExpect(jsonPath("$.status").value("error"));
+		}
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class)).isZero();
+	}
+
+	@Test
+	void 지난_폼_기준버전으로_최신조건을_덮어쓰지_않는다() throws Exception {
+		insertSession(500, 10, 2);
+		insertVersion(1001, 500, 1, true);
+		insertVersion(1002, 500, 2, false);
+		postEvent("stale-form", "{\"event_type\":\"form\",\"base_version_id\":1001,\"form_input\":{\"budget_krw\":1}}")
+				.andExpect(status().isBadRequest());
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class))
+				.isEqualTo(2);
+	}
+
+	@Test
+	void 같은_요청키의_다른_입력은_400으로_거부한다() throws Exception {
+		insertSession(500, 10, 1);
+		postEvent("key-reuse", formBody(100000)).andExpect(status().isOk());
+		postEvent("key-reuse", formBody(200000)).andExpect(status().isBadRequest());
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class))
+				.isEqualTo(1);
+	}
+
+	@Test
+	void 변경없는_폼도_요청키를_기억하고_나중_재전송이_조건을_되돌리지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		postEvent("initial", formBody(100000)).andExpect(status().isOk());
+		String first = postEvent("unchanged", formBody(100000)).andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		postEvent("changed", formBody(200000)).andExpect(status().isOk());
+		String replay = postEvent("unchanged", formBody(100000)).andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		assertThat(com.jayway.jsonpath.JsonPath.<Object>read(replay, "$")).isEqualTo(com.jayway.jsonpath.JsonPath.<Object>read(first, "$"));
+		assertThat(jdbcTemplate.queryForObject("SELECT current_version FROM work_session WHERE session_id = 500", Integer.class))
+				.isEqualTo(2);
+	}
+
+	@Test
+	void 같은_요청키가_동시에_도착해도_버전과_응답을_한번만_만든다() throws Exception {
+		insertSession(500, 10, 1);
+		var barrier = new java.util.concurrent.CyclicBarrier(2);
+		try (var pool = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+			java.util.concurrent.Callable<String> call = () -> {
+				barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+				return postEvent("parallel-same", formBody(100000)).andExpect(status().isOk())
+						.andReturn().getResponse().getContentAsString();
+			};
+			var first = pool.submit(call);
+			var second = pool.submit(call);
+			assertThat(com.jayway.jsonpath.JsonPath.<Object>read(first.get(10, java.util.concurrent.TimeUnit.SECONDS), "$"))
+					.isEqualTo(com.jayway.jsonpath.JsonPath.<Object>read(second.get(10, java.util.concurrent.TimeUnit.SECONDS), "$"));
+		}
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isEqualTo(1);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class)).isEqualTo(2);
+	}
+
+	@Test
+	void 서로_다른_동시_이벤트도_버전번호가_충돌하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		var barrier = new java.util.concurrent.CyclicBarrier(2);
+		try (var pool = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+			var first = pool.submit(() -> {
+				barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+				return postEvent("parallel-A", formBody(100000)).andExpect(status().isOk()).andReturn();
+			});
+			var second = pool.submit(() -> {
+				barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+				return postEvent("parallel-B", formBody(200000)).andExpect(status().isOk()).andReturn();
+			});
+			first.get(10, java.util.concurrent.TimeUnit.SECONDS);
+			second.get(10, java.util.concurrent.TimeUnit.SECONDS);
+		}
+		assertThat(jdbcTemplate.queryForList("SELECT version_no FROM work_version WHERE session_id = 500 ORDER BY version_no", Integer.class))
+				.containsExactly(1, 2);
+	}
+
+	@Test
+	void 질문은_서버가_발급하고_답변후에는_재사용할수_없다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(ApiResponse.needsInput(Map.of("question_id", "untrusted-ai-id", "missing_fields",
+				List.of(Map.of("path", "budget_krw", "label", "예산"))), "예산을 알려 주세요."))
+				.when(aiServerClient).post(anyString(), any(), anyString(), any());
+		String body = postEvent("ask", "{\"event_type\":\"message\",\"content\":\"매입 준비\"}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("needs_input"))
+				.andReturn().getResponse().getContentAsString();
+		String questionId = com.jayway.jsonpath.JsonPath.read(body, "$.data.question_id");
+		assertThat(questionId).startsWith("q_").isNotEqualTo("untrusted-ai-id");
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+		org.mockito.Mockito.doReturn(agentInput(100000)).when(aiServerClient).post(anyString(), any(), anyString(), any());
+		String reply = "{\"event_type\":\"question_reply\",\"question_id\":\"" + questionId + "\",\"answer\":\"10만원\"}";
+		postEvent("answer", reply).andExpect(status().isOk());
+		postEvent("answer", reply).andExpect(status().isOk()); // 동일 요청의 재시도는 원 응답
+		postEvent("answer-again", reply).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void 발급하지_않은_질문에는_AI를_호출하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		postEvent("forged-question", "{\"event_type\":\"question_reply\",\"question_id\":\"fake\",\"answer\":\"10만원\"}")
+				.andExpect(status().isBadRequest());
+		org.mockito.Mockito.verify(aiServerClient, org.mockito.Mockito.never()).post(anyString(), any(), anyString(), any());
+	}
+
+	@Test
+	void AI를_기다리는동안_입력이_바뀌면_해석결과를_저장하지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		insertVersion(1001, 500, 1, false);
+		org.mockito.Mockito.doAnswer(call -> {
+			insertVersion(1002, 500, 2, false);
+			jdbcTemplate.update("UPDATE work_session SET current_version = 2 WHERE session_id = 500");
+			return agentInput(100000);
+		}).when(aiServerClient).post(anyString(), any(), anyString(), any());
+		postEvent("outdated-agent", "{\"event_type\":\"message\",\"content\":\"예산 변경\"}")
+				.andExpect(status().isBadRequest());
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class)).isZero();
+	}
+
+	@Test
+	void 폼의_중첩_개인정보도_입력스냅샷과_응답에서_가린다() throws Exception {
+		insertSession(500, 10, 0);
+		String body = "{\"event_type\":\"form\",\"form_input\":{\"supplier\":{\"person_name\":\"홍길동\",\"contact\":\"010-1234-5678 a@b.com\"},\"budget_krw\":100000}}";
+		String response = postEvent("private-form", body).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.version_no").value(1)).andReturn().getResponse().getContentAsString();
+		assertThat(response).doesNotContain("홍길동", "010-1234-5678", "a@b.com");
+		assertThat(jdbcTemplate.queryForObject("SELECT input_json::text FROM work_version WHERE session_id = 500", String.class))
+				.doesNotContain("홍길동", "010-1234-5678", "a@b.com");
+	}
+
+	@Test
+	void 잡담과_설명만인_명시적_NO_CHANGE는_대화만_저장한다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(ApiResponse.ok(Map.of("detail_status", "NO_CHANGE")))
+				.when(aiServerClient).post(anyString(), any(), anyString(), any());
+		postEvent("smalltalk", "{\"event_type\":\"message\",\"content\":\"안녕하세요\"}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.input_version_id").value(nullValue()));
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message WHERE session_id = 500", Integer.class)).isEqualTo(2);
+	}
+
+	@Test
+	void 같은_기준버전이어도_새_질문이_발급되면_지난_질문을_거부한다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(ApiResponse.needsInput(Map.of("missing_fields", List.of(Map.of("path", "budget_krw"))), "예산?"))
+				.when(aiServerClient).post(anyString(), any(), anyString(), any());
+		String first = postEvent("question-A", "{\"event_type\":\"message\",\"content\":\"매입\"}")
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		String questionId = com.jayway.jsonpath.JsonPath.read(first, "$.data.question_id");
+		postEvent("question-B", "{\"event_type\":\"message\",\"content\":\"다시 질문\"}").andExpect(status().isOk());
+		postEvent("old-question", "{\"event_type\":\"question_reply\",\"question_id\":\"" + questionId + "\",\"answer\":\"10만원\"}")
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void 폼의_음수_잘못된_단위_소수_기간을_거부한다() throws Exception {
+		insertSession(500, 10, 1);
+		String[] inputs = {"{\"budget_krw\":-1}", "{\"planning_days\":1.5}",
+				"{\"max_delivery_count\":0}", "{\"budget_krw\":\"돈\"}",
+				"{\"items\":[{\"base_unit\":\"L\"}]}",
+				"{\"items\":[{\"safety_stock\":10,\"max_end_inventory\":5}]}"};
+		for (int i = 0; i < inputs.length; i++) {
+			postEvent("invalid-form-" + i, "{\"event_type\":\"form\",\"form_input\":" + inputs[i] + "}")
+					.andExpect(status().isBadRequest());
+		}
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+	}
+
+	@Test
+	void 모르는_재고는_null로_유지하고_0으로_만들지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		postEvent("unknown-inventory", "{\"event_type\":\"form\",\"form_input\":{\"usable_inventory\":null,\"budget_krw\":100000}}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("needs_input"))
+				.andExpect(jsonPath("$.data.draft_input.usable_inventory").value(nullValue()))
+				.andExpect(jsonPath("$.data.missing_fields[0].path").value("usable_inventory"));
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_version WHERE session_id = 500", Integer.class)).isZero();
+	}
+
+	private ApiResponse<Map<String, Object>> agentInput(int budget) {
+		return ApiResponse.ok(Map.of("parsed_input", Map.of("input", Map.of("budget_krw", budget),
+				"changed", List.of("budget_krw")), "assumptions", List.of(), "warnings", List.of()));
+	}
+
+	private String formBody(int budget) {
+		return "{\"event_type\":\"form\",\"form_input\":{\"budget_krw\":" + budget + "}}";
+	}
+
+	private org.springframework.test.web.servlet.ResultActions postEvent(String key, String body) throws Exception {
+		return mockMvc.perform(post("/api/v1/work-sessions/500/events").header("X-Request-Key", key)
+				.contentType(MediaType.APPLICATION_JSON).content(body));
 	}
 
 	/** 목록 시나리오용 업무를 updated_at까지 지정해 넣는다(정렬·커서 검증). */
