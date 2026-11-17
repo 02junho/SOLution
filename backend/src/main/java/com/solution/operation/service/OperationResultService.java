@@ -156,7 +156,9 @@ public class OperationResultService {
 			transaction.executeWithoutResult(status -> {
 				requestKeyLock.lock("operation", source.inputVersionId(), key);
 				repository.lockSession(sessionId);
+				// 같은 입력 버전의 결과만 본다. 같은 키로 지난 버전 결과가 있어도 이번 버전의 단계를 result로 만들지 않는다.
 				String step = repository.findByRequestKey(sessionId, key)
+						.filter(stored -> stored.inputVersionId() == source.inputVersionId())
 						.map(stored -> "ok".equals(stored.responseStatus()) ? "result" : "review")
 						.orElse("review");
 				repository.markStep(sessionId, source.versionNo(), step);

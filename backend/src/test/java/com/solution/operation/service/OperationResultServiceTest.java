@@ -307,6 +307,24 @@ class OperationResultServiceTest {
 	}
 
 	@Test
+	void 같은_키의_지난_버전_결과로는_실패한_이번_버전_단계를_result로_만들지_않는다() throws IOException {
+		service.run(SESSION, VERSION, "first");
+		StoredResult old = saved.get(RESULT);
+		StoredResult otherVersion = new StoredResult(old.resultId(), VERSION - 1, old.sessionId(), old.versionNo(),
+				old.featureType(), old.responseStatus(), old.detailStatus(), old.summaryJson(), old.detailJson(),
+				old.createdAt(), old.currentVersion(), old.ownerKey(), null);
+		clearInvocations(repository);
+		when(repository.findByRequestKey(SESSION, "reused"))
+				.thenReturn(Optional.empty(), Optional.of(otherVersion));
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("complete", false);
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "reused")).isInstanceOf(ApiException.class);
+		verify(repository).markStep(SESSION, 1, "review");
+		verify(repository, never()).markStep(SESSION, 1, "result");
+	}
+
+	@Test
 	void warnings가_배열이_아니면_계약_오류() throws IOException {
 		Map<String, Object> simulation = data("compare_response.json");
 		simulation.put("warnings", Map.of("warning_id", "SIMULATED_CONDITIONS", "message", "모의 조건", "requires_ack", true));
