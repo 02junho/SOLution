@@ -59,14 +59,15 @@ HS_BASE = {
     ],
 }
 
-# ── 시연 자료 초안 (data/demo, 11.15, 최정경 확인 전) ─────────────────────
+# ── 시연 자료 (data/demo, 최정경 확인 11.17) · 시연 업무 1004와 같은 입력 ─────
 # 총필요량은 판매 계획(아이스 아메리카노 100 · 아이스 라떼 30 · 핫 라떼 20잔) × 재료표로 계산한 값.
+# 우유는 재료표대로 핫 라떼 220ml (아이스 라떼 200ml × 30 + 220ml × 20 = 10,400ml). 200ml로 셌을 때(10,000ml)와 구매안은 같다.
 DEMO = {
     "store_id": 1, "session_id": 100, "input_version_id": 1001,
     "planning_days": 7, "budget_krw": 200000, "max_delivery_count": 2,
     "items": [
         {"item_id": "beans", "item_name": "원두", "base_unit": "g", "gross_need": 2700, "usable_inventory": 1000, "safety_stock": 500, "storage_capacity": 5000},
-        {"item_id": "milk", "item_name": "우유", "base_unit": "ml", "gross_need": 10000, "usable_inventory": 2000, "safety_stock": 2000, "storage_capacity": 24000},
+        {"item_id": "milk", "item_name": "우유", "base_unit": "ml", "gross_need": 10400, "usable_inventory": 2000, "safety_stock": 2000, "storage_capacity": 24000},
         {"item_id": "ice_cup", "item_name": "아이스컵", "base_unit": "ea", "gross_need": 130, "usable_inventory": 50, "safety_stock": 50, "storage_capacity": 1000},
         {"item_id": "hot_cup", "item_name": "핫컵", "base_unit": "ea", "gross_need": 20, "usable_inventory": 30, "safety_stock": 30, "storage_capacity": 500},
         {"item_id": "lid", "item_name": "컵 뚜껑", "base_unit": "ea", "gross_need": 150, "usable_inventory": 100, "safety_stock": 50, "storage_capacity": 1000},
@@ -121,7 +122,7 @@ def named_cases() -> list[dict]:
         {"id": "E14", "name": "현식 사례 · 토마토 보관 한도 1,999g", "source": "방현식 블라인드 정답 (10.26)",
          "request": _with(HS_BASE, lambda r: r["items"][3].update(storage_capacity=1999)),
          "expect": {"status": "infeasible", "violations": ["storage"], "oracle": True}},
-        {"id": "E06", "name": "시연 자료 초안 (품목 5 · 거래처 4)", "source": "신준호 계산 (11.15), 시연 자료 정경 확인 전", "request": DEMO,
+        {"id": "E06", "name": "시연 자료 (품목 5 · 거래처 4, 업무 1004)", "source": "신준호 계산 (11.15), 최정경 자료 확인 (11.17)", "request": DEMO,
          "expect": {"status": "ok", "p1": 125500, "p2": 127500, "baseline": 119500, "baseline_violations": ["delivery_count", "minimum_order"]}},
         {"id": "E07", "name": "폐기 조건 · 우유 한도에 딱 맞음", "source": "API 명세 손계산 (11.16)",
          "request": _with(SPEC, lambda r: r["items"][1].update(max_end_inventory=5000)),

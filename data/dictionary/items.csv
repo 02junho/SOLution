@@ -1,1 +1,6 @@
 item_id,item_name,base_unit,spec,aliases,dictionary_version,source
+beans,원두,g,1kg 봉,원두|커피콩|블렌드 원두|에스프레소 블렌드,v1,가정
+milk,우유,ml,1L 팩,우유|흰우유|카페우유|멸균우유,v1,가정
+ice_cup,아이스컵,ea,16oz 투명컵,아이스컵|PET컵|투명컵|16온스컵,v1,가정
+hot_cup,핫컵,ea,13oz 종이컵,핫컵|종이컵|13온스컵,v1,가정
+lid,컵 뚜껑,ea,아이스·핫 공용 뚜껑,뚜껑|리드|컵뚜껑,v1,가정

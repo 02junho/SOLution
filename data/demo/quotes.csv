@@ -1,1 +1,14 @@
 supplier_id,item_id,pack_size,pack_unit,pack_price_krw,vat_included,source
+A,beans,1000,g,20000,Y,가정
+B,milk,12000,ml,28000,Y,가정
+B,milk,6000,ml,16500,,가정
+C,beans,1000,g,23000,Y,가정
+C,milk,12000,ml,34000,Y,가정
+C,ice_cup,50,ea,4000,Y,가정
+C,hot_cup,50,ea,4500,Y,가정
+C,lid,100,ea,3000,Y,가정
+D,beans,1000,g,26000,Y,가정
+D,milk,6000,ml,19800,Y,가정
+D,ice_cup,50,ea,5000,Y,가정
+D,hot_cup,50,ea,5500,Y,가정
+D,lid,100,ea,3500,Y,가정

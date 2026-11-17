@@ -1,1 +1,5 @@
-supplier_id,supplier_name,minimum_order_krw,delivery_fee_krw,source
+supplier_id,supplier_name,minimum_order_krw,delivery_fee_krw,free_delivery_min_krw,source
+A,거래처 A (원두 로스터리),70000,3000,,가정
+B,거래처 B (유제품 대리점),20000,4000,50000,가정
+C,거래처 C (카페 도매몰),0,5000,150000,가정
+D,거래처 D (동네 식자재마트),0,2000,,가정
