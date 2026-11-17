@@ -21,7 +21,7 @@
 | `demo/sales_recent.csv` | 최근 3일 메뉴별 판매 잔 수 | 최정경 |
 | `demo/quotes.csv` | 거래처별 견적 (포장 단위 · 가격 · 부가세) | 최정경 |
 | `demo/store.json` | 매장 이름 · 상권 · 영업시간 · 기준일 | 신준호 |
-| `demo/suppliers.csv` | 거래처 최소 주문금액 · 배송비 | 신준호 |
+| `demo/suppliers.csv` | 거래처 최소 주문금액 · 배송비 · 무료배송 기준 금액 | 신준호 |
 | `demo/inventory.csv` | 재고 · 안전재고 · 보관 한도 | 신준호 |
 | `demo/purchase_conditions.json` | 예산 · 배송 횟수 한도 · 계획 기간 | 신준호 |
 | `demo/time_slots.csv` | 시간대 구간별 손님 비중 · 인원 | 최가영 |

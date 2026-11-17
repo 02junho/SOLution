@@ -103,12 +103,13 @@ step5() {
 }
 
 step6() {
-  title 6 "시연 데이터 (매장 1 · 입력 확인된 구매 업무 1001·1002·1003)"
+  title 6 "시연 데이터 (매장 1 · 입력 확인된 구매 업무 1001~1004)"
   [ "$(psql_q "select owner_key from store where store_id = 1")" = "demo-owner" ] && ok "매장 1 (demo-owner)" \
     || { no "매장 1이 없음" ".env에 DEMO_SEED=true 추가 후 docker compose up -d backend"; return; }
   local s
-  s=$(psql_q "select string_agg(s.session_id::text, ',' order by s.session_id) from work_session s join work_version v on v.session_id = s.session_id and v.version_no = s.current_version where s.session_id in (1001, 1002, 1003) and v.input_confirmed_at is not null")
-  [ "$s" = "1001,1002,1003" ] && ok "구매 업무 1001·1002·1003, 모두 입력 확인됨" || no "구매 업무: ${s:-없음}"
+  s=$(psql_q "select string_agg(s.session_id::text, ',' order by s.session_id) from work_session s join work_version v on v.session_id = s.session_id and v.version_no = s.current_version where s.session_id in (1001, 1002, 1003, 1004) and v.input_confirmed_at is not null")
+  [ "$s" = "1001,1002,1003,1004" ] && ok "구매 업무 1001~1004, 모두 입력 확인됨" \
+    || no "구매 업무: ${s:-없음}" "1004가 없으면 docker compose up -d --build backend (seed는 없는 것만 추가)"
 }
 
 step7() {
@@ -133,7 +134,7 @@ step7() {
 }
 
 step8() {
-  title 8 "구매 실패 두 가지 (1002 예산 부족 · 1003 재고 빈칸)"
+  title 8 "구매 나머지 시연 (1002 예산 부족 · 1003 재고 빈칸 · 1004 거래처 4곳)"
   local b
   b=$(run_purchase 1002 100201)
   echo "$b" | jq -e '.status == "infeasible" and .data.violations[0].constraint == "budget"' >/dev/null 2>&1 \
@@ -141,6 +142,10 @@ step8() {
   b=$(run_purchase 1003 100301)
   echo "$b" | jq -e '.status == "needs_input" and .data.missing_fields[0].path == "items[1].usable_inventory"' >/dev/null 2>&1 \
     && ok "1003 needs_input: $(echo "$b" | jq -r .message)" || no "1003 응답: $(echo "$b" | jq -c . 2>/dev/null)"
+  b=$(run_purchase 1004 100401)
+  echo "$b" | jq -e '.status == "ok" and .data.summary.choices[0].total_krw == 125500 and .data.summary.choices[1].total_krw == 127500' >/dev/null 2>&1 \
+    && ok "1004 거래처 4곳: 안 1 125,500원 · 안 2 127,500원 · 기준선 $(echo "$b" | jq -r .data.summary.baseline.total_krw)원" \
+    || no "1004 응답: $(echo "$b" | jq -c . 2>/dev/null)"
 }
 
 step9() {

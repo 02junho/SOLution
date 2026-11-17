@@ -1,6 +1,6 @@
 {
-  "budget_krw": null,
-  "max_delivery_count": null,
-  "planning_days": null,
-  "source": null
+  "budget_krw": 200000,
+  "max_delivery_count": 2,
+  "planning_days": 7,
+  "source": "가정"
 }

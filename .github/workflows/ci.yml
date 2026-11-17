@@ -107,7 +107,7 @@ jobs:
           test "$count" = "8"
 
       # 시연용 기본 데이터(위에서 켠 DEMO_SEED=true)로 화면이 부르는 주소부터
-      # Spring → FastAPI 계산 → DB 저장 → 다시 조회까지 끝까지 확인한다. (정상 1 · 예산 부족 1 · 재고 빈칸 1)
+      # Spring → FastAPI 계산 → DB 저장 → 다시 조회까지 끝까지 확인한다. (정상 1 · 예산 부족 1 · 재고 빈칸 1 · 거래처 4곳 1)
       - name: 구매 시연 흐름 확인
         run: |
           run() {
@@ -122,7 +122,8 @@ jobs:
             | jq -e '.status == "ok" and .data.detail.choices[0].choice_key == "purchase_1"' > /dev/null
           run 1002 100201 | jq -e '.status == "infeasible" and .data.violations[0].constraint == "budget"' > /dev/null
           run 1003 100301 | jq -e '.status == "needs_input" and .data.missing_fields[0].path == "items[1].usable_inventory"' > /dev/null
-          echo "구매 시연 흐름 정상 (정상 1 · 예산 부족 1 · 재고 빈칸 1)"
+          run 1004 100401 | jq -e '.status == "ok" and .data.summary.choices[0].total_krw == 125500 and .data.summary.choices[1].total_krw == 127500' > /dev/null
+          echo "구매 시연 흐름 정상 (정상 1 · 예산 부족 1 · 재고 빈칸 1 · 거래처 4곳 1)"
 
       - name: 실패하면 서버 로그 출력
         if: failure()

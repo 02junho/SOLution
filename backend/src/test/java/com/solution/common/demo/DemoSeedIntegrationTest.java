@@ -54,7 +54,7 @@ class DemoSeedIntegrationTest {
 	private AiServerClient aiServerClient;
 
 	@Test
-	void 서버가_뜰_때_시연용_매장과_구매_업무_3건이_들어간다() {
+	void 서버가_뜰_때_시연용_매장과_구매_업무_4건이_들어간다() {
 		assertThat(jdbcTemplate.queryForObject("SELECT owner_key FROM store WHERE store_id = 1", String.class))
 				.isEqualTo("demo-owner");
 		List<Long> sessions = jdbcTemplate.queryForList("""
@@ -63,7 +63,7 @@ class DemoSeedIntegrationTest {
 				WHERE s.store_id = 1 AND s.feature_type = 'purchase' AND v.input_confirmed_at IS NOT NULL
 				ORDER BY s.session_id
 				""", Long.class);
-		assertThat(sessions).containsExactly(1001L, 1002L, 1003L);
+		assertThat(sessions).containsExactly(1001L, 1002L, 1003L, 1004L);
 	}
 
 	@Test
