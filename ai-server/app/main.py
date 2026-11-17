@@ -6,6 +6,7 @@ from app.agent.router import router as agent_router
 from app.core.db import check_database, close_pool, open_pool
 from app.core.errors import register_exception_handlers
 from app.core.response import ApiResponse, ok
+from app.tools.labor.router import router as labor_router
 from app.tools.purchase.router import router as purchase_router
 
 
@@ -24,6 +25,7 @@ register_exception_handlers(app)
 # 예) from app.tools.labor.router import router as labor_router
 #     app.include_router(labor_router, prefix="/tools/labor")
 app.include_router(purchase_router, prefix="/tools/purchase")
+app.include_router(labor_router, prefix="/tools/labor")
 app.include_router(agent_router, prefix="/agent")
 
 

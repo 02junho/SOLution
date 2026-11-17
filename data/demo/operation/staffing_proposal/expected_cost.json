@@ -1,0 +1,102 @@
+{
+  "status": "ok",
+  "data": {
+    "session_id": 520001,
+    "input_version_id": 530001,
+    "wage_year": 2026,
+    "minimum_hourly_wage_krw": 10320,
+    "assumptions_version": "demo.staffing-review.v1",
+    "monthly_estimation_method": "REPEATED_WEEK_FACTOR",
+    "weeks_per_month": 4.345,
+    "plans": [
+      {
+        "choice_key": "CURRENT",
+        "employee_paid_seconds": 28800,
+        "owner_work_seconds": 43200,
+        "base_wage_krw": 82560,
+        "weekly_holiday_cost_krw": null,
+        "employer_insurance_cost_krw": null,
+        "cash_cost_krw": 82560,
+        "weekly_base_wage_estimate_krw": 412800,
+        "monthly_cash_cost_estimate_krw": 1793616,
+        "cost_scope": "BASE_WAGE_ONLY",
+        "workers": [
+          {
+            "worker_key": "B",
+            "paid_seconds": 28800,
+            "base_wage_krw": 82560,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 82560
+          }
+        ],
+        "additional_cash_cost_krw": 0,
+        "additional_monthly_cash_cost_estimate_krw": 0
+      },
+      {
+        "choice_key": "ALT_A",
+        "employee_paid_seconds": 28800,
+        "owner_work_seconds": 43200,
+        "base_wage_krw": 82560,
+        "weekly_holiday_cost_krw": null,
+        "employer_insurance_cost_krw": null,
+        "cash_cost_krw": 82560,
+        "weekly_base_wage_estimate_krw": 412800,
+        "monthly_cash_cost_estimate_krw": 1793616,
+        "cost_scope": "BASE_WAGE_ONLY",
+        "workers": [
+          {
+            "worker_key": "B",
+            "paid_seconds": 28800,
+            "base_wage_krw": 82560,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 82560
+          }
+        ],
+        "additional_cash_cost_krw": 0,
+        "additional_monthly_cash_cost_estimate_krw": 0
+      },
+      {
+        "choice_key": "ALT_C",
+        "employee_paid_seconds": 39600,
+        "owner_work_seconds": 43200,
+        "base_wage_krw": 113520,
+        "weekly_holiday_cost_krw": null,
+        "employer_insurance_cost_krw": null,
+        "cash_cost_krw": 113520,
+        "weekly_base_wage_estimate_krw": 567600,
+        "monthly_cash_cost_estimate_krw": 2466222,
+        "cost_scope": "BASE_WAGE_ONLY",
+        "workers": [
+          {
+            "worker_key": "B",
+            "paid_seconds": 28800,
+            "base_wage_krw": 82560,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 82560
+          },
+          {
+            "worker_key": "C",
+            "paid_seconds": 10800,
+            "base_wage_krw": 30960,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 30960
+          }
+        ],
+        "additional_cash_cost_krw": 30960,
+        "additional_monthly_cash_cost_estimate_krw": 672606
+      }
+    ],
+    "warnings": [],
+    "assumptions": [
+      "입력 시급과 유급시간으로 계산한 계획 비용입니다. 실제 급여 정산서가 아닙니다.",
+      "주휴수당을 제외했습니다.",
+      "사업주 부담 보험료를 제외했습니다.",
+      "월 4.345주와 직원별 주간 반복 패턴을 가정한 월 추정치입니다."
+    ]
+  },
+  "message": null
+}

@@ -6,6 +6,7 @@ import {
 import { ConfirmationModal } from './features/workflow/Results'
 import Workspace, { NewSession } from './features/workflow/Workspace'
 import { useWorkspace } from './features/workflow/useWorkspace'
+import OperationResultsPage from './features/operation/OperationResultsPage'
 import SystemCheckPage from './pages/SystemCheckPage'
 import type { FeatureType } from './types/api'
 
@@ -27,6 +28,8 @@ export default function App() {
     const match = /^#\/work\/(\d+)$/.exec(route)
     if (match) void openSession(Number(match[1]))
   }, [route, openSession])
+  // 운영 비교 결과 화면(개발 연결용). 공통 업무 화면과 붙이기 전까지 #/operation으로만 연다.
+  const operationPage = route.startsWith('#/operation')
   const savedPage = route.startsWith('#/confirmations')
   const systemPage = route.startsWith('#/system')
   function selectFeature(next: FeatureType) {
@@ -53,6 +56,7 @@ export default function App() {
       window.location.hash = `/work/${id}`
     }
   }
+  if (operationPage) return <OperationResultsPage />
   return (
     <div className="app-shell">
       <a

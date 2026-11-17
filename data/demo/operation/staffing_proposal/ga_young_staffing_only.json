@@ -1,0 +1,88 @@
+{
+  "staffing_schema_version": "operation.staffing.employees.v1-proposal",
+  "choices": [
+    {
+      "choice_key": "CURRENT",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          }
+        ],
+        "peak_staff_count": 2,
+        "total_staff_hours": 24
+      }
+    },
+    {
+      "choice_key": "ALT_A",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [
+              "MAKE"
+            ],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          }
+        ],
+        "peak_staff_count": 2,
+        "total_staff_hours": 24
+      }
+    },
+    {
+      "choice_key": "ALT_C",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "C",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "start_time": "11:00",
+            "end_time": "14:00"
+          }
+        ],
+        "peak_staff_count": 3,
+        "total_staff_hours": 27
+      }
+    }
+  ],
+  "note": "가영 공유 배치 초안을 재현한 합성 계약 예제. A/B의 소유자·시급·휴게가 없어 급여 계산 입력이 아님."
+}

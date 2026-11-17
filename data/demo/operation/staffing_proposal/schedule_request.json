@@ -1,0 +1,156 @@
+{
+  "session_id": 520001,
+  "input_version_id": 530001,
+  "business_date": "2026-11-16",
+  "workers": [
+    {
+      "worker_key": "A",
+      "is_owner": true,
+      "is_minor": false,
+      "hourly_wage_krw": null
+    },
+    {
+      "worker_key": "B",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    },
+    {
+      "worker_key": "C",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    }
+  ],
+  "timezone": "Asia/Seoul",
+  "rule_policy_version": "labor.kr.2026.v1",
+  "auto_break": true,
+  "avoid_break_windows": [
+    {
+      "start_time": "11:00",
+      "end_time": "14:00"
+    }
+  ],
+  "plans": [
+    {
+      "choice_key": "CURRENT",
+      "shifts": [
+        {
+          "worker_key": "A",
+          "start_time": "07:00",
+          "end_time": "19:00",
+          "task_code": "ORDER",
+          "primary_role": "ORDER",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "B",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [],
+          "breaks": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_A",
+      "shifts": [
+        {
+          "worker_key": "A",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ORDER",
+          "primary_role": "ORDER",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "A",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER",
+          "primary_role": "ORDER",
+          "can_support": [
+            "MAKE"
+          ],
+          "breaks": []
+        },
+        {
+          "worker_key": "A",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ORDER",
+          "primary_role": "ORDER",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "B",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "B",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [
+            "ORDER"
+          ],
+          "breaks": []
+        },
+        {
+          "worker_key": "B",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [],
+          "breaks": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_C",
+      "shifts": [
+        {
+          "worker_key": "A",
+          "start_time": "07:00",
+          "end_time": "19:00",
+          "task_code": "ORDER",
+          "primary_role": "ORDER",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "B",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [],
+          "breaks": []
+        },
+        {
+          "worker_key": "C",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "MAKE",
+          "primary_role": "MAKE",
+          "can_support": [
+            "ORDER"
+          ],
+          "breaks": []
+        }
+      ]
+    }
+  ]
+}

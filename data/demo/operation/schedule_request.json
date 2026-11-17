@@ -1,0 +1,156 @@
+{
+  "session_id": 520001,
+  "input_version_id": 530001,
+  "business_date": "2026-11-16",
+  "workers": [
+    {
+      "worker_key": "OWNER",
+      "is_owner": true,
+      "is_minor": false,
+      "hourly_wage_krw": null
+    },
+    {
+      "worker_key": "STAFF_1",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    },
+    {
+      "worker_key": "STAFF_2",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    }
+  ],
+  "plans": [
+    {
+      "choice_key": "CURRENT",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION",
+          "breaks": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_A",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF_HELP_PREPARATION",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "task_code": "PREPARATION",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION",
+          "breaks": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_C",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF",
+          "breaks": []
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION",
+          "breaks": []
+        },
+        {
+          "worker_key": "STAFF_2",
+          "start_time": "11:30",
+          "end_time": "13:30",
+          "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+          "breaks": []
+        }
+      ]
+    }
+  ],
+  "auto_break": true,
+  "avoid_break_windows": [
+    {
+      "start_time": "11:00",
+      "end_time": "14:00"
+    }
+  ],
+  "timezone": "Asia/Seoul",
+  "rule_policy_version": "labor.kr.2026.v1"
+}

@@ -1,0 +1,2073 @@
+{
+  "result": {
+    "result_id": 7001,
+    "session_id": 520001,
+    "input_version_id": 530001,
+    "version_no": 1,
+    "feature_type": "operation",
+    "response_status": "ok",
+    "detail_status": "COMPLETED",
+    "created_at": "2026-11-13T10:00:00+09:00",
+    "is_latest_version": true,
+    "confirmed_choice_key": null,
+    "summary": {
+      "comparison_window": {
+        "start_time": "11:00",
+        "end_time": "14:00"
+      },
+      "requested_repetitions": 30,
+      "completed_repetitions": 30,
+      "statistics_policy_version": "operation.statistics.demo.v1",
+      "choices": [
+        {
+          "choice_key": "CURRENT",
+          "metrics": {
+            "order_queue_wait_mean_seconds": 40,
+            "post_order_wait_mean_seconds": 190,
+            "total_time_mean_seconds": 250,
+            "total_time_p90_seconds": 390,
+            "post_order_wait_over_300_ratio": 0.2,
+            "completed_customer_count_mean": 120,
+            "throughput_per_hour_mean": 40
+          },
+          "cash_cost_krw": 82560,
+          "additional_cash_cost_krw": 0,
+          "monthly_cash_cost_estimate_krw": 1793616,
+          "additional_monthly_cash_cost_estimate_krw": 0,
+          "owner_work_seconds": 43200,
+          "comparison": null,
+          "employee_paid_seconds": 28800,
+          "cost_scope": "BASE_WAGE_ONLY",
+          "staffing_summary": {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "max_concurrent_workers": 2,
+            "assignments": [
+              {
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              },
+              {
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              }
+            ],
+            "simulation_excludes_breaks": true
+          }
+        },
+        {
+          "choice_key": "ALT_A",
+          "metrics": {
+            "order_queue_wait_mean_seconds": 35,
+            "post_order_wait_mean_seconds": 180,
+            "total_time_mean_seconds": 235,
+            "total_time_p90_seconds": 370,
+            "post_order_wait_over_300_ratio": 0.15,
+            "completed_customer_count_mean": 120,
+            "throughput_per_hour_mean": 40
+          },
+          "cash_cost_krw": 82560,
+          "additional_cash_cost_krw": 0,
+          "monthly_cash_cost_estimate_krw": 1793616,
+          "additional_monthly_cash_cost_estimate_krw": 0,
+          "owner_work_seconds": 43200,
+          "comparison": {
+            "metric": "post_order_wait_mean_seconds",
+            "delta_vs_current_seconds": -10.0,
+            "ci95_lower_seconds": -10.657,
+            "ci95_upper_seconds": -9.343,
+            "better_count": 30,
+            "paired_repetitions": 30,
+            "label": "개선"
+          },
+          "employee_paid_seconds": 28800,
+          "cost_scope": "BASE_WAGE_ONLY",
+          "staffing_summary": {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "max_concurrent_workers": 2,
+            "assignments": [
+              {
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF_HELP_PREPARATION",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              },
+              {
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              }
+            ],
+            "simulation_excludes_breaks": true
+          }
+        },
+        {
+          "choice_key": "ALT_C",
+          "metrics": {
+            "order_queue_wait_mean_seconds": 20,
+            "post_order_wait_mean_seconds": 140,
+            "total_time_mean_seconds": 180,
+            "total_time_p90_seconds": 300,
+            "post_order_wait_over_300_ratio": 0.05,
+            "completed_customer_count_mean": 120,
+            "throughput_per_hour_mean": 40
+          },
+          "cash_cost_krw": 103200,
+          "additional_cash_cost_krw": 20640,
+          "monthly_cash_cost_estimate_krw": 2242020,
+          "additional_monthly_cash_cost_estimate_krw": 448404,
+          "owner_work_seconds": 43200,
+          "comparison": {
+            "metric": "post_order_wait_mean_seconds",
+            "delta_vs_current_seconds": -50.0,
+            "ci95_lower_seconds": -50.986,
+            "ci95_upper_seconds": -49.014,
+            "better_count": 30,
+            "paired_repetitions": 30,
+            "label": "개선"
+          },
+          "employee_paid_seconds": 36000,
+          "cost_scope": "BASE_WAGE_ONLY",
+          "staffing_summary": {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "max_concurrent_workers": 3,
+            "assignments": [
+              {
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              },
+              {
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "start_time": "11:00",
+                "end_time": "14:00"
+              },
+              {
+                "worker_key": "STAFF_2",
+                "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+                "start_time": "11:30",
+                "end_time": "13:30"
+              }
+            ],
+            "simulation_excludes_breaks": true
+          }
+        }
+      ],
+      "warnings": [
+        {
+          "warning_id": "SIMULATED_CONDITIONS",
+          "message": "모의 조건으로 계산한 결과입니다. 실측 결과가 아닙니다.",
+          "requires_ack": true
+        }
+      ],
+      "recommendation": {
+        "choice_key": "ALT_C",
+        "reason": "주문 후 수령 300초 초과 비율이 가장 낮음",
+        "basis_metric": "post_order_wait_over_300_ratio"
+      },
+      "assumptions": [
+        "대기·비교 통계와 추천은 화면 연결용 합성 예제입니다. 실제 SimPy 실행 결과가 아닙니다.",
+        "계획 배치표이며 실제 근무 기록이 아닙니다.",
+        "휴게는 배치표에만 반영했고 시뮬레이션에는 반영하지 않았습니다.",
+        "하루 연속 근무의 휴게·연소자 일일 시간만 검사합니다. 가산수당·연차 등은 별도 확인 대상입니다.",
+        "입력 시급과 유급시간으로 계산한 계획 비용입니다. 실제 급여 정산서가 아닙니다.",
+        "주휴수당을 제외했습니다.",
+        "사업주 부담 보험료를 제외했습니다.",
+        "월 4.345주와 직원별 주간 반복 패턴을 가정한 월 추정치입니다."
+      ],
+      "complete": true
+    },
+    "detail": {
+      "labor": {
+        "session_id": 520001,
+        "input_version_id": 530001,
+        "wage_year": 2026,
+        "minimum_hourly_wage_krw": 10320,
+        "assumptions_version": "demo.operation.v1",
+        "monthly_estimation_method": "REPEATED_WEEK_FACTOR",
+        "weeks_per_month": 4.345,
+        "plans": [
+          {
+            "choice_key": "CURRENT",
+            "employee_paid_seconds": 28800,
+            "owner_work_seconds": 43200,
+            "base_wage_krw": 82560,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 82560,
+            "weekly_base_wage_estimate_krw": 412800,
+            "monthly_cash_cost_estimate_krw": 1793616,
+            "cost_scope": "BASE_WAGE_ONLY",
+            "workers": [
+              {
+                "worker_key": "STAFF_1",
+                "paid_seconds": 28800,
+                "base_wage_krw": 82560,
+                "weekly_holiday_cost_krw": null,
+                "employer_insurance_cost_krw": null,
+                "cash_cost_krw": 82560
+              }
+            ],
+            "additional_cash_cost_krw": 0,
+            "additional_monthly_cash_cost_estimate_krw": 0
+          },
+          {
+            "choice_key": "ALT_A",
+            "employee_paid_seconds": 28800,
+            "owner_work_seconds": 43200,
+            "base_wage_krw": 82560,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 82560,
+            "weekly_base_wage_estimate_krw": 412800,
+            "monthly_cash_cost_estimate_krw": 1793616,
+            "cost_scope": "BASE_WAGE_ONLY",
+            "workers": [
+              {
+                "worker_key": "STAFF_1",
+                "paid_seconds": 28800,
+                "base_wage_krw": 82560,
+                "weekly_holiday_cost_krw": null,
+                "employer_insurance_cost_krw": null,
+                "cash_cost_krw": 82560
+              }
+            ],
+            "additional_cash_cost_krw": 0,
+            "additional_monthly_cash_cost_estimate_krw": 0
+          },
+          {
+            "choice_key": "ALT_C",
+            "employee_paid_seconds": 36000,
+            "owner_work_seconds": 43200,
+            "base_wage_krw": 103200,
+            "weekly_holiday_cost_krw": null,
+            "employer_insurance_cost_krw": null,
+            "cash_cost_krw": 103200,
+            "weekly_base_wage_estimate_krw": 516000,
+            "monthly_cash_cost_estimate_krw": 2242020,
+            "cost_scope": "BASE_WAGE_ONLY",
+            "workers": [
+              {
+                "worker_key": "STAFF_1",
+                "paid_seconds": 28800,
+                "base_wage_krw": 82560,
+                "weekly_holiday_cost_krw": null,
+                "employer_insurance_cost_krw": null,
+                "cash_cost_krw": 82560
+              },
+              {
+                "worker_key": "STAFF_2",
+                "paid_seconds": 7200,
+                "base_wage_krw": 20640,
+                "weekly_holiday_cost_krw": null,
+                "employer_insurance_cost_krw": null,
+                "cash_cost_krw": 20640
+              }
+            ],
+            "additional_cash_cost_krw": 20640,
+            "additional_monthly_cash_cost_estimate_krw": 448404
+          }
+        ],
+        "warnings": [],
+        "assumptions": [
+          "입력 시급과 유급시간으로 계산한 계획 비용입니다. 실제 급여 정산서가 아닙니다.",
+          "주휴수당을 제외했습니다.",
+          "사업주 부담 보험료를 제외했습니다.",
+          "월 4.345주와 직원별 주간 반복 패턴을 가정한 월 추정치입니다."
+        ]
+      },
+      "schedule": {
+        "session_id": 520001,
+        "input_version_id": 530001,
+        "rule_policy_version": "labor.kr.2026.v1",
+        "is_observation": false,
+        "plans": [
+          {
+            "choice_key": "CURRENT",
+            "schedule": [
+              {
+                "start_time": "07:00",
+                "end_time": "11:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "11:00",
+                "end_time": "14:00",
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF",
+                "breaks": []
+              },
+              {
+                "start_time": "14:00",
+                "end_time": "19:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "10:00",
+                "end_time": "19:00",
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "breaks": [
+                  {
+                    "start_time": "14:00",
+                    "end_time": "15:00",
+                    "is_paid": false
+                  }
+                ]
+              }
+            ],
+            "violations": []
+          },
+          {
+            "choice_key": "ALT_A",
+            "schedule": [
+              {
+                "start_time": "07:00",
+                "end_time": "11:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "11:00",
+                "end_time": "14:00",
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF_HELP_PREPARATION",
+                "breaks": []
+              },
+              {
+                "start_time": "14:00",
+                "end_time": "19:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "breaks": []
+              },
+              {
+                "start_time": "11:00",
+                "end_time": "14:00",
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+                "breaks": []
+              },
+              {
+                "start_time": "14:00",
+                "end_time": "19:00",
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "breaks": [
+                  {
+                    "start_time": "14:00",
+                    "end_time": "15:00",
+                    "is_paid": false
+                  }
+                ]
+              }
+            ],
+            "violations": []
+          },
+          {
+            "choice_key": "ALT_C",
+            "schedule": [
+              {
+                "start_time": "07:00",
+                "end_time": "11:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "11:00",
+                "end_time": "14:00",
+                "worker_key": "OWNER",
+                "task_code": "ORDER_HANDOFF",
+                "breaks": []
+              },
+              {
+                "start_time": "14:00",
+                "end_time": "19:00",
+                "worker_key": "OWNER",
+                "task_code": "ALL_TASKS",
+                "breaks": []
+              },
+              {
+                "start_time": "10:00",
+                "end_time": "19:00",
+                "worker_key": "STAFF_1",
+                "task_code": "PREPARATION",
+                "breaks": [
+                  {
+                    "start_time": "14:00",
+                    "end_time": "15:00",
+                    "is_paid": false
+                  }
+                ]
+              },
+              {
+                "start_time": "11:30",
+                "end_time": "13:30",
+                "worker_key": "STAFF_2",
+                "task_code": "PREPARATION_HELP_ORDER_HANDOFF",
+                "breaks": []
+              }
+            ],
+            "violations": []
+          }
+        ],
+        "warnings": [],
+        "assumptions": [
+          "계획 배치표이며 실제 근무 기록이 아닙니다.",
+          "휴게는 배치표에만 반영했고 시뮬레이션에는 반영하지 않았습니다.",
+          "하루 연속 근무의 휴게·연소자 일일 시간만 검사합니다. 가산수당·연차 등은 별도 확인 대상입니다."
+        ]
+      },
+      "metric_definitions": {
+        "order_queue_wait_mean_seconds": {
+          "definition": "도착 → 주문 시작의 평균",
+          "unit": "seconds"
+        },
+        "post_order_wait_mean_seconds": {
+          "definition": "주문 완료 → 수령의 평균",
+          "unit": "seconds"
+        },
+        "total_time_mean_seconds": {
+          "definition": "도착 → 수령의 평균",
+          "unit": "seconds"
+        },
+        "total_time_p90_seconds": {
+          "definition": "도착 → 수령의 90백분위",
+          "unit": "seconds"
+        },
+        "post_order_wait_over_300_ratio": {
+          "definition": "주문 완료 → 수령이 300초를 초과한 고객 비율",
+          "unit": "ratio"
+        },
+        "completed_customer_count_mean": {
+          "definition": "워밍업 제외 관찰 구간 내 수령 완료 고객 수의 반복 평균",
+          "unit": "customers"
+        },
+        "throughput_per_hour_mean": {
+          "definition": "같은 관찰 구간의 완료 고객 수 / 관찰 시간(시간)의 반복 평균",
+          "unit": "customers_per_hour"
+        },
+        "comparison": {
+          "metric": "post_order_wait_mean_seconds",
+          "delta_definition": "같은 반복의 후보 평균 − CURRENT 평균을 구한 후 반복 평균",
+          "ci95_method": "반복별 짝 차이 평균의 t 구간 (예제 정책)",
+          "better_definition": "후보 − CURRENT < 0인 반복 수; 동률 제외"
+        },
+        "aggregation_policy": {
+          "observation_window": "[11:00:00, 14:00:00)",
+          "warmup_excluded": true,
+          "warmup_start_time": "10:30:00",
+          "late_completion_policy": "14:00 이후 수령 완료는 관찰 구간 완료 수에서 제외",
+          "p90_aggregation": "같은 관찰 구간 완료 고객의 반복별 총 소요 p90을 계산한 뒤 반복 평균",
+          "status": "EXAMPLE_POLICY_REQUIRES_SIMULATION_OWNER_CONFIRMATION"
+        }
+      },
+      "statistics_policy_version": "operation.statistics.demo.v1",
+      "replication_metrics": [
+        {
+          "replication_no": 1,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 184.2,
+                "total_time_mean_seconds": 244.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 171.3,
+                "total_time_mean_seconds": 226.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 129.85,
+                "total_time_mean_seconds": 169.85,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 2,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 184.6,
+                "total_time_mean_seconds": 244.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 171.9,
+                "total_time_mean_seconds": 226.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 130.55,
+                "total_time_mean_seconds": 170.55,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 3,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 185.0,
+                "total_time_mean_seconds": 245.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 172.5,
+                "total_time_mean_seconds": 227.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 131.25,
+                "total_time_mean_seconds": 171.25,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 4,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 185.4,
+                "total_time_mean_seconds": 245.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 173.1,
+                "total_time_mean_seconds": 228.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 131.95,
+                "total_time_mean_seconds": 171.95,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 5,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 185.8,
+                "total_time_mean_seconds": 245.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 173.7,
+                "total_time_mean_seconds": 228.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 132.65,
+                "total_time_mean_seconds": 172.65,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 6,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 186.2,
+                "total_time_mean_seconds": 246.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 174.3,
+                "total_time_mean_seconds": 229.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 133.35,
+                "total_time_mean_seconds": 173.35,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 7,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 186.6,
+                "total_time_mean_seconds": 246.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 174.9,
+                "total_time_mean_seconds": 229.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 134.05,
+                "total_time_mean_seconds": 174.05,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 8,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 187.0,
+                "total_time_mean_seconds": 247.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 175.5,
+                "total_time_mean_seconds": 230.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 134.75,
+                "total_time_mean_seconds": 174.75,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 9,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 187.4,
+                "total_time_mean_seconds": 247.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 176.1,
+                "total_time_mean_seconds": 231.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 135.45,
+                "total_time_mean_seconds": 175.45,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 10,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 187.8,
+                "total_time_mean_seconds": 247.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 176.7,
+                "total_time_mean_seconds": 231.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 136.15,
+                "total_time_mean_seconds": 176.15,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 11,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 188.2,
+                "total_time_mean_seconds": 248.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 177.3,
+                "total_time_mean_seconds": 232.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 136.85,
+                "total_time_mean_seconds": 176.85,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 12,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 188.6,
+                "total_time_mean_seconds": 248.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 177.9,
+                "total_time_mean_seconds": 232.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 137.55,
+                "total_time_mean_seconds": 177.55,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 13,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 189.0,
+                "total_time_mean_seconds": 249.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 178.5,
+                "total_time_mean_seconds": 233.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 138.25,
+                "total_time_mean_seconds": 178.25,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 14,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 189.4,
+                "total_time_mean_seconds": 249.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 179.1,
+                "total_time_mean_seconds": 234.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 138.95,
+                "total_time_mean_seconds": 178.95,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 15,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 189.8,
+                "total_time_mean_seconds": 249.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 179.7,
+                "total_time_mean_seconds": 234.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 139.65,
+                "total_time_mean_seconds": 179.65,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 16,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 190.2,
+                "total_time_mean_seconds": 250.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 180.3,
+                "total_time_mean_seconds": 235.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 140.35,
+                "total_time_mean_seconds": 180.35,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 17,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 190.6,
+                "total_time_mean_seconds": 250.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 180.9,
+                "total_time_mean_seconds": 235.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 141.05,
+                "total_time_mean_seconds": 181.05,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 18,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 191.0,
+                "total_time_mean_seconds": 251.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 181.5,
+                "total_time_mean_seconds": 236.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 141.75,
+                "total_time_mean_seconds": 181.75,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 19,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 191.4,
+                "total_time_mean_seconds": 251.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 182.1,
+                "total_time_mean_seconds": 237.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 142.45,
+                "total_time_mean_seconds": 182.45,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 20,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 191.8,
+                "total_time_mean_seconds": 251.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 182.7,
+                "total_time_mean_seconds": 237.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 143.15,
+                "total_time_mean_seconds": 183.15,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 21,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 192.2,
+                "total_time_mean_seconds": 252.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 183.3,
+                "total_time_mean_seconds": 238.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 143.85,
+                "total_time_mean_seconds": 183.85,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 22,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 192.6,
+                "total_time_mean_seconds": 252.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 183.9,
+                "total_time_mean_seconds": 238.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 144.55,
+                "total_time_mean_seconds": 184.55,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 23,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 193.0,
+                "total_time_mean_seconds": 253.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 184.5,
+                "total_time_mean_seconds": 239.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 145.25,
+                "total_time_mean_seconds": 185.25,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 24,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 193.4,
+                "total_time_mean_seconds": 253.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 185.1,
+                "total_time_mean_seconds": 240.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 145.95,
+                "total_time_mean_seconds": 185.95,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 25,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 193.8,
+                "total_time_mean_seconds": 253.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 185.7,
+                "total_time_mean_seconds": 240.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 146.65,
+                "total_time_mean_seconds": 186.65,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 26,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 194.2,
+                "total_time_mean_seconds": 254.2,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 186.3,
+                "total_time_mean_seconds": 241.3,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 147.35,
+                "total_time_mean_seconds": 187.35,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 27,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 194.6,
+                "total_time_mean_seconds": 254.6,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 186.9,
+                "total_time_mean_seconds": 241.9,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 148.05,
+                "total_time_mean_seconds": 188.05,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 28,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 195.0,
+                "total_time_mean_seconds": 255.0,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 187.5,
+                "total_time_mean_seconds": 242.5,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 148.75,
+                "total_time_mean_seconds": 188.75,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 29,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 195.4,
+                "total_time_mean_seconds": 255.4,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 188.1,
+                "total_time_mean_seconds": 243.1,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 149.45,
+                "total_time_mean_seconds": 189.45,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        },
+        {
+          "replication_no": 30,
+          "plans": [
+            {
+              "choice_key": "CURRENT",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 40,
+                "post_order_wait_mean_seconds": 195.8,
+                "total_time_mean_seconds": 255.8,
+                "total_time_p90_seconds": 390,
+                "post_order_wait_over_300_ratio": 0.2,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_A",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 35,
+                "post_order_wait_mean_seconds": 188.7,
+                "total_time_mean_seconds": 243.7,
+                "total_time_p90_seconds": 370,
+                "post_order_wait_over_300_ratio": 0.15,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            },
+            {
+              "choice_key": "ALT_C",
+              "metrics": {
+                "order_queue_wait_mean_seconds": 20,
+                "post_order_wait_mean_seconds": 150.15,
+                "total_time_mean_seconds": 190.15,
+                "total_time_p90_seconds": 300,
+                "post_order_wait_over_300_ratio": 0.05,
+                "completed_customer_count_mean": 120,
+                "throughput_per_hour_mean": 40
+              }
+            }
+          ]
+        }
+      ],
+      "trace_refs": [
+        {
+          "result_id": 7001,
+          "log_id": 9001,
+          "choice_key": "CURRENT",
+          "replication_no": 1,
+          "is_complete": false
+        },
+        {
+          "result_id": 7001,
+          "log_id": 9002,
+          "choice_key": "ALT_A",
+          "replication_no": 1,
+          "is_complete": false
+        },
+        {
+          "result_id": 7001,
+          "log_id": 9003,
+          "choice_key": "ALT_C",
+          "replication_no": 1,
+          "is_complete": false
+        }
+      ],
+      "sensitivity_grid": null,
+      "assumptions": [
+        "계획 배치표이며 실제 근무 기록이 아닙니다.",
+        "휴게는 배치표에만 반영했고 시뮬레이션에는 반영하지 않았습니다.",
+        "하루 연속 근무의 휴게·연소자 일일 시간만 검사합니다. 가산수당·연차 등은 별도 확인 대상입니다.",
+        "입력 시급과 유급시간으로 계산한 계획 비용입니다. 실제 급여 정산서가 아닙니다.",
+        "주휴수당을 제외했습니다.",
+        "사업주 부담 보험료를 제외했습니다.",
+        "월 4.345주와 직원별 주간 반복 패턴을 가정한 월 추정치입니다.",
+        "비교 카드의 대기 수치는 개발용 합성 값이며 SimPy 실측 결과가 아닙니다."
+      ],
+      "sources": []
+    }
+  },
+  "traces": [
+    {
+      "result_id": 7001,
+      "log_id": 9001,
+      "session_id": 520001,
+      "input_version_id": 530001,
+      "choice_key": "CURRENT",
+      "replication_no": 1,
+      "trace_schema_version": "operation.trace.v2",
+      "time_origin": "11:00:00",
+      "time_unit": "seconds",
+      "observation_window": {
+        "start_seconds": 0,
+        "end_seconds": 10800
+      },
+      "event_count": 9,
+      "is_complete": false,
+      "initial_state": {
+        "active_staff_keys": [
+          "OWNER",
+          "STAFF_1"
+        ],
+        "customers": [
+          {
+            "customer_key": "WARMUP_1",
+            "state": "WAITING_PREPARATION"
+          }
+        ],
+        "order_queue": [],
+        "preparation_queue": [
+          "WARMUP_1"
+        ],
+        "in_service": [],
+        "completed_customer_count": 0
+      },
+      "events": [
+        {
+          "at_seconds": 10,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 1
+        },
+        {
+          "at_seconds": 140,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 2
+        },
+        {
+          "at_seconds": 150,
+          "event_type": "HANDED_OVER",
+          "customer_key": "WARMUP_1",
+          "worker_key": "OWNER",
+          "sequence_no": 3
+        },
+        {
+          "at_seconds": 1800,
+          "event_type": "ARRIVED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": null,
+          "sequence_no": 4
+        },
+        {
+          "at_seconds": 1812,
+          "event_type": "ORDER_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 5
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "ORDER_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 6
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 7
+        },
+        {
+          "at_seconds": 1942,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 8
+        },
+        {
+          "at_seconds": 1946,
+          "event_type": "HANDED_OVER",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 9
+        }
+      ]
+    },
+    {
+      "result_id": 7001,
+      "log_id": 9002,
+      "session_id": 520001,
+      "input_version_id": 530001,
+      "choice_key": "ALT_A",
+      "replication_no": 1,
+      "trace_schema_version": "operation.trace.v2",
+      "time_origin": "11:00:00",
+      "time_unit": "seconds",
+      "observation_window": {
+        "start_seconds": 0,
+        "end_seconds": 10800
+      },
+      "event_count": 9,
+      "is_complete": false,
+      "initial_state": {
+        "active_staff_keys": [
+          "OWNER",
+          "STAFF_1"
+        ],
+        "customers": [
+          {
+            "customer_key": "WARMUP_1",
+            "state": "WAITING_PREPARATION"
+          }
+        ],
+        "order_queue": [],
+        "preparation_queue": [
+          "WARMUP_1"
+        ],
+        "in_service": [],
+        "completed_customer_count": 0
+      },
+      "events": [
+        {
+          "at_seconds": 10,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 1
+        },
+        {
+          "at_seconds": 140,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 2
+        },
+        {
+          "at_seconds": 150,
+          "event_type": "HANDED_OVER",
+          "customer_key": "WARMUP_1",
+          "worker_key": "OWNER",
+          "sequence_no": 3
+        },
+        {
+          "at_seconds": 1800,
+          "event_type": "ARRIVED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": null,
+          "sequence_no": 4
+        },
+        {
+          "at_seconds": 1812,
+          "event_type": "ORDER_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 5
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "ORDER_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 6
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 7
+        },
+        {
+          "at_seconds": 1942,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 8
+        },
+        {
+          "at_seconds": 1946,
+          "event_type": "HANDED_OVER",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 9
+        }
+      ]
+    },
+    {
+      "result_id": 7001,
+      "log_id": 9003,
+      "session_id": 520001,
+      "input_version_id": 530001,
+      "choice_key": "ALT_C",
+      "replication_no": 1,
+      "trace_schema_version": "operation.trace.v2",
+      "time_origin": "11:00:00",
+      "time_unit": "seconds",
+      "observation_window": {
+        "start_seconds": 0,
+        "end_seconds": 10800
+      },
+      "event_count": 11,
+      "is_complete": false,
+      "initial_state": {
+        "active_staff_keys": [
+          "OWNER",
+          "STAFF_1"
+        ],
+        "customers": [
+          {
+            "customer_key": "WARMUP_1",
+            "state": "WAITING_PREPARATION"
+          }
+        ],
+        "order_queue": [],
+        "preparation_queue": [
+          "WARMUP_1"
+        ],
+        "in_service": [],
+        "completed_customer_count": 0
+      },
+      "events": [
+        {
+          "at_seconds": 10,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 1
+        },
+        {
+          "at_seconds": 140,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "WARMUP_1",
+          "worker_key": "STAFF_1",
+          "sequence_no": 2
+        },
+        {
+          "at_seconds": 150,
+          "event_type": "HANDED_OVER",
+          "customer_key": "WARMUP_1",
+          "worker_key": "OWNER",
+          "sequence_no": 3
+        },
+        {
+          "at_seconds": 1800,
+          "event_type": "STAFF_ON",
+          "customer_key": null,
+          "worker_key": "STAFF_2",
+          "sequence_no": 4
+        },
+        {
+          "at_seconds": 1800,
+          "event_type": "ARRIVED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": null,
+          "sequence_no": 5
+        },
+        {
+          "at_seconds": 1812,
+          "event_type": "ORDER_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 6
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "ORDER_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 7
+        },
+        {
+          "at_seconds": 1822,
+          "event_type": "PREPARATION_STARTED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_2",
+          "sequence_no": 8
+        },
+        {
+          "at_seconds": 1942,
+          "event_type": "PREPARATION_COMPLETED",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "STAFF_2",
+          "sequence_no": 9
+        },
+        {
+          "at_seconds": 1946,
+          "event_type": "HANDED_OVER",
+          "customer_key": "CUSTOMER_1",
+          "worker_key": "OWNER",
+          "sequence_no": 10
+        },
+        {
+          "at_seconds": 9000,
+          "event_type": "STAFF_OFF",
+          "customer_key": null,
+          "worker_key": "STAFF_2",
+          "sequence_no": 11
+        }
+      ]
+    }
+  ]
+}

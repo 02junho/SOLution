@@ -1,0 +1,181 @@
+{
+  "business_date": "2026-11-16",
+  "wage_year": 2026,
+  "assumptions_version": "demo.staffing-review.v1",
+  "simulation": {
+    "scenario": {
+      "daily_orders": 200,
+      "share_method": "p50",
+      "takeout_ratio": 0.4
+    },
+    "repetitions": 30,
+    "random_seed": 42,
+    "execution_mode": "continuous_day"
+  },
+  "labor": {
+    "timezone": "Asia/Seoul",
+    "rule_policy_version": "labor.kr.2026.v1",
+    "auto_break": true,
+    "avoid_break_windows": [
+      {
+        "start_time": "11:00",
+        "end_time": "14:00"
+      }
+    ],
+    "workers": [
+      {
+        "worker_key": "A",
+        "is_owner": true,
+        "is_minor": false,
+        "hourly_wage_krw": null
+      },
+      {
+        "worker_key": "B",
+        "is_owner": false,
+        "is_minor": false,
+        "hourly_wage_krw": 10320
+      },
+      {
+        "worker_key": "C",
+        "is_owner": false,
+        "is_minor": false,
+        "hourly_wage_krw": 10320
+      }
+    ],
+    "plans": [
+      {
+        "choice_key": "CURRENT",
+        "shifts": [
+          {
+            "worker_key": "A",
+            "start_time": "07:00",
+            "end_time": "19:00",
+            "task_code": "ORDER",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "B",
+            "start_time": "10:00",
+            "end_time": "19:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "breaks": []
+          }
+        ]
+      },
+      {
+        "choice_key": "ALT_A",
+        "shifts": [
+          {
+            "worker_key": "A",
+            "start_time": "07:00",
+            "end_time": "11:00",
+            "task_code": "ORDER",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "A",
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "task_code": "ORDER",
+            "primary_role": "ORDER",
+            "can_support": [
+              "MAKE"
+            ],
+            "breaks": []
+          },
+          {
+            "worker_key": "A",
+            "start_time": "14:00",
+            "end_time": "19:00",
+            "task_code": "ORDER",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "B",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "B",
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "breaks": []
+          },
+          {
+            "worker_key": "B",
+            "start_time": "14:00",
+            "end_time": "19:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "breaks": []
+          }
+        ]
+      },
+      {
+        "choice_key": "ALT_C",
+        "shifts": [
+          {
+            "worker_key": "A",
+            "start_time": "07:00",
+            "end_time": "19:00",
+            "task_code": "ORDER",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "B",
+            "start_time": "10:00",
+            "end_time": "19:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "breaks": []
+          },
+          {
+            "worker_key": "C",
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "task_code": "MAKE",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "breaks": []
+          }
+        ]
+      }
+    ],
+    "cost_options": {
+      "include_weekly_holiday": false,
+      "include_employer_insurance": false
+    },
+    "weekly_context": null,
+    "insurance_context": null,
+    "monthly_projection": {
+      "weeks_per_month": 4.345,
+      "worker_days_per_week": {
+        "B": 5,
+        "C": 5
+      }
+    }
+  }
+}

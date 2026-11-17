@@ -140,6 +140,10 @@ cd backend && ./gradlew test
 cd ai-server && pytest
 ```
 
+```bash
+cd frontend && npm test
+```
+
 ### 4. 화면 (`frontend/`, 5173)
 
 ```bash
@@ -236,8 +240,11 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
     - 운영(`operation`) 결과는 고른 안에 `SIMULATED_CONDITIONS`(`requires_ack: true`)가 있어야 확정됩니다. 이 경고가 없으면 확인할 경고가 없어도 `RESULT_NOT_READY`입니다 (가드레일 명세 GR-24).
     - Spring에 경고 허용 목록은 없습니다. 확정 API는 저장된 결과에 있는 경고로 검사하므로, 새 경고는 `requires_ack`만 정하면 됩니다 (가드레일 명세 G-D4).
   - 고를 수 있는 안: `choice_key` (매입 `purchase_1`·`purchase_2`, 운영 `CURRENT`·`ALT_A`·`ALT_C`). 확정 때는 `selected_choice_key`로 저장됩니다.
+  - 운영 결과의 안 목록은 `summary.choices`이고, `summary.complete`(꼭 `true`/`false`)는 30회 완주·집계와 세 안의 배치표·비용 연결이 다 끝났을 때만 `true`입니다. 화면은 `true`일 때만 확정 버튼을 켭니다. simulation이 `complete: false`를 주면 Spring은 저장하지 않고 `400 RESULT_NOT_READY`를 돌려줍니다.
 - **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
 - **요청 키**: Spring이 `X-Request-Key` 헤더로 넘기고, FastAPI는 `get_request_key`로 받아 `execution_log.request_key`에 씁니다. 같은 요청을 다시 보낼 때는 같은 키를 씁니다.
+  - 화면 → Spring 헤더는 API마다 다릅니다. 구매 계산 실행은 `X-Request-Key`(없으면 Spring이 만듦), 운영 계산 실행과 확정은 `Idempotency-Key`(필수, 1~100자)입니다. 운영은 이 키에 단계 이름을 붙여(`키:simulation`·`키:schedule`·`키:cost`) FastAPI에 넘깁니다. 헤더 이름을 하나로 맞출지는 남은 결정입니다.
+  - 운영 계산 실행에 같은 키로 다른 입력 버전을 보내면 `400 IDEMPOTENCY_KEY_REUSED`입니다(확정 API도 같은 코드).
   - `work_result.request_key`에는 UQ가 없습니다(ERD). `work_result`에 쓰는 API(구매·운영 계산 실행)는 저장하는 트랜잭션 안에서 `RequestKeyLock.lock(기능, 입력버전, 요청키)`를 먼저 걸고, 같은 결과가 이미 있는지 다시 확인한 뒤 없을 때만 저장합니다. 확정(`work_confirmation`)은 `confirm_request_key` UQ가 있어 잠금이 필요 없습니다.
 - **기다리는 시간**: Spring → FastAPI 연결 3초, 응답 120초(`application.yml`의 `ai-server.*`).
 - **DB 테이블을 바꿀 때**: `V1__init_schema.sql`은 고치지 말고 `backend/src/main/resources/db/migration/V2__설명.sql`을 새로 추가합니다.
