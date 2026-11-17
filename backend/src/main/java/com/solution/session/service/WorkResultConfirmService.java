@@ -93,7 +93,7 @@ public class WorkResultConfirmService {
 			}
 			if (source.inputVersionId() != request.expectedInputVersionId()
 					|| source.versionNo() != source.currentVersion()) {
-				throw error("STALE_RESULT", "조건이 바뀌었어요. 최신 결과를 다시 확인해 주세요.");
+				throw error("STALE_VERSION", "조건이 바뀌었어요. 최신 입력을 확인한 뒤 계산해 주세요.");
 			}
 			if (source.inputConfirmedAt() == null) {
 				throw error("INPUT_NOT_CONFIRMED", "입력을 먼저 확인해 주세요.");

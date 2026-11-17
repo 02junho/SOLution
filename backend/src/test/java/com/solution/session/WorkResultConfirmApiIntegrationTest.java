@@ -143,7 +143,7 @@ class WorkResultConfirmApiIntegrationTest {
 				.andExpect(jsonPath("$.data.is_current_version").value(false))
 				.andExpect(jsonPath("$.data.step").value("review"));
 		confirm(2001, "new", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.data.detail_code").value("STALE_RESULT"));
+				.andExpect(jsonPath("$.data.detail_code").value("STALE_VERSION"));
 	}
 
 	@Test
@@ -164,9 +164,9 @@ class WorkResultConfirmApiIntegrationTest {
 	@Test
 	void 옛_결과와_화면의_버전_불일치를_거절한다() throws Exception {
 		confirm(2003, "old", body("purchase_1", "[\"VAT_UNKNOWN\"]").replace("1002", "1001"))
-				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("STALE_RESULT"));
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("STALE_VERSION"));
 		confirm(2001, "mismatch", body("purchase_1", "[\"VAT_UNKNOWN\"]").replace("1002", "9999"))
-				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("STALE_RESULT"));
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("STALE_VERSION"));
 		assertThat(count()).isZero();
 	}
 
