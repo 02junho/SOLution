@@ -3,11 +3,13 @@ package com.solution.session.service;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.solution.session.dto.WorkConfirmationListResponse.Item;
+import com.solution.session.dto.WorkConfirmationDetailResponse;
 
 @Repository
 public class ConfirmationListRepository {
@@ -51,4 +53,24 @@ public class ConfirmationListRepository {
 				rs.getString("feature_type"), rs.getString("selected_choice_key"), rs.getInt("version_no"),
 				rs.getBoolean("is_current_version"), rs.getObject("confirmed_at", OffsetDateTime.class)), args.toArray());
 	}
+	/** JSONB 보존본을 읽고, 권한은 복제 store_id 대신 실제 소속으로 확인한다. */
+	public Optional<WorkConfirmationDetailResponse> findDetail(long confirmationId, String ownerKey) {
+		return jdbc.query("""
+				SELECT c.confirmation_id, c.result_id, c.input_version_id, v.session_id, s.feature_type,
+				       c.selected_choice_key, c.confirmed_by, c.confirmed_at,
+				       (v.version_no = s.current_version) AS is_current_version,
+				       c.acknowledged_warnings_json::text, c.selected_snapshot_json::text
+				FROM work_confirmation c
+				JOIN work_version v ON v.input_version_id = c.input_version_id
+				JOIN work_session s ON s.session_id = v.session_id
+				JOIN store st ON st.store_id = s.store_id
+				WHERE c.confirmation_id = ? AND st.owner_key = ?
+				""", (rs, i) -> new WorkConfirmationDetailResponse(rs.getLong("confirmation_id"), rs.getLong("result_id"),
+					rs.getLong("input_version_id"), rs.getLong("session_id"), rs.getString("feature_type"),
+					rs.getString("selected_choice_key"), rs.getString("confirmed_by"),
+					rs.getObject("confirmed_at", OffsetDateTime.class), rs.getBoolean("is_current_version"),
+					rs.getString("acknowledged_warnings_json"), rs.getString("selected_snapshot_json")), confirmationId, ownerKey)
+				.stream().findFirst();
+	}
+
 }

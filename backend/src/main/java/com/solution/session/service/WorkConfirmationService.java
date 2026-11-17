@@ -10,6 +10,7 @@ import com.solution.common.auth.CurrentOwner;
 import com.solution.common.exception.ApiException;
 import com.solution.common.response.ApiResponse;
 import com.solution.session.dto.WorkConfirmationListResponse;
+import com.solution.session.dto.WorkConfirmationDetailResponse;
 
 @Service
 public class WorkConfirmationService {
@@ -43,6 +44,11 @@ public class WorkConfirmationService {
 			next = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
 		}
 		return ApiResponse.ok(new WorkConfirmationListResponse(page, next));
+	}
+
+	public ApiResponse<WorkConfirmationDetailResponse> getDetail(long confirmationId) {
+		return ApiResponse.ok(repository.findDetail(confirmationId, owner.key())
+				.orElseThrow(ConfirmationNotFoundException::new));
 	}
 
 	private record Cursor(OffsetDateTime confirmedAt, long confirmationId) {
