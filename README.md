@@ -141,7 +141,7 @@ cd ai-server && pytest
 ```
 
 ```bash
-cd frontend && npm run test:operation
+cd frontend && npm test
 ```
 
 ### 4. 화면 (`frontend/`, 5173)

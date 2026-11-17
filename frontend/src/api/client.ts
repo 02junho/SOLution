@@ -1,23 +1,66 @@
 import type { ApiResponse } from '../types/api'
 
-// 서버 호출은 이 함수로만 한다. needs_input·infeasible은 정상 응답이므로 화면에서 status로 나눠 처리한다.
-// 연결 실패나 응답 형식이 아니면 status: 'error'로 바꿔 돌려준다.
-export async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
+export type ClientResponse<T> = ApiResponse<T> & { httpStatus?: number }
+
+// 모든 화면은 Spring만 호출한다. HTTP 오류와 잘못된 응답을 성공으로 취급하지 않는다.
+export async function request<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<ClientResponse<T>> {
   try {
-    const response = await fetch(`/api${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
-    })
-    return (await response.json()) as ApiResponse<T>
+    const headers = new Headers(init?.headers)
+    if (init?.body != null && !headers.has('Content-Type'))
+      headers.set('Content-Type', 'application/json')
+    const response = await fetch(`/api${path}`, { ...init, headers })
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      return {
+        httpStatus: response.status,
+        status: 'error',
+        data: null,
+        message: '서버 응답을 읽지 못했어요. 잠시 후 다시 시도해 주세요.',
+      }
+    }
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('status' in body) ||
+      !['ok', 'needs_input', 'infeasible', 'error'].includes(
+        String(body.status),
+      )
+    ) {
+      return {
+        httpStatus: response.status,
+        status: 'error',
+        data: null,
+        message: '서버 응답을 읽지 못했어요. 잠시 후 다시 시도해 주세요.',
+      }
+    }
+    const parsed = body as ApiResponse<T>
+    return {
+      httpStatus: response.status,
+      status: response.ok ? parsed.status : 'error',
+      data: parsed.data ?? null,
+      message:
+        typeof parsed.message === 'string'
+          ? parsed.message
+          : response.ok
+            ? null
+            : '요청을 완료하지 못했어요.',
+    }
   } catch {
-    return { status: 'error', data: null, message: '서버에 연결하지 못했습니다.' }
+    return {
+      status: 'error',
+      data: null,
+      message: '서버에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.',
+    }
   }
 }
-
 export function get<T>(path: string) {
   return request<T>(path)
 }
-
 export function post<T>(path: string, body: unknown) {
   return request<T>(path, { method: 'POST', body: JSON.stringify(body) })
 }
