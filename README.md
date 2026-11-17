@@ -78,7 +78,7 @@ SOLution/
 
 - 기능 코드는 `features/`(화면), `purchase/`·`operation/`(Spring), `tools/`(FastAPI) 아래 **기능별 폴더**에 둡니다.
 - 여러 기능이 같이 쓰는 코드는 `common/`(화면·Spring), `core/`(FastAPI)에만 둡니다.
-- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`를 씁니다. 예외로 최종 확정 기록은 확정을 처리하는 Spring이 `execution_log`에 남깁니다(`log_type='tool'`, `name='confirm'`, 가드레일 명세 GR-19).
+- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`를 씁니다. 예외로 최종 확정 기록은 확정을 처리하는 Spring이 `execution_log`에 남깁니다(`log_type='tool'`, `name='confirm'`, 가드레일 명세 GR-19). 이 기록은 확정과 다른 트랜잭션에서 최선 시도로 남기므로, 기록이 실패해도 확정은 그대로 성공합니다. 확정의 원본은 `work_confirmation`이고, `execution_log`의 확정 기록은 빠질 수 있는 참고용입니다.
 
 ---
 
@@ -231,6 +231,8 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
   - 빠진 값(`needs_input`): `data.missing_fields[]`의 기본 칸은 `{path, label, unit}`. `path`는 요청 JSON 안의 위치, `label`은 사장님께 보여 줄 이름, `unit`은 단위(없으면 `null`). 왜 필요한지는 `message`에 씁니다.
   - 경고: `warnings[]`의 기본 칸은 `{warning_id, message, requires_ack}`. 기능에 따라 칸을 더 붙여도 됩니다(예: 구매의 `choice_keys`). 확정할 때 화면은 확인한 `warning_id`만 보냅니다.
     - `requires_ack`는 꼭 `true`/`false`로 넣습니다. `true`(필수)는 고른 안에 걸려 있으면 확인해야 확정되고, `false`(참고)는 화면에 보여 주기만 합니다. 지금 필수는 `VAT_UNKNOWN`·`SIMULATED_CONDITIONS`, 참고는 `END_STOCK_OVER_LIMIT`입니다.
+    - `warning_id`는 한 결과 안에서 한 번만 씁니다. 여러 안에 걸리는 경고는 따로 여러 번 넣지 말고 하나의 경고에 `choice_keys`로 묶습니다. 같은 `warning_id`가 두 번 있으면 덜 끝난 결과로 보고 확정이 막힙니다(`RESULT_NOT_READY`).
+    - 운영(`operation`) 결과는 고른 안에 `SIMULATED_CONDITIONS`(`requires_ack: true`)가 있어야 확정됩니다. 이 경고가 없으면 확인할 경고가 없어도 `RESULT_NOT_READY`입니다 (가드레일 명세 GR-24).
     - Spring에 경고 허용 목록은 없습니다. 확정 API는 저장된 결과에 있는 경고로 검사하므로, 새 경고는 `requires_ack`만 정하면 됩니다 (가드레일 명세 G-D4).
   - 고를 수 있는 안: `choice_key` (매입 `purchase_1`·`purchase_2`, 운영 `CURRENT`·`ALT_A`·`ALT_C`). 확정 때는 `selected_choice_key`로 저장됩니다.
 - **JSON 이름은 snake_case**(`item_id`, `price_krw`)입니다. Spring은 Java 필드를 camelCase(`itemId`)로 쓰면 주고받을 때 자동으로 바뀌고, FastAPI·화면은 snake_case 그대로 씁니다.
