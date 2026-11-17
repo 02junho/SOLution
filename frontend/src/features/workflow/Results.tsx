@@ -13,6 +13,7 @@ import {
   resolveChoice,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
+import ResultExplanation from './ResultExplanation'
 
 function nameOf(
   input: JsonObject | null,
@@ -149,6 +150,11 @@ export default function Results({
                 : '계산 전'}
         </span>
       </div>
+      <ResultExplanation
+        resultId={result?.result_id ?? null}
+        eligible={!!validResult}
+        busy={!!busy}
+      />
       {saved && (
         <div className="saved-banner">
           <Icon name="check" />

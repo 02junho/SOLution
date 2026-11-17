@@ -1962,6 +1962,90 @@ main {
 }
 
 /* 신한 블루 팔레트. 기존 카드·여백·3열 구조는 유지한다. */
+.explanation-card {
+  margin: 16px 20px;
+  padding: 16px;
+  border: 1px solid #dce5fa;
+  border-radius: 9px;
+  background: #f7f9ff;
+}
+.explanation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.explanation-heading .section-heading {
+  color: var(--green);
+}
+.explanation-heading h3 {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.explanation-hint,
+.explanation-loading {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.explanation-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.explanation-error {
+  font-size: 13px;
+  color: #9d3434;
+  overflow-wrap: anywhere;
+}
+.explanation-button {
+  margin-top: 14px;
+  font-size: 12px;
+  min-height: 36px;
+}
+.explanation-headline {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.explanation-choices {
+  margin: 12px 0;
+}
+.explanation-choices > div {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.explanation-choices dt {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink);
+}
+.explanation-choices dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.explanation-notes h4 {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.explanation-notes ul,
+.explanation-caveats {
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+@media (max-width: 690px) {
+  .explanation-card {
+    margin: 14px;
+    padding: 14px;
+  }
+}
+
 .button.primary,
 .brand-symbol,
 .send-button {
