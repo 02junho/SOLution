@@ -81,7 +81,7 @@ class WorkResultConfirmServiceTest {
 	void 잠금_대기_후_최신_버전으로_검사한다() {
 		given(repository.findSource(2001)).willReturn(Optional.of(source("demo-owner", 2)), Optional.of(source("demo-owner", 3)));
 		assertThatThrownBy(() -> service.confirm(2001, "key", request))
-				.isInstanceOfSatisfying(ResultConfirmException.class, e -> assertThat(e.getDetailCode()).isEqualTo("STALE_RESULT"));
+				.isInstanceOfSatisfying(ResultConfirmException.class, e -> assertThat(e.getDetailCode()).isEqualTo("STALE_VERSION"));
 		verify(repository, never()).hasVersionConfirmation(anyLong());
 	}
 
