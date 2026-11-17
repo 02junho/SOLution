@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
@@ -96,7 +97,8 @@ class OperationRunIntegrationTest {
 	}
 
 	private void stubSimulation(CyclicBarrier overlap) {
-		when(simulation.compare(any(), anyString())).thenAnswer(call -> {
+		// 이미 스텁된 메서드를 when(...)으로 다시 부르면 앞 스텁이 null 인자로 실행되므로 doAnswer로 바꾼다.
+		doAnswer(call -> {
 			SimulationRequest request = call.getArgument(0);
 			if (overlap != null) {
 				overlap.await(10, TimeUnit.SECONDS);
@@ -107,7 +109,7 @@ class OperationRunIntegrationTest {
 			List<StaffingPlan> staffing = OperationResultContract.staffing(data.get("staffing"))
 					.stream().map(StaffingPlan::fromConfirmedPlan).toList();
 			return new SimulationResult(ApiResponse.ok(data), staffing, call.getArgument(1));
-		});
+		}).when(simulation).compare(any(), anyString());
 	}
 
 	@Test

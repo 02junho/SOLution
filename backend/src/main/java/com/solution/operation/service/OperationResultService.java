@@ -151,6 +151,8 @@ public class OperationResultService {
 	private ApiResponse<Map<String, Object>> combine(Map<String, Object> simulation, Map<String, Object> schedule,
 			Map<String, Object> cost, long resultId) {
 		List<Map<String, Object>> summaries = new ArrayList<>();
+		// 마감 판정은 simulation이 한 안이라도 준 경우에만 모든 안에 칸을 두고(없는 안은 null), 아무도 안 주면 칸을 만들지 않는다.
+		boolean anyClosing = OperationResultContract.plans(simulation).stream().anyMatch(plan -> plan.get("closing") != null);
 		for (Map<String, Object> plan : OperationResultContract.plans(simulation)) {
 			Map<String, Object> money = OperationResultContract.plans(cost).stream()
 					.filter(row -> row.get("choice_key").equals(plan.get("choice_key"))).findFirst().orElseThrow();
@@ -160,7 +162,9 @@ public class OperationResultService {
 			}
 			Map<String, Object> row = new LinkedHashMap<>();
 			copy(plan, row, "choice_key", "metrics", "comparison", "staffing");
-			row.put("closing", plan.get("closing"));
+			if (anyClosing) {
+				row.put("closing", plan.get("closing"));
+			}
 			copy(money, row, "cash_cost_krw", "additional_cash_cost_krw", "owner_work_seconds", "employee_paid_seconds",
 					"base_wage_krw", "cost_scope", "monthly_cash_cost_estimate_krw", "additional_monthly_cash_cost_estimate_krw");
 			Map<String, Object> staffingPlan = OperationResultContract.plans(schedule).stream()
