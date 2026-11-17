@@ -288,6 +288,25 @@ class OperationResultServiceTest {
 	}
 
 	@Test
+	void 늦은_요청이_실패해도_앞_요청이_저장한_성공_결과의_단계를_지킨다() throws IOException {
+		service.run(SESSION, VERSION, "first");
+		StoredResult previous = saved.get(RESULT);
+		clearInvocations(repository);
+		// 처음 조회 때는 없었지만, 실패 처리 시점에는 같은 키로 앞 요청의 성공 결과가 저장돼 있다.
+		when(repository.findByRequestKey(SESSION, "late"))
+				.thenReturn(Optional.empty(), Optional.of(previous));
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("complete", false);
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "late")).isInstanceOf(ApiException.class);
+		var order = inOrder(requestKeyLock, repository);
+		order.verify(repository).markStep(SESSION, 1, "running");
+		order.verify(requestKeyLock).lock("operation", VERSION, "late");
+		order.verify(repository).markStep(SESSION, 1, "result");
+		verify(repository, never()).markStep(SESSION, 1, "review");
+	}
+
+	@Test
 	void warnings가_배열이_아니면_계약_오류() throws IOException {
 		Map<String, Object> simulation = data("compare_response.json");
 		simulation.put("warnings", Map.of("warning_id", "SIMULATED_CONDITIONS", "message", "모의 조건", "requires_ack", true));

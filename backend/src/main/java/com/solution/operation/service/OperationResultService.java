@@ -152,7 +152,15 @@ public class OperationResultService {
 					map(labor.data().get("cost")), resultId));
 		}
 		catch (RuntimeException e) {
-			repository.markStep(sessionId, source.versionNo(), "review");
+			// 같은 키의 앞 요청이 이미 결과를 저장했다면 그 결과에 맞는 단계를 둔다. save와 같은 잠금 순서를 쓴다.
+			transaction.executeWithoutResult(status -> {
+				requestKeyLock.lock("operation", source.inputVersionId(), key);
+				repository.lockSession(sessionId);
+				String step = repository.findByRequestKey(sessionId, key)
+						.map(stored -> "ok".equals(stored.responseStatus()) ? "result" : "review")
+						.orElse("review");
+				repository.markStep(sessionId, source.versionNo(), step);
+			});
 			throw e;
 		}
 	}
