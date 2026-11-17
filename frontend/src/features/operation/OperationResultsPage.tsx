@@ -87,7 +87,7 @@ export default function OperationResultsPage({ previewOnly = false }: { previewO
     if (runningKey.current?.fingerprint !== fingerprint) runningKey.current = { fingerprint, key: crypto.randomUUID() }
     const token = ++generation.current
     pendingResult.current?.abort(); pendingTrace.current?.abort()
-    setLoading(true); setPreview(false); setResult(null); setTrace(null); setMessage(null)
+    setLoading(true); setPreview(false); setResult(null); setTrace(null); setLoadingDetail(false); setLoadingTrace(false); setMessage(null)
     const response = await runOperation(Number(sessionId), Number(inputVersionId), runningKey.current.key)
     if (token !== generation.current) return
     setLoading(false)

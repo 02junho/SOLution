@@ -29,6 +29,8 @@ export default function OperationResultPanel({ result, preview = false, loadingD
   const [acknowledged, setAcknowledged] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  // 확정 요청에 실제로 보낸 안. 저장 중에 다른 카드를 눌러도 이 안을 확정된 것으로 표시한다.
+  const [savedChoice, setSavedChoice] = useState<OperationPlan | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const summary = result.summary
   const plans = summary.choices ?? []
@@ -40,11 +42,12 @@ export default function OperationResultPanel({ result, preview = false, loadingD
     && !result.confirmed_choice_key && !saved
   async function confirm() {
     if (!selected || !onConfirm || preview) return
+    const choice = selected
     setSaving(true); setMessage(null)
     try {
-      const response = await onConfirm(selected, acknowledged)
+      const response = await onConfirm(choice, acknowledged)
       if (response.status === 'ok' && response.data) {
-        setSaved(true)
+        setSaved(true); setSavedChoice(choice); setSelected(choice)
         setMessage(response.data.is_current_version ? '선택한 운영안을 저장했습니다.' : '확정 이력은 저장됐지만 입력이 변경됐습니다. 최신 조건을 확인해 주세요.')
       } else setMessage(response.message ?? '확정을 완료하지 못했습니다.')
     } catch {
@@ -74,14 +77,14 @@ export default function OperationResultPanel({ result, preview = false, loadingD
       <div className="op-section-title"><div><span className="op-eyebrow">01 · 인원과 역할</span><h2>세 가지 계획을 비교하세요</h2></div></div>
       <div className="op-card-grid">{plans.map(plan => <PlanCard key={plan.choice_key} plan={plan}
         recommended={summary.recommendation?.choice_key === plan.choice_key}
-        selected={selected === plan.choice_key} onSelect={() => setSelected(plan.choice_key)} />)}</div>
+        selected={selected === plan.choice_key} onSelect={() => { if (!saving) setSelected(plan.choice_key) }} />)}</div>
       {summary.recommendation && <p className="op-recommendation">대기 지표 기준 추천: <strong>{CHOICE_LABELS[summary.recommendation.choice_key]}</strong> · {summary.recommendation.reason}<br />인건비는 별도로 비교하며, 최종 선택은 사장님이 합니다.</p>}
       <section className="op-surface op-detail-section">
         <div className="op-section-title"><div><span className="op-eyebrow">02 · 하루 계획과 근거</span><h2>전체 배치표 · 대기열 재생</h2></div>
           {!result.detail && <button className="op-secondary" onClick={onDetail} disabled={loadingDetail}>{loadingDetail ? '불러오는 중…' : '상세보기'}</button>}</div>
         {!result.detail ? <p className="op-muted">상세보기를 누르면 계획 배치표와 재생 가능한 기록을 불러옵니다.</p> : <>
           <div className="op-plan-tabs" role="group" aria-label="배치표 운영안">{plans.map(plan => <button key={plan.choice_key}
-            className={selected === plan.choice_key ? '' : 'op-secondary'} onClick={() => setSelected(plan.choice_key)}>{CHOICE_LABELS[plan.choice_key]}</button>)}</div>
+            className={selected === plan.choice_key ? '' : 'op-secondary'} disabled={saving} onClick={() => setSelected(plan.choice_key)}>{CHOICE_LABELS[plan.choice_key]}</button>)}</div>
           <div className="op-table-scroll"><table><caption>{CHOICE_LABELS[selected ?? 'CURRENT']} 계획 배치표</caption>
             <thead><tr><th>시간</th><th>직원</th><th>담당 업무</th><th>휴게</th></tr></thead>
             <tbody>{result.detail.schedule.plans.find(p => p.choice_key === (selected ?? 'CURRENT'))?.schedule.map((row, i) => <tr key={`${row.worker_key}-${i}`}>
@@ -103,7 +106,7 @@ export default function OperationResultPanel({ result, preview = false, loadingD
       <div className="op-save-row"><div><strong>{selected ? `${CHOICE_LABELS[selected]} 선택` : '운영안을 선택해 주세요'}</strong>
         <p className="op-muted">{preview ? '미리보기에서는 저장하지 않습니다.' : '선택한 계획만 저장합니다. 실제 근무표를 적용하지 않습니다.'}</p></div>
         <button onClick={confirm} disabled={preview || !onConfirm || !valid || !selected || saving || required.some(w => !acknowledged.includes(w.warning_id))}>
-          {saving ? '저장 중…' : saved || result.confirmed_choice_key ? '확정됨' : '이 안으로 확정'}</button></div>
+          {saving ? '저장 중…' : savedChoice ? `${CHOICE_LABELS[savedChoice]} 확정됨` : saved || result.confirmed_choice_key ? '확정됨' : '이 안으로 확정'}</button></div>
       {message && <p role="status" className="op-notice">{message}</p>}
     </section>
   </>

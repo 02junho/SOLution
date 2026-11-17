@@ -23,7 +23,8 @@ class TimeWindow(Contract):
     @field_validator("start_time", "end_time")
     @classmethod
     def valid_time(cls, value: str) -> str:
-        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+        # \d는 유니코드 숫자(예: ٠)도 받으므로 ASCII 숫자만 허용한다. 문자열 비교로 순서를 검사하기 때문이다.
+        if not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", value):
             raise ValueError("시각은 HH:mm 형식이어야 합니다.")
         return value
 

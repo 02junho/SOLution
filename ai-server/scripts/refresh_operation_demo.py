@@ -47,7 +47,7 @@ def refresh():
     write(DATA / "compare_response.json", fixture)
     preview = read("preview.json")
     summary = preview["result"]["summary"]
-    for plan in summary["plans"]:
+    for plan in summary["choices"]:
         calculated = next(row for row in money.data["plans"] if row["choice_key"] == plan["choice_key"])
         for key in ("cash_cost_krw", "additional_cash_cost_krw", "owner_work_seconds", "cost_scope",
                     "monthly_cash_cost_estimate_krw", "additional_monthly_cash_cost_estimate_krw"):

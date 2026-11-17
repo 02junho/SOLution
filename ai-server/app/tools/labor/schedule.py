@@ -81,7 +81,11 @@ def run(body: ScheduleRequest):
             span = last-first
             if rest_total < required_break_seconds(span-rest_total) and body.auto_break:
                 # 30분 단위의 최소 추가 휴게. 체류시간과 유급시간을 혼동하지 않는다.
-                additional = next((n for n in (1800, 3600) if rest_total+n >= required_break_seconds(span-rest_total-n)), None)
+                lengths = [n for n in (1800, 3600) if rest_total+n >= required_break_seconds(span-rest_total-n)]
+                # 연소자는 하루 7시간 한도 안에 드는 가장 짧은 휴게를 먼저 고른다.
+                # 맞는 길이가 없으면 법정 최소 휴게로 두고 아래 MINOR_DAILY_LIMIT로 알린다.
+                fitting = [n for n in lengths if not worker.is_minor or span-rest_total-n <= 7*3600]
+                additional = (fitting or lengths or [None])[0]
                 candidates = []
                 if additional is not None:
                     for shift in shifts:

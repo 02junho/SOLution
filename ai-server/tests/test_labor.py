@@ -172,7 +172,29 @@ def test_unknown_age_is_missing_input():
 
 def test_minor_daily_work_limit():
     body = schedule_body(); body["workers"][1]["is_minor"] = True
-    assert schedule.run(ScheduleRequest.model_validate(body)).status == "infeasible"
+    result = schedule.run(ScheduleRequest.model_validate(body))
+    assert result.status == "infeasible"
+    # 휴게를 늘려도 7시간을 넘으면 연소자 한도 위반만 알리고, 휴게 미배치로 잘못 알리지 않는다.
+    assert {v["code"] for v in result.data["violations"]} == {"MINOR_DAILY_LIMIT"}
+
+
+def test_minor_auto_break_lengthens_to_fit_daily_limit():
+    # 09:00~17:00 연소자: 30분 휴게면 7시간 30분 근무라 한도를 넘고, 60분이면 7시간으로 맞는다.
+    body = schedule_body(); body["workers"][1]["is_minor"] = True
+    for plan in body["plans"]:
+        plan["shifts"] = [{"worker_key": "STAFF_1", "start_time": "09:00", "end_time": "17:00", "task_code": "ALL_TASKS", "breaks": []}]
+    result = schedule.run(ScheduleRequest.model_validate(body))
+    assert result.status == "ok"
+    rest = result.data["plans"][0]["schedule"][0]["breaks"]
+    assert sum(schedule.seconds(x["end_time"])-schedule.seconds(x["start_time"]) for x in rest) == 3600
+
+
+@pytest.mark.parametrize("value", ["1٠:00", "١٢:00", "12:٣٠"])
+def test_time_rejects_non_ascii_digits(value):
+    body = schedule_body()
+    body["plans"][0]["shifts"][0]["end_time"] = value
+    with pytest.raises(ValueError):
+        ScheduleRequest.model_validate(body)
 
 
 def test_overlapping_shifts_bad_request_and_log(logs):
