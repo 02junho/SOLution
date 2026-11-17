@@ -72,7 +72,9 @@ export default function ResultExplanation({
           <Icon name="chat" size={18} />
           <h3>AI 결과 설명</h3>
         </div>
-        <span className="status-pill">{label}</span>
+        <span className="status-pill" role="status">
+          {label}
+        </span>
       </div>
       {!hasResult ? (
         <p className="explanation-hint">
@@ -80,7 +82,7 @@ export default function ResultExplanation({
           있어요.
         </p>
       ) : loading ? (
-        <p className="explanation-loading" role="status">
+        <p className="explanation-loading">
           <span className="spinner" />
           계산 결과를 바탕으로 설명을 준비하고 있어요.
         </p>
