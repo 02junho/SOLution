@@ -11,17 +11,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.solution.common.client.AiServerClient;
 import com.solution.common.response.ApiResponse;
 import com.solution.operation.dto.OperationRunRequest;
 import com.solution.operation.service.OperationResultService;
 
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/operation")
 public class OperationResultController {
+
+	static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 
 	private final OperationResultService service;
 
@@ -29,14 +29,15 @@ public class OperationResultController {
 		this.service = service;
 	}
 
+	/**
+	 * 화면이 만든 Idempotency-Key(필수)로 같은 실행의 재전송을 알아본다 (현식 API v0.4).
+	 * FastAPI로 가는 내부 X-Request-Key는 이 키에 단계 이름을 붙여 Spring이 만든다.
+	 */
 	@PostMapping("/sessions/{sessionId}/results")
 	public ApiResponse<Map<String, Object>> run(@PathVariable long sessionId,
 			@Valid @RequestBody OperationRunRequest body,
-			@RequestHeader(value = AiServerClient.REQUEST_KEY_HEADER, required = false) String requestedKey,
-			HttpServletResponse response) {
-		String key = requestedKey == null || requestedKey.isBlank() ? AiServerClient.newRequestKey() : requestedKey;
-		response.setHeader(AiServerClient.REQUEST_KEY_HEADER, key);
-		return service.run(sessionId, body.inputVersionId(), key);
+			@RequestHeader(value = IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey) {
+		return service.run(sessionId, body.inputVersionId(), idempotencyKey);
 	}
 
 	@GetMapping("/results/{resultId}")

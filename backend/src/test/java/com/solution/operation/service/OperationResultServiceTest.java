@@ -123,7 +123,7 @@ class OperationResultServiceTest {
 		assertThat(saved.get(RESULT).summaryJson()).doesNotContain("\"events\"");
 		assertThat(saved.get(RESULT).detailJson()).contains("trace_refs", "metric_definitions", "schedule");
 		assertThat(response.data().get("detail")).isNull();
-		List<Map<String, Object>> plans = (List<Map<String, Object>>) summary.get("plans");
+		List<Map<String, Object>> plans = (List<Map<String, Object>>) summary.get("choices");
 		assertThat(plans.get(2)).containsEntry("additional_cash_cost_krw", 20640);
 		assertThat(map(plans.get(2).get("metrics"))).containsEntry("total_time_mean_seconds", 180);
 	}
@@ -172,6 +172,128 @@ class OperationResultServiceTest {
 		clearInvocations(client);
 		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1")).isInstanceOf(ApiException.class);
 		verifyNoInteractions(client);
+	}
+
+	// ===== v0.4 계약: 사유 코드 · Idempotency-Key · complete · choices · 경고 =====
+
+	@Test
+	void 오류마다_사유_코드를_붙인다() throws IOException {
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(source("demo-owner", "operation", 1, false)));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1"))
+				.hasFieldOrPropertyWithValue("detailCode", "INPUT_NOT_CONFIRMED");
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(source("demo-owner", "operation", 2, true)));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1"))
+				.hasFieldOrPropertyWithValue("detailCode", "STALE_VERSION");
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(source("another-owner", "operation", 1, true)));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1"))
+				.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND");
+		assertThatThrownBy(() -> service.result(9999, "summary"))
+				.hasFieldOrPropertyWithValue("detailCode", "RESULT_NOT_FOUND");
+		assertThatThrownBy(() -> service.result(RESULT, "full"))
+				.hasFieldOrPropertyWithValue("detailCode", "INVALID_REQUEST");
+		verifyNoInteractions(client);
+	}
+
+	@Test
+	void 같은_키에_다른_입력이면_IDEMPOTENCY_KEY_REUSED() {
+		service.run(SESSION, VERSION, "run-1");
+		StoredResult old = saved.get(RESULT);
+		when(repository.findByRequestKey(SESSION, "run-1")).thenReturn(Optional.of(new StoredResult(old.resultId(), VERSION - 1,
+				old.sessionId(), old.versionNo(), old.featureType(), old.responseStatus(), old.detailStatus(), old.summaryJson(),
+				old.detailJson(), old.createdAt(), old.currentVersion(), old.ownerKey(), null)));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1"))
+				.isInstanceOfSatisfying(ApiException.class, e -> {
+					assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+					assertThat(e.getDetailCode()).isEqualTo("IDEMPOTENCY_KEY_REUSED");
+				});
+	}
+
+	@Test
+	void Idempotency_Key가_없거나_비었거나_길면_INVALID_REQUEST() {
+		for (String key : new String[] { null, "", "   ", "가".repeat(3), "k".repeat(101) }) {
+			assertThatThrownBy(() -> service.run(SESSION, VERSION, key))
+					.isInstanceOfSatisfying(ApiException.class, e -> {
+						assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+						assertThat(e.getDetailCode()).isEqualTo("INVALID_REQUEST");
+					});
+		}
+		// UUID처럼 출력 가능한 ASCII 100자까지는 받는다.
+		assertThat(service.run(SESSION, VERSION, "k".repeat(100)).status().getValue()).isEqualTo("ok");
+	}
+
+	@Test
+	void 성공_결과는_choices와_complete_true로_저장한다() throws IOException {
+		var response = service.run(SESSION, VERSION, "run-1");
+		Map<String, Object> summary = map(response.data().get("summary"));
+		assertThat(summary).containsEntry("complete", true).doesNotContainKeys("plans", "choice_keys");
+		assertThat((List<Map<String, Object>>) summary.get("choices")).extracting(row -> row.get("choice_key"))
+				.containsExactly("CURRENT", "ALT_A", "ALT_C");
+		Map<String, Object> stored = mapper.readValue(saved.get(RESULT).summaryJson(), type);
+		assertThat(stored).containsEntry("complete", true).containsKey("choices");
+		assertThat(map(mapper.readValue(saved.get(RESULT).detailJson(), type).get("labor"))).containsKey("plans");
+	}
+
+	@Test
+	void complete가_false면_저장하지_않고_RESULT_NOT_READY() throws IOException {
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("complete", false);
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1"))
+				.isInstanceOfSatisfying(ApiException.class, e -> {
+					assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+					assertThat(e.getDetailCode()).isEqualTo("RESULT_NOT_READY");
+				});
+		verify(repository, never()).insertResult(any(), any(), anyString());
+		verify(client, never()).post(eq("/tools/labor/schedule"), any(), anyString(), any(ParameterizedTypeReference.class));
+	}
+
+	@Test
+	void complete가_boolean이_아니거나_없으면_계약_오류() throws IOException {
+		for (Object value : new Object[] { "true", 1, null }) {
+			Map<String, Object> simulation = data("compare_response.json");
+			if (value == null) {
+				simulation.remove("complete");
+			}
+			else {
+				simulation.put("complete", value);
+			}
+			tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+			assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-" + value)).isInstanceOf(AiServerException.class);
+		}
+		verify(repository, never()).insertResult(any(), any(), anyString());
+	}
+
+	@Test
+	void 질문_결과는_complete_false와_빈_choices로_저장한다() throws IOException {
+		tool("/tools/simulation/compare", ApiResponse.needsInput(new java.util.LinkedHashMap<>(Map.of(
+				"detail_status", "NEEDS_INPUT",
+				"missing_fields", List.of(Map.of("path", "arrivals", "label", "손님 도착", "unit", "명")))),
+				"손님 도착 조건을 알려 주세요."));
+		var response = service.run(SESSION, VERSION, "run-1");
+		assertThat(response.status().getValue()).isEqualTo("needs_input");
+		assertThat(response.data()).containsEntry("complete", false).containsEntry("choices", List.of())
+				.containsEntry("recommendation", null);
+		assertThat(response.message()).isEqualTo("손님 도착 조건을 알려 주세요.");
+	}
+
+	@Test
+	void 등록되지_않은_경고_ID도_requires_ack로_받고_모의조건은_필수로_둔다() throws IOException {
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("warnings", List.of(Map.of("warning_id", "WARMUP_EXCLUDED", "message", "워밍업 구간을 뺐어요.",
+				"requires_ack", false)));
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		var warnings = (List<Map<String, Object>>) map(service.run(SESSION, VERSION, "run-1").data().get("summary")).get("warnings");
+		assertThat(warnings).extracting(row -> row.get("warning_id")).containsExactly("WARMUP_EXCLUDED", "SIMULATED_CONDITIONS");
+		assertThat(warnings.get(1)).containsEntry("requires_ack", true);
+	}
+
+	@Test
+	void 모의조건_경고를_참고로_낮추면_계약_오류() throws IOException {
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("warnings", List.of(Map.of("warning_id", "SIMULATED_CONDITIONS", "message", "모의 조건",
+				"requires_ack", false)));
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1")).isInstanceOf(AiServerException.class);
 	}
 
 	@Test
@@ -322,7 +444,7 @@ class OperationResultServiceTest {
 	@Test
 	void summarizesStaffingBeforeEffectsWithoutExtendingTwoHourShift() {
 		var response = service.run(SESSION, VERSION, "run-1");
-		var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("plans");
+		var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("choices");
 		Map<String, Object> staffingSummary = map(plans.get(2).get("staffing_summary"));
 		assertThat(staffingSummary).containsEntry("max_concurrent_workers", 3);
 		var assignments = (List<Map<String, Object>>)staffingSummary.get("assignments");
@@ -349,7 +471,7 @@ class OperationResultServiceTest {
         ((List<Map<String, Object>>)simulation.get("results")).get(2).put("closing", closing);
         tool("/tools/simulation/compare", ApiResponse.ok(simulation));
         var response = service.run(SESSION, VERSION, "closing-1");
-        var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("plans");
+        var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("choices");
         assertThat(plans.getFirst()).containsKey("closing");
         assertThat(plans.getFirst().get("closing")).isNull();
         assertThat(plans.get(2).get("closing")).isEqualTo(closing);
@@ -379,7 +501,7 @@ class OperationResultServiceTest {
         tool("/tools/labor/schedule", ApiResponse.ok(data("staffing_proposal/schedule_response.json")));
         tool("/tools/labor/cost", ApiResponse.ok(data("staffing_proposal/expected_cost.json")));
         var response = service.run(SESSION, VERSION, "staffing-review");
-        var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("plans");
+        var plans = (List<Map<String, Object>>)map(response.data().get("summary")).get("choices");
         assertThat(plans.get(2)).containsEntry("additional_cash_cost_krw", 30960);
         assertThat(map(plans.get(2).get("staffing_summary"))).containsEntry("total_staff_hours", 24.0);
         assertThat(map(plans.get(2).get("staffing"))).containsKey("employees");

@@ -31,10 +31,11 @@ export default function OperationResultPanel({ result, preview = false, loadingD
   const [saved, setSaved] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const summary = result.summary
-  const plans = summary.plans ?? []
+  const plans = summary.choices ?? []
   const warnings = summary.warnings ?? []
   const required = warnings.filter(w => w.requires_ack)
-  const valid = result.response_status === 'ok' && result.is_latest_version
+  // complete가 정확히 true일 때만 확정 버튼을 켠다. 없거나 다른 값이면 끈다 (API v0.4).
+  const valid = result.response_status === 'ok' && result.is_latest_version && summary.complete === true
     && summary.completed_repetitions === 30 && summary.requested_repetitions === 30
     && !result.confirmed_choice_key && !saved
   async function confirm() {

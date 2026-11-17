@@ -18,7 +18,7 @@
       "requested_repetitions": 30,
       "completed_repetitions": 30,
       "statistics_policy_version": "operation.statistics.demo.v1",
-      "plans": [
+      "choices": [
         {
           "choice_key": "CURRENT",
           "metrics": {
@@ -184,11 +184,7 @@
         "사업주 부담 보험료를 제외했습니다.",
         "월 4.345주와 직원별 주간 반복 패턴을 가정한 월 추정치입니다."
       ],
-      "choice_keys": [
-        "CURRENT",
-        "ALT_A",
-        "ALT_C"
-      ]
+      "complete": true
     },
     "detail": {
       "labor": {

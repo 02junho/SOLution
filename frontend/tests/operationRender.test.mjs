@@ -18,9 +18,9 @@ test('세 비교 카드와 모의 조건·비용 범위를 실제 컴포넌트�
 })
 test('지정된 비교 지표와 0을 포함한 구간의 표시가 일치한다', () => {
   const result = structuredClone(sample.result)
-  result.summary.plans[1].comparison.metric = 'total_time_p90_seconds'
-  result.summary.plans[1].comparison.ci95_lower_seconds = -1
-  result.summary.plans[1].comparison.ci95_upper_seconds = 1
+  result.summary.choices[1].comparison.metric = 'total_time_p90_seconds'
+  result.summary.choices[1].comparison.ci95_lower_seconds = -1
+  result.summary.choices[1].comparison.ci95_upper_seconds = 1
   const html = renderToStaticMarkup(createElement(Panel, { ...props, result }))
   assert.ok(html.includes('총 소요 p90 차이'))
   assert.ok(html.includes('차이 없음'))
@@ -35,8 +35,8 @@ test('정보 부족 결과를 성공 카드로 그리지 않는다', () => {
 })
 test('미확인 금액과 실제 0원을 구분한다', () => {
   const result = structuredClone(sample.result)
-  result.summary.plans[0].monthly_cash_cost_estimate_krw = null
-  result.summary.plans[0].additional_monthly_cash_cost_estimate_krw = null
+  result.summary.choices[0].monthly_cash_cost_estimate_krw = null
+  result.summary.choices[0].additional_monthly_cash_cost_estimate_krw = null
   const html = renderToStaticMarkup(createElement(Panel, { ...props, result }))
   assert.ok(html.includes('미확인'))
   assert.ok(html.includes('0원'))
@@ -49,7 +49,7 @@ test('배치 요약을 대기·비용보다 먼저 보여주고 2시간 추가 �
 })
 test('이전 저장 결과에는 배치 요약 대신 전체 배치표 안내를 보여준다', () => {
   const result = structuredClone(sample.result)
-  result.summary.plans.forEach(plan => { delete plan.staffing_summary })
+  result.summary.choices.forEach(plan => { delete plan.staffing_summary })
   const html = renderToStaticMarkup(createElement(Panel, { ...props, result }))
   assert.ok(html.includes('인원·역할 요약이 없는 이전 결과'))
 })
@@ -63,16 +63,16 @@ test('구버전 결과와 미리보기의 확정 버튼을 잠근다', () => {
 
 test('마감 판정 미제공을 성공으로 표시하지 않는다', () => {
   const result = structuredClone(sample.result)
-  result.summary.plans.forEach(p => { delete p.closing })
+  result.summary.choices.forEach(p => { delete p.closing })
   const html = renderToStaticMarkup(createElement(Panel, { ...props, result }))
   assert.equal((html.match(/마감 판정 미제공/g) ?? []).length, 3)
   assert.ok(!html.includes('성공 비율'))
 })
 test('확인된 역할·지원 가능 업무·배치시간과 마감 결과를 표시한다', () => {
   const result = structuredClone(sample.result)
-  result.summary.plans[2].closing = { failed_repetitions: 3, success_ratio: 0.9 }
-  result.summary.plans[2].staffing_summary.total_staff_hours = 24
-  result.summary.plans[2].staffing_summary.assignments[0] = {
+  result.summary.choices[2].closing = { failed_repetitions: 3, success_ratio: 0.9 }
+  result.summary.choices[2].staffing_summary.total_staff_hours = 24
+  result.summary.choices[2].staffing_summary.assignments[0] = {
     worker_key: 'A', is_owner: true, task_code: 'ORDER', primary_role: 'ORDER', can_support: ['MAKE'], start_time: '11:00', end_time: '14:00'
   }
   const html = renderToStaticMarkup(createElement(Panel, { ...props, result }))

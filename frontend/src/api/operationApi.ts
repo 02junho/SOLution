@@ -11,9 +11,10 @@ export function loadOperationTrace(resultId: number, logId: number, signal?: Abo
   return request<OperationTrace>(`/v1/operation/results/${resultId}/traces/${logId}`, { signal })
 }
 
+// 같은 실행을 다시 보낼 때는 같은 Idempotency-Key를 쓴다(필수). 내부 X-Request-Key는 Spring이 만든다 (API v0.4).
 export function runOperation(sessionId: number, inputVersionId: number, requestKey: string) {
   return request<OperationResult>(`/v1/operation/sessions/${sessionId}/results`, {
-    method: 'POST', headers: { 'X-Request-Key': requestKey }, body: JSON.stringify({ input_version_id: inputVersionId }),
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }, body: JSON.stringify({ input_version_id: inputVersionId }),
   })
 }
 

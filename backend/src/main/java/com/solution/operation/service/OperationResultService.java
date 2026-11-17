@@ -45,7 +45,16 @@ import tools.jackson.databind.ObjectMapper;
 public class OperationResultService {
 
 	private static final TypeReference<LinkedHashMap<String, Object>> JSON_MAP = new TypeReference<>() { };
-	private static final Set<String> WARNING_IDS = Set.of("SIMULATED_CONDITIONS", "VAT_UNKNOWN");
+	// 오류 사유 코드 (data.detail_code). 구매·확정 API와 같은 이름을 쓴다 (상태코드·경고 점검 공유사항 11.17, 현식 API v0.4).
+	static final String CODE_INVALID_REQUEST = "INVALID_REQUEST";
+	static final String CODE_SESSION_NOT_FOUND = "SESSION_NOT_FOUND";
+	static final String CODE_RESULT_NOT_FOUND = "RESULT_NOT_FOUND";
+	static final String CODE_STALE_VERSION = "STALE_VERSION";
+	static final String CODE_INPUT_NOT_CONFIRMED = "INPUT_NOT_CONFIRMED";
+	static final String CODE_IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED";
+	static final String CODE_RESULT_NOT_READY = "RESULT_NOT_READY";
+	static final String SIMULATED_CONDITIONS = "SIMULATED_CONDITIONS";
+	private static final String KEY_REUSED = "같은 요청키로 다른 내용을 보낼 수 없습니다.";
 	private static final Set<String> EVENT_TYPES = Set.of("ARRIVED", "ORDER_STARTED", "ORDER_COMPLETED",
 			"PREPARATION_STARTED", "PREPARATION_COMPLETED", "HANDOFF_STARTED", "HANDED_OVER", "STAFF_ON", "STAFF_OFF");
 	private final OperationResultRepository repository;
@@ -71,8 +80,9 @@ public class OperationResultService {
 	}
 
 	public ApiResponse<Map<String, Object>> run(long sessionId, long versionId, String requestKey) {
-		if (requestKey == null || !requestKey.matches("[A-Za-z0-9_.:-]{1,100}")) {
-			throw ApiException.badRequest("요청키는 영문·숫자·_ . : - 조합 1~100자로 보내 주세요.");
+		// Idempotency-Key는 필수, 1~100자, 공백만은 안 됨 (v0.4). 내부 단계 키(키:simulation 등)로도 쓰므로 출력 가능한 ASCII만 받는다.
+		if (requestKey == null || requestKey.isBlank() || !requestKey.matches("[\\x20-\\x7E]{1,100}")) {
+			throw ApiException.badRequest(CODE_INVALID_REQUEST, "Idempotency-Key는 1~100자의 요청 키여야 합니다.");
 		}
 		return runLocked(sessionId, versionId, requestKey);
 	}
@@ -80,15 +90,15 @@ public class OperationResultService {
 	private ApiResponse<Map<String, Object>> runLocked(long sessionId, long versionId, String key) {
 		SessionVersion source = ownedSource(sessionId, versionId);
 		if (!Objects.equals(source.versionNo(), source.currentVersion())) {
-			throw ApiException.badRequest("조건이 바뀌었어요. 최신 입력을 확인한 뒤 계산해 주세요.");
+			throw ApiException.badRequest(CODE_STALE_VERSION, "조건이 바뀌었어요. 최신 입력을 확인한 뒤 계산해 주세요.");
 		}
 		if (source.inputConfirmedAt() == null) {
-			throw ApiException.badRequest("입력을 먼저 확인해 주세요.");
+			throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, "입력을 먼저 확인해 주세요.");
 		}
 		var existing = repository.findByRequestKey(sessionId, key);
 		if (existing.isPresent()) {
 			if (existing.get().inputVersionId() != versionId) {
-				throw ApiException.badRequest("같은 요청키로 다른 입력을 보낼 수 없습니다.");
+				throw ApiException.badRequest(CODE_IDEMPOTENCY_KEY_REUSED, KEY_REUSED);
 			}
 			return runResponse(existing.get());
 		}
@@ -123,6 +133,12 @@ public class OperationResultService {
 			if (simulation.status() != ResponseStatus.OK) {
 				return save(source, resultId, key, remapMissing(simulation, "simulation"));
 			}
+			// complete는 엄격한 boolean이다 (v0.4). 문자열 "true"·숫자 1·누락은 계약 오류(502),
+			// false(30회 완주·집계 미완료)는 확정 가능한 성공으로 저장하지 않고 400 RESULT_NOT_READY.
+			require(simulation.data().get("complete") instanceof Boolean);
+			if (!Boolean.TRUE.equals(simulation.data().get("complete"))) {
+				throw ApiException.badRequest(CODE_RESULT_NOT_READY, "30회 계산과 집계가 끝난 결과가 필요합니다.");
+			}
 			OperationResultContract.validateSimulation(simulation.data());
 			// 직원별 하루 전체 계획이 확인되지 않으면 피크 인원 수로 인건비를 추측하지 않는다.
 			require(returned.staffing() != null);
@@ -145,7 +161,7 @@ public class OperationResultService {
 		return repository.findSessionVersion(sessionId, versionId)
 				.filter(row -> "operation".equals(row.featureType()) && owner.key().equals(row.ownerKey()))
 				.filter(row -> row.inputVersionId() != null)
-				.orElseThrow(() -> ApiException.notFound("운영 업무 또는 입력을 찾을 수 없습니다."));
+				.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, "운영 업무 또는 입력을 찾을 수 없습니다."));
 	}
 
 	private ApiResponse<Map<String, Object>> combine(Map<String, Object> simulation, Map<String, Object> schedule,
@@ -166,7 +182,8 @@ public class OperationResultService {
 				row.put("closing", plan.get("closing"));
 			}
 			copy(money, row, "cash_cost_krw", "additional_cash_cost_krw", "owner_work_seconds", "employee_paid_seconds",
-					"base_wage_krw", "cost_scope", "monthly_cash_cost_estimate_krw", "additional_monthly_cash_cost_estimate_krw");
+					"base_wage_krw", "weekly_holiday_cost_krw", "employer_insurance_cost_krw", "cost_scope",
+					"monthly_cash_cost_estimate_krw", "additional_monthly_cash_cost_estimate_krw");
 			Map<String, Object> staffingPlan = OperationResultContract.plans(schedule).stream()
 					.filter(item -> item.get("choice_key").equals(plan.get("choice_key")))
 					.findFirst().orElseThrow();
@@ -177,15 +194,17 @@ public class OperationResultService {
 		Map<String, Object> summary = new LinkedHashMap<>();
 		copy(simulation, summary, "comparison_window", "requested_repetitions", "completed_repetitions",
 				"statistics_policy_version", "recommendation", "staffing_schema_version");
-		summary.put("plans", summaries);
-		summary.put("choice_keys", summaries.stream().map(row -> row.get("choice_key")).toList());
+		// 화면·확정용 배열은 summary.choices 하나다 (v0.4). labor 원본의 plans는 detail.labor·detail.schedule에 그대로 둔다.
+		summary.put("choices", summaries);
 		LinkedHashMap<String, Map<String, Object>> warnings = new LinkedHashMap<>();
 		LinkedHashSet<String> assumptions = new LinkedHashSet<>();
 		for (Map<String, Object> stage : List.of(simulation, schedule, cost)) {
 			if (stage.get("warnings") instanceof List<?>) {
 				for (Map<String, Object> warning : maps(stage.get("warnings"))) {
-					require(WARNING_IDS.contains(warning.get("warning_id")) && warning.get("message") instanceof String
-							&& warning.get("requires_ack") instanceof Boolean);
+					// 경고 ID 허용 목록은 두지 않는다. 필수·참고는 requires_ack로 나눈다 (README · 가드레일 G-D4).
+					require(warning.get("warning_id") instanceof String id && !id.isBlank()
+							&& warning.get("message") instanceof String && warning.get("requires_ack") instanceof Boolean);
+					// 같은 ID에 다른 문구·확인 조건이 오면 하나로 덮어쓰지 않고 계약 오류로 본다.
 					Map<String, Object> previous = warnings.putIfAbsent((String) warning.get("warning_id"), warning);
 					require(previous == null || previous.equals(warning));
 				}
@@ -197,10 +216,19 @@ public class OperationResultService {
 				}
 			}
 		}
-		warnings.put("SIMULATED_CONDITIONS", Map.of("warning_id", "SIMULATED_CONDITIONS",
-				"message", "모의 조건으로 계산한 결과입니다. 실측 결과가 아닙니다.", "requires_ack", true));
+		// 운영 결과는 모의 조건 필수 경고가 있어야 확정된다 (GR-24). 도구가 이미 줬다면 필수(true)인지만 확인한다.
+		Map<String, Object> simulated = warnings.get(SIMULATED_CONDITIONS);
+		if (simulated == null) {
+			warnings.put(SIMULATED_CONDITIONS, Map.of("warning_id", SIMULATED_CONDITIONS,
+					"message", "모의 조건으로 계산한 결과입니다. 실측 결과가 아닙니다.", "requires_ack", true));
+		}
+		else {
+			require(Boolean.TRUE.equals(simulated.get("requires_ack")));
+		}
 		summary.put("warnings", new ArrayList<>(warnings.values()));
 		summary.put("assumptions", new ArrayList<>(assumptions));
+		// 30회 완주·집계(simulation complete)와 세 안의 배치표·비용 연결 검사를 모두 통과한 결과만 여기까지 온다.
+		summary.put("complete", true);
 		Map<String, Object> detail = new LinkedHashMap<>();
 		detail.put("labor", cost);
 		detail.put("schedule", schedule);
@@ -230,7 +258,10 @@ public class OperationResultService {
 		boolean ok = outcome.status() == ResponseStatus.OK;
 		Map<String, Object> summary = ok ? map(outcome.data().get("summary")) : new LinkedHashMap<>(outcome.data());
 		if (!ok) {
+			// 질문·실패 결과는 확정할 수 없다. 성공 칸을 빈 값으로 고정해 부분 결과를 성공처럼 읽지 않게 한다 (v0.4).
 			summary.put("message", outcome.message());
+			summary.put("complete", false);
+			summary.put("choices", List.of());
 			summary.put("recommendation", null);
 		}
 		String detailStatus = Objects.toString(outcome.data().get("detail_status"), null);
@@ -244,7 +275,7 @@ public class OperationResultService {
 			var stored = repository.findByRequestKey(source.sessionId(), key);
 			if (stored.isPresent()) {
 				if (stored.get().inputVersionId() != source.inputVersionId()) {
-					throw ApiException.badRequest("같은 요청키로 다른 입력을 보낼 수 없습니다.");
+					throw ApiException.badRequest(CODE_IDEMPOTENCY_KEY_REUSED, KEY_REUSED);
 				}
 				return;
 			}
@@ -258,7 +289,7 @@ public class OperationResultService {
 
 	public ApiResponse<Map<String, Object>> result(long resultId, String view) {
 		if (!Set.of("summary", "detail").contains(view)) {
-			throw ApiException.badRequest("view는 summary 또는 detail만 사용할 수 있습니다.");
+			throw ApiException.badRequest(CODE_INVALID_REQUEST, "view는 summary 또는 detail만 사용할 수 있습니다.");
 		}
 		StoredResult row = ownedResult(resultId, "detail".equals(view));
 		Map<String, Object> data = metadata(row);
@@ -271,7 +302,7 @@ public class OperationResultService {
 	private StoredResult ownedResult(long resultId, boolean detail) {
 		return repository.findResult(resultId, detail)
 				.filter(row -> "operation".equals(row.featureType()) && owner.key().equals(row.ownerKey()))
-				.orElseThrow(() -> ApiException.notFound("운영 결과를 찾을 수 없습니다."));
+				.orElseThrow(() -> ApiException.notFound(CODE_RESULT_NOT_FOUND, "운영 결과를 찾을 수 없습니다."));
 	}
 
 	private ApiResponse<Map<String, Object>> runResponse(StoredResult row) {

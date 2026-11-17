@@ -66,8 +66,10 @@ export type TraceRef = {
   is_complete: boolean
 }
 export type OperationSummary = {
-  choice_keys?: OperationPlan[]
-  plans?: PlanSummary[]
+  // 화면·확정용 정식 배열 (API v0.4). labor 원본 plans는 detail.labor·detail.schedule에만 있다.
+  choices?: PlanSummary[]
+  // 30회 완주·집계·비용·배치표 검증이 끝난 결과만 true. 질문·실패 결과는 false.
+  complete?: boolean
   comparison_window?: { start_time: string; end_time: string }
   requested_repetitions?: number
   completed_repetitions?: number
