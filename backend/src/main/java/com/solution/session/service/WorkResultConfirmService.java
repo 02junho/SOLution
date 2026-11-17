@@ -251,10 +251,36 @@ public class WorkResultConfirmService {
 				}
 			}
 		}
+		if ("purchase".equals(source.featureType()) && detail instanceof Map<?, ?> raw
+				&& raw.get("lines") instanceof List<?> lines) {
+			// 결과가 가리키는 불변 입력 버전에서 이름을 복사한다. 현재 화면 입력은 사용하지 않는다.
+			Map<String, Object> input = sessions.findVersion(source.sessionId(), source.versionNo())
+					.map(version -> json.readValue(version.inputJson(), MAP)).orElseGet(LinkedHashMap::new);
+			Map<String, Object> preserved = new LinkedHashMap<>(map(detail));
+			preserved.put("lines", lines.stream().map(line -> {
+				if (!(line instanceof Map<?, ?>)) { return line; }
+				Map<String, Object> copy = new LinkedHashMap<>(map(line));
+				copyName(copy, input.get("items"), "item_id", "item_name");
+				copyName(copy, input.get("suppliers"), "supplier_id", "supplier_name");
+				return copy;
+			}).toList());
+			detail = preserved;
+		}
 		snapshot.put("detail", detail);
 		snapshot.put("warnings", applicable);
 		snapshot.put("assumptions", summary.getOrDefault("assumptions", List.of()));
 		return snapshot;
+	}
+
+	private void copyName(Map<String, Object> line, Object entries, String id, String name) {
+		if (line.get(id) == null || !(entries instanceof List<?> values)) { return; }
+		for (Object entry : values) {
+			if (entry instanceof Map<?, ?> value && java.util.Objects.equals(line.get(id), value.get(id))
+					&& value.get(name) instanceof String text && !text.isBlank()) {
+				line.put(name, text);
+				return;
+			}
+		}
 	}
 
 	private List<?> list(Object value) {
