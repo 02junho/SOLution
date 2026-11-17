@@ -86,4 +86,23 @@ class FastApiSimulationServiceTest {
                 .isInstanceOf(AiServerException.class);
     }
 
+	@Test
+	void 미완료_응답은_배치를_읽지_않고_호출자에게_넘긴다() throws Exception {
+		// 30회를 다 못 채운 응답은 배치가 비어 있을 수 있다. 여기서 계약 오류로 끊으면 호출자가 RESULT_NOT_READY를 줄 수 없다.
+		var client = mock(AiServerClient.class);
+		var mapper = JsonMapper.builder().build();
+		Map<String, Object> fixture = mapper.readValue(
+				Files.readString(Path.of("../data/demo/operation/compare_response.json")), new TypeReference<>() { });
+		Map<String, Object> data = (Map<String, Object>) fixture.get("data");
+		data.put("complete", false);
+		data.remove("staffing");
+		data.put("results", List.of());
+		when(client.post(eq("/tools/simulation/compare"), any(), eq("run:simulation"),
+				any(ParameterizedTypeReference.class))).thenReturn(ApiResponse.ok(data));
+		var request = new SimulationRequest(520001, 530001, 7001, Map.of("repetitions", 30), List.of());
+		var result = new FastApiSimulationService(client).compare(request, "run:simulation");
+		assertThat(result.staffing()).isNull();
+		assertThat(result.response().data()).containsEntry("complete", false);
+	}
+
 }

@@ -2,6 +2,18 @@ import type { CustomerStage, OperationTrace } from './types'
 
 export type ReplayState = { customers: Map<string, CustomerStage>; activeStaff: Set<string>; completed: number; initialKnown: boolean }
 
+// 재생 프레임마다 같은 이벤트를 다시 정렬하지 않도록 이벤트 배열별로 정렬 결과를 한 번만 만든다.
+// 원본 배열은 바꾸지 않고, 배열이 바뀌면(새 trace) 새로 정렬한다.
+const sortedEvents = new WeakMap<OperationTrace['events'], OperationTrace['events']>()
+function sorted(events: OperationTrace['events']) {
+  let result = sortedEvents.get(events)
+  if (!result) {
+    result = [...events].sort((a, b) => a.at_seconds - b.at_seconds || a.sequence_no - b.sequence_no)
+    sortedEvents.set(events, result)
+  }
+  return result
+}
+
 /** 매번 초기 상태부터 재구성하므로 뒤로 이동해도 이전 재생 상태가 섞이지 않는다. 통계 계산은 하지 않는다. */
 export function stateAt(trace: OperationTrace, atSeconds: number): ReplayState {
   const initial = trace.initial_state ?? {
@@ -14,8 +26,7 @@ export function stateAt(trace: OperationTrace, atSeconds: number): ReplayState {
   for (const row of initial.in_service) customers.set(row.customer_key, row.stage)
   const activeStaff = new Set(initial.active_staff_keys)
   let completed = initial.completed_customer_count
-  const events = [...trace.events].sort((a, b) => a.at_seconds - b.at_seconds || a.sequence_no - b.sequence_no)
-  for (const event of events) {
+  for (const event of sorted(trace.events)) {
     if (event.at_seconds > atSeconds) break
     if (event.event_type === 'STAFF_ON' && event.worker_key) activeStaff.add(event.worker_key)
     if (event.event_type === 'STAFF_OFF' && event.worker_key) activeStaff.delete(event.worker_key)

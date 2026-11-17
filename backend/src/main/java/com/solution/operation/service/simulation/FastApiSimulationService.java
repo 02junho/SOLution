@@ -66,6 +66,13 @@ public class FastApiSimulationService implements SimulationService {
 			OperationResultContract.require(sameId(data.get("result_id"), request.resultId()));
 			if (employeeContract) {
 				OperationResultContract.require(requestKey.equals(data.get("request_key")));
+			}
+			// 30회 완주·집계가 끝난(complete: true) 응답만 배치를 읽는다. 미완료 응답은 배치가 비어 있을 수 있으므로
+			// 여기서 계약 오류로 끊지 않고 호출자가 complete를 보고 400 RESULT_NOT_READY(또는 502)로 정한다.
+			if (!Boolean.TRUE.equals(data.get("complete"))) {
+				return new SimulationResult(response, null, requestKey);
+			}
+			if (employeeContract) {
 				staffing = SimulationStaffingMapper.fromData(data);
 			} else {
 				staffing = OperationResultContract.staffing(data.get("staffing")).stream()

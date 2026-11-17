@@ -199,7 +199,9 @@ public class OperationResultService {
 		LinkedHashMap<String, Map<String, Object>> warnings = new LinkedHashMap<>();
 		LinkedHashSet<String> assumptions = new LinkedHashSet<>();
 		for (Map<String, Object> stage : List.of(simulation, schedule, cost)) {
-			if (stage.get("warnings") instanceof List<?>) {
+			// warnings가 있으면 반드시 배열이어야 한다. 객체 등 다른 모양을 건너뛰면 필수 경고가 조용히 사라진다.
+			if (stage.get("warnings") != null) {
+				require(stage.get("warnings") instanceof List<?>);
 				for (Map<String, Object> warning : maps(stage.get("warnings"))) {
 					// 경고 ID 허용 목록은 두지 않는다. 필수·참고는 requires_ack로 나눈다 (README · 가드레일 G-D4).
 					require(warning.get("warning_id") instanceof String id && !id.isBlank()
@@ -277,6 +279,9 @@ public class OperationResultService {
 				if (stored.get().inputVersionId() != source.inputVersionId()) {
 					throw ApiException.badRequest(CODE_IDEMPOTENCY_KEY_REUSED, KEY_REUSED);
 				}
+				// 같은 키의 늦은 요청이 앞 요청이 바꾼 단계를 running으로 덮었을 수 있으므로, 저장된 결과에 맞게 되돌린다.
+				repository.markStep(source.sessionId(), source.versionNo(),
+						"ok".equals(stored.get().responseStatus()) ? "result" : "review");
 				return;
 			}
 			repository.insertResult(result, source, key);

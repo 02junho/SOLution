@@ -3,7 +3,7 @@ import json,sys
 from copy import deepcopy
 from pathlib import Path
 r=Path(__file__).resolve().parents[2]; d=r/'data/demo/operation/staffing_proposal';d.mkdir(exist_ok=True)
-def write(n,x):(d/n).write_text(json.dumps(x,ensure_ascii=False,indent=2)+'\n')
+def write(n,x):(d/n).write_text(json.dumps(x,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 def employee(staff,role,support,start='07:00',end='19:00'):
  return dict(staff_id=staff,primary_role=role,can_support=support,start_time=start,end_time=end)
 ga=[]
@@ -13,7 +13,7 @@ for key in ['CURRENT','ALT_A','ALT_C']:
  ga.append(dict(choice_key=key,staffing=dict(employees=es,peak_staff_count=3 if key=='ALT_C' else 2,total_staff_hours=27 if key=='ALT_C' else 24)))
 write('ga_young_staffing_only.json',{'staffing_schema_version':'operation.staffing.employees.v1-proposal','choices':ga,'note':'가영 공유 배치 초안을 재현한 합성 계약 예제. A/B의 소유자·시급·휴게가 없어 급여 계산 입력이 아님.'})
 # Payroll pipeline example is separate, with explicit owner/wage/time assumptions.
-original=json.loads((r/'data/demo/operation/input.json').read_text());body=deepcopy(original)
+original=json.loads((r/'data/demo/operation/input.json').read_text(encoding='utf-8'));body=deepcopy(original)
 body['assumptions_version']='demo.staffing-review.v1'
 body['labor']['workers']=[dict(worker_key='A',is_owner=True,is_minor=False,hourly_wage_krw=None),dict(worker_key='B',is_owner=False,is_minor=False,hourly_wage_krw=10320),dict(worker_key='C',is_owner=False,is_minor=False,hourly_wage_krw=10320)]
 body['labor']['monthly_projection']['worker_days_per_week']={'B':5,'C':5}
@@ -29,7 +29,7 @@ for key in ['CURRENT','ALT_A','ALT_C']:
 body['labor']['plans']=plans
 write('input.json',body)
 # Reuse statistics only as a labelled protocol fixture, never an actual SimPy run.
-sim=json.loads((r/'data/demo/operation/compare_response.json').read_text()); data=sim['data']
+sim=json.loads((r/'data/demo/operation/compare_response.json').read_text(encoding='utf-8')); data=sim['data']
 old=data.pop('results',data.pop('plans',[]));data.pop('staffing',None)
 for i,choice in enumerate(choices):
  choice.update({k:v for k,v in old[i].items() if k!='choice_key'})

@@ -288,6 +288,30 @@ class OperationResultServiceTest {
 	}
 
 	@Test
+	void warnings가_배열이_아니면_계약_오류() throws IOException {
+		Map<String, Object> simulation = data("compare_response.json");
+		simulation.put("warnings", Map.of("warning_id", "SIMULATED_CONDITIONS", "message", "모의 조건", "requires_ack", true));
+		tool("/tools/simulation/compare", ApiResponse.ok(simulation));
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "run-1")).isInstanceOf(AiServerException.class);
+		verify(repository, never()).insertResult(any(), any(), anyString());
+	}
+
+	@Test
+	void 같은_키_결과가_먼저_저장됐으면_단계를_그_결과에_맞게_되돌린다() {
+		service.run(SESSION, VERSION, "first");
+		StoredResult previous = saved.get(RESULT);
+		clearInvocations(repository);
+		// 처음 조회 때는 없다가, 저장 직전 잠금 안에서 다시 보니 다른 요청이 이미 저장한 경우
+		when(repository.findByRequestKey(SESSION, "race"))
+				.thenReturn(Optional.empty(), Optional.of(previous), Optional.of(previous));
+		service.run(SESSION, VERSION, "race");
+		var order = inOrder(repository);
+		order.verify(repository).markStep(SESSION, 1, "running");
+		order.verify(repository).markStep(SESSION, 1, "result");
+		verify(repository, never()).insertResult(any(), any(), eq("race"));
+	}
+
+	@Test
 	void 모의조건_경고를_참고로_낮추면_계약_오류() throws IOException {
 		Map<String, Object> simulation = data("compare_response.json");
 		simulation.put("warnings", List.of(Map.of("warning_id", "SIMULATED_CONDITIONS", "message", "모의 조건",
