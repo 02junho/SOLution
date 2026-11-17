@@ -13,6 +13,7 @@ import {
   resolveChoice,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
+import ResultExplanation from './ResultExplanation'
 
 function nameOf(
   input: JsonObject | null,
@@ -99,6 +100,12 @@ export default function Results({
   const [acks, setAcks] = useState<string[]>([])
   const [copyNotice, setCopyNotice] = useState('')
   const choices = result?.summary.choices ?? []
+  const choiceLabels = Object.fromEntries(
+    choices.map((item, index) => [
+      item.choice_key,
+      item.label ?? `대안 ${index + 1}`,
+    ]),
+  )
   const choice = choices.find((item) => item.choice_key === selected)
   const resolved = choice ? resolveChoice(choice, choices) : null
   const warnings = applicableWarnings(
@@ -149,6 +156,12 @@ export default function Results({
                 : '계산 전'}
         </span>
       </div>
+      <ResultExplanation
+        resultId={result?.result_id ?? null}
+        eligible={!!validResult}
+        busy={!!busy}
+        choiceLabels={choiceLabels}
+      />
       {saved && (
         <div className="saved-banner">
           <Icon name="check" />
