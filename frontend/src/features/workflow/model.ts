@@ -136,6 +136,9 @@ export class RequestKeys {
   done(signature: string) {
     this.keys.delete(signature)
   }
+  remember(signature: string, key: string) {
+    this.keys.set(signature, key)
+  }
 }
 const confirmationKeys = new RequestKeys()
 export function confirmationKey(
@@ -146,7 +149,10 @@ export function confirmationKey(
   const fallback = confirmationKeys.for(signature)
   try {
     const previous = storage?.getItem(name)
-    if (previous) return previous
+    if (previous) {
+      confirmationKeys.remember(signature, previous)
+      return previous
+    }
     storage?.setItem(name, fallback)
   } catch {
     /* 저장소를 사용할 수 없어도 현재 창에서는 같은 키를 유지한다. */

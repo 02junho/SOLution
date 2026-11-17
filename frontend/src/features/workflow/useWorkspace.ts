@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { workflowApi } from '../../api/workflowApi'
+import { workflowApi, WorkflowError } from '../../api/workflowApi.ts'
 import type { FeatureType } from '../../types/api'
 import type {
   Confirmation,
@@ -8,7 +8,7 @@ import type {
   PurchaseResult,
   SessionContext,
 } from '../../types/workflow'
-import { confirmationKey, currentInput, RequestKeys } from './model'
+import { confirmationKey, currentInput, RequestKeys } from './model.ts'
 
 type Workspace = {
   context: SessionContext | null
@@ -40,7 +40,12 @@ async function load(id: number): Promise<Workspace> {
     input: currentInput(messages, context.current_version_id),
     result:
       result?.input_version_id === context.current_version_id ? result : null,
-    saved: confirmations.items.find((item) => item.is_current_version) ?? null,
+    saved:
+      confirmations.items.find(
+        (item) =>
+          item.is_current_version &&
+          item.version_no === context.current_version,
+      ) ?? null,
   }
 }
 export function useWorkspace() {
@@ -50,9 +55,22 @@ export function useWorkspace() {
   const [notice, setNotice] = useState('')
   const scope = useRef(0)
   const locked = useRef(false)
+  const queuedOpen = useRef<number | null>(null)
+  const pendingEvents = useRef(
+    new Map<number, { signature: string; payload: JsonObject; key: string }>(),
+  )
+  const [pendingSessions, setPendingSessions] = useState<number[]>([])
   const keys = useRef(new RequestKeys())
   const open = useCallback(async (id: number) => {
-    if (locked.current) return
+    if (locked.current) {
+      queuedOpen.current = id
+      scope.current++
+      setWorkspace(empty)
+      setError('')
+      setNotice('')
+      setBusy('진행 중인 요청이 끝나면 선택한 업무를 열어요')
+      return
+    }
     const generation = ++scope.current
     setWorkspace(empty)
     setError('')
@@ -70,6 +88,17 @@ export function useWorkspace() {
       if (scope.current === generation) setBusy('')
     }
   }, [])
+  function release(generation: number) {
+    locked.current = false
+    const next = queuedOpen.current
+    queuedOpen.current = null
+    if (next !== null) void open(next)
+    else if (scope.current === generation) setBusy('')
+  }
+  function clearPending(id: number) {
+    pendingEvents.current.delete(id)
+    setPendingSessions([...pendingEvents.current.keys()])
+  }
   function reset() {
     if (!locked.current) {
       scope.current++
@@ -92,7 +121,7 @@ export function useWorkspace() {
     try {
       const store = Number(import.meta.env.VITE_STORE_ID ?? 1)
       const session = await workflowApi.create(store, feature, method, title)
-      return session.session_id
+      return queuedOpen.current === null ? session.session_id : null
     } catch (cause) {
       if (scope.current === generation)
         setError(
@@ -100,16 +129,22 @@ export function useWorkspace() {
         )
       return null
     } finally {
-      locked.current = false
-      if (scope.current === generation) setBusy('')
+      release(generation)
     }
   }
   async function act(
     label: string,
     action: (context: SessionContext) => Promise<string>,
+    replay = false,
   ): Promise<boolean> {
     const context = workspace.context
     if (!context || locked.current || busy) return false
+    if (!replay && pendingEvents.current.has(context.session_id)) {
+      setError(
+        '이전 입력 요청의 처리 여부부터 확인해 주세요. 재전송 버튼을 눌러 주세요.',
+      )
+      return false
+    }
     locked.current = true
     const generation = scope.current
     setBusy(label)
@@ -142,22 +177,73 @@ export function useWorkspace() {
         )
       return false
     } finally {
-      locked.current = false
-      if (scope.current === generation) setBusy('')
+      release(generation)
     }
   }
   async function event(body: JsonObject) {
-    return act('입력을 확인하고 있어요', async (context) => {
-      const payload = { ...body, base_version_id: context.current_version_id }
-      const signature = JSON.stringify([context.session_id, payload])
-      const response = await workflowApi.event(
-        context.session_id,
-        payload,
-        keys.current.for(signature),
-      )
-      keys.current.done(signature)
-      return response.message ?? '입력을 반영했어요.'
-    })
+    return act(
+      '입력을 확인하고 있어요',
+      async (context) => {
+        const id = context.session_id
+        const signature = JSON.stringify(body)
+        let pending = pendingEvents.current.get(id)
+        if (pending && pending.signature !== signature) {
+          throw new Error(
+            '이전 입력 요청의 처리 여부부터 확인해 주세요. 재전송 버튼을 눌러 주세요.',
+          )
+        }
+        if (!pending) {
+          pending = {
+            signature,
+            payload: structuredClone({
+              ...body,
+              base_version_id: context.current_version_id,
+            }),
+            key: crypto.randomUUID(),
+          }
+          pendingEvents.current.set(id, pending)
+          setPendingSessions([...pendingEvents.current.keys()])
+        }
+        try {
+          const response = await workflowApi.event(
+            id,
+            pending.payload,
+            pending.key,
+          )
+          clearPending(id)
+          return response.message ?? '입력을 반영했어요.'
+        } catch (cause) {
+          if (
+            cause instanceof WorkflowError &&
+            cause.httpStatus &&
+            cause.httpStatus >= 400 &&
+            cause.httpStatus < 500
+          ) {
+            clearPending(id)
+            if (
+              cause.code === 'STALE_INPUT' ||
+              cause.message ===
+                '조건이 바뀌었어요. 최신 입력을 불러온 뒤 다시 보내 주세요.'
+            ) {
+              throw new WorkflowError(
+                '이전 입력 요청은 저장되지 않았고 조건이 바뀌었어요. 최신 조건을 검토한 뒤 새 요청으로 보내 주세요.',
+                'STALE_INPUT',
+                cause.httpStatus,
+              )
+            }
+          }
+          throw cause
+        }
+      },
+      true,
+    )
+  }
+  function retryEvent() {
+    const id = workspace.context?.session_id
+    const pending = id === undefined ? undefined : pendingEvents.current.get(id)
+    return pending
+      ? event(JSON.parse(pending.signature) as JsonObject)
+      : Promise.resolve(false)
   }
   function confirmInput() {
     return act('입력 조건을 확인하고 있어요', async (context) => {
@@ -234,6 +320,10 @@ export function useWorkspace() {
     reset,
     create,
     event,
+    pendingEvent:
+      workspace.context !== null &&
+      pendingSessions.includes(workspace.context.session_id),
+    retryEvent,
     confirmInput,
     calculate,
     confirm,

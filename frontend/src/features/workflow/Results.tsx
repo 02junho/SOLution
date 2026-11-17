@@ -55,10 +55,17 @@ export function PurchaseLines({
           {lines.map((line, i) => (
             <tr key={i}>
               <td>
-                <strong>{nameOf(input, 'items', line.item_id)}</strong>
+                <strong>
+                  {String(
+                    line.item_name ?? nameOf(input, 'items', line.item_id),
+                  )}
+                </strong>
                 <small>
-                  {nameOf(input, 'suppliers', line.supplier_id)} ·{' '}
-                  {amount(line.pack_size, String(line.pack_unit ?? ''))}
+                  {String(
+                    line.supplier_name ??
+                      nameOf(input, 'suppliers', line.supplier_id),
+                  )}{' '}
+                  · {amount(line.pack_size, String(line.pack_unit ?? ''))}
                 </small>
               </td>
               <td>{amount(line.pack_count, '개')}</td>
@@ -139,7 +146,7 @@ export default function Results({
               ? '비교할 준비 완료'
               : result
                 ? '조건 확인 필요'
-              : '계산 전'}
+                : '계산 전'}
         </span>
       </div>
       {saved && (

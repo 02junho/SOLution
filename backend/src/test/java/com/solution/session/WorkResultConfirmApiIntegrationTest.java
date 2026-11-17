@@ -2,6 +2,7 @@ package com.solution.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -80,6 +81,28 @@ class WorkResultConfirmApiIntegrationTest {
 		insertResult(2002, 1002, 500, 2);
 		insertResult(2003, 1001, 500, 1);
 		insertResult(3001, 1003, 600, 1);
+	}
+
+	@Test
+	void 선택안의_품목과_거래처명은_해당_입력버전에서_복사해_보존한다() throws Exception {
+		jdbc.update("UPDATE work_version SET input_json=?::jsonb WHERE input_version_id=1002", """
+				{"items":[{"item_id":"coffee","item_name":"확정 당시 원두"}],
+				 "suppliers":[{"supplier_id":"a","supplier_name":"확정 당시 거래처"}]}
+				""");
+		jdbc.update("UPDATE work_result SET detail_json=?::jsonb WHERE result_id=2001", """
+				{"choices":[{"choice_key":"purchase_1","lines":[
+				 {"item_id":"coffee","supplier_id":"a","item_name":"다른 이름","line_krw":120400}]}]}
+				""");
+		confirm(2001, "preserve-names", body("purchase_1", "[\"VAT_UNKNOWN\"]")).andExpect(status().isOk());
+		long id = jdbc.queryForObject("SELECT confirmation_id FROM work_confirmation", Long.class);
+		jdbc.update("INSERT INTO work_version(input_version_id,session_id,version_no,schema_version,input_json) VALUES (1004,500,3,'purchase.v1','{}')");
+		jdbc.update("UPDATE work_session SET current_version=3 WHERE session_id=500");
+		jdbc.update("UPDATE work_result SET detail_json='{}' WHERE result_id=2001");
+		mvc.perform(get("/api/v1/work-confirmations/" + id)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.is_current_version").value(false))
+				.andExpect(jsonPath("$.data.selected_snapshot_json.detail.lines[0].item_name").value("확정 당시 원두"))
+				.andExpect(jsonPath("$.data.selected_snapshot_json.detail.lines[0].supplier_name").value("확정 당시 거래처"))
+				.andExpect(jsonPath("$.data.selected_snapshot_json.detail.lines[0].line_krw").value(120400));
 	}
 
 	@Test

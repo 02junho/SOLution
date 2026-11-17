@@ -1,10 +1,12 @@
 import type { ApiResponse } from '../types/api'
 
+export type ClientResponse<T> = ApiResponse<T> & { httpStatus?: number }
+
 // 모든 화면은 Spring만 호출한다. HTTP 오류와 잘못된 응답을 성공으로 취급하지 않는다.
 export async function request<T>(
   path: string,
   init?: RequestInit,
-): Promise<ApiResponse<T>> {
+): Promise<ClientResponse<T>> {
   try {
     const headers = new Headers(init?.headers)
     if (init?.body != null && !headers.has('Content-Type'))
@@ -15,6 +17,7 @@ export async function request<T>(
       body = await response.json()
     } catch {
       return {
+        httpStatus: response.status,
         status: 'error',
         data: null,
         message: '서버 응답을 읽지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -29,6 +32,7 @@ export async function request<T>(
       )
     ) {
       return {
+        httpStatus: response.status,
         status: 'error',
         data: null,
         message: '서버 응답을 읽지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -36,6 +40,7 @@ export async function request<T>(
     }
     const parsed = body as ApiResponse<T>
     return {
+      httpStatus: response.status,
       status: response.ok ? parsed.status : 'error',
       data: parsed.data ?? null,
       message:

@@ -474,6 +474,18 @@ export default function Workspace({
           {workspace.notice}
         </div>
       )}
+      {workspace.pendingEvent && !busy && (
+        <Alert>
+          입력 요청의 응답을 받지 못했어요. 같은 요청으로 처리 여부를 확인할 수
+          있어요.
+          <button
+            className="button secondary"
+            onClick={() => workspace.retryEvent()}
+          >
+            재전송하여 처리 확인
+          </button>
+        </Alert>
+      )}
       <div className="workspace-grid">
         <Progress workspace={workspace} />
         <section

@@ -81,7 +81,7 @@ export default function PurchaseForm({
           : {
               item_id: items[0]?.item_id ?? '',
               supplier_id: suppliers[0]?.supplier_id ?? '',
-              pack_unit: items[0]?.base_unit ?? 'g',
+              pack_unit: items[0]?.base_unit ?? '',
               vat_included: null,
             }
     setDraft((previous) => ({
@@ -114,6 +114,14 @@ export default function PurchaseForm({
     setError('')
     if (!items.length || !suppliers.length || !quotes.length) {
       setError('품목, 거래처, 견적을 각각 하나 이상 입력해 주세요.')
+      return
+    }
+    if (
+      items.some(
+        (item) => !['g', 'ml', 'ea'].includes(String(item.base_unit ?? '')),
+      )
+    ) {
+      setError('모든 품목의 기준 단위를 선택해 주세요.')
       return
     }
     if (
@@ -218,7 +226,7 @@ export default function PurchaseForm({
                   <label>
                     기준 단위
                     <select
-                      value={String(row.base_unit ?? 'g')}
+                      value={String(row.base_unit ?? '')}
                       onChange={(e) => {
                         const unit = e.target.value
                         update('items', i, { base_unit: unit })
@@ -232,6 +240,7 @@ export default function PurchaseForm({
                         }))
                       }}
                     >
+                      <option value="">선택해 주세요</option>
                       <option value="g">g (그램)</option>
                       <option value="ml">ml (밀리리터)</option>
                       <option value="ea">개</option>
@@ -376,7 +385,7 @@ export default function PurchaseForm({
                         )
                         update('quotes', i, {
                           item_id: e.target.value,
-                          pack_unit: item?.base_unit ?? 'g',
+                          pack_unit: item?.base_unit ?? '',
                         })
                       }}
                     >
@@ -412,7 +421,7 @@ export default function PurchaseForm({
                     </select>
                   </label>
                   <NumberField
-                    label={`한 묶음의 양 (${String(row.pack_unit ?? 'g')})`}
+                    label={`한 묶음의 양 (${String(row.pack_unit || '단위 선택 필요')})`}
                     required
                     min={0.000001}
                     value={row.pack_size}

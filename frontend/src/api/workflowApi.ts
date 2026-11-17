@@ -1,5 +1,6 @@
 import { request } from './client.ts'
-import type { ApiResponse, FeatureType } from '../types/api'
+import type { ClientResponse } from './client.ts'
+import type { FeatureType } from '../types/api'
 import type {
   Page,
   SessionSummary,
@@ -15,17 +16,20 @@ import type {
 
 export class WorkflowError extends Error {
   code: string
-  constructor(message: string, code = 'REQUEST_FAILED') {
+  httpStatus?: number
+  constructor(message: string, code = 'REQUEST_FAILED', httpStatus?: number) {
     super(message)
     this.code = code
+    this.httpStatus = httpStatus
   }
 }
-function unwrap<T>(response: ApiResponse<T>): T {
+function unwrap<T>(response: ClientResponse<T>): T {
   if (response.status === 'error' || response.data === null) {
     const data = response.data as JsonObject | null
     throw new WorkflowError(
       response.message || '요청을 완료하지 못했어요. 다시 시도해 주세요.',
       typeof data?.detail_code === 'string' ? data.detail_code : undefined,
+      response.httpStatus,
     )
   }
   return response.data

@@ -55,7 +55,16 @@ export default function App() {
   }
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main-content">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault()
+          const main = document.getElementById('main-content')
+          main?.focus({ preventScroll: true })
+          main?.scrollIntoView({ block: 'start' })
+        }}
+      >
         본문으로 바로가기
       </a>
       <header className="app-header">
@@ -81,6 +90,9 @@ export default function App() {
           >
             저장한 계획
           </a>
+          <a href="#/system" aria-current={systemPage ? 'page' : undefined}>
+            연결 확인
+          </a>
         </nav>
         <div className="header-store">
           <span className="store-avatar">☕</span>
@@ -88,14 +100,6 @@ export default function App() {
             {import.meta.env.VITE_STORE_NAME || '우리 매장'}
             <small>사장님 워크스페이스</small>
           </span>
-          <a
-            className="connection-link"
-            href="#/system"
-            aria-label="서버 연결 상태 확인"
-          >
-            <span className="tiny-dot" />
-            연결 확인
-          </a>
         </div>
       </header>
       <main id="main-content" tabIndex={-1}>

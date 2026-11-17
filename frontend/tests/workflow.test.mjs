@@ -140,6 +140,27 @@ test('확정 키는 저장소 및 저장소 장애 상황에도 재시도에 유
     confirmationKey('result-2', unavailable),
   )
 })
+test('저장된 기존 확정 키를 읽은 뒤 저장소가 실패해도 같은 키를 유지한다', () => {
+  const key = 'persisted-before-reload'
+  assert.equal(
+    confirmationKey('persisted-result', {
+      getItem: () => key,
+      setItem: () => {
+        throw new Error('쓰기 불가')
+      },
+    }),
+    key,
+  )
+  assert.equal(
+    confirmationKey('persisted-result', {
+      getItem: () => {
+        throw new Error('읽기 불가')
+      },
+      setItem: () => {},
+    }),
+    key,
+  )
+})
 test('복원 입력은 현재 버전 ID와 일치하는 저장 스냅샷만 사용한다', () => {
   const message = (version, budget) => ({
     metadata_json: {
