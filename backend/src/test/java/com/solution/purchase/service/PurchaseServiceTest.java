@@ -227,6 +227,7 @@ class PurchaseServiceTest {
 		assertThatThrownBy(() -> service.run(100, 1001, "key-1"))
 				.isInstanceOf(ApiException.class)
 				.hasMessage(PurchaseService.SESSION_NOT_FOUND)
+				.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND")
 				.extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
 	}
 
@@ -237,6 +238,7 @@ class PurchaseServiceTest {
 		assertThatThrownBy(() -> service.run(100, 1001, "key-1"))
 				.isInstanceOf(ApiException.class)
 				.hasMessage(PurchaseService.NOT_LATEST)
+				.hasFieldOrPropertyWithValue("detailCode", "STALE_VERSION")
 				.extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 	}
 
@@ -247,6 +249,7 @@ class PurchaseServiceTest {
 		assertThatThrownBy(() -> service.run(100, 1001, "key-1"))
 				.isInstanceOf(ApiException.class)
 				.hasMessage(PurchaseService.NOT_CONFIRMED)
+				.hasFieldOrPropertyWithValue("detailCode", "INPUT_NOT_CONFIRMED")
 				.extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
 	}
 
@@ -288,6 +291,7 @@ class PurchaseServiceTest {
 
 		assertThatThrownBy(() -> service.detail(2001))
 				.isInstanceOf(ApiException.class)
-				.hasMessage(PurchaseService.RESULT_NOT_FOUND);
+				.hasMessage(PurchaseService.RESULT_NOT_FOUND)
+				.hasFieldOrPropertyWithValue("detailCode", "RESULT_NOT_FOUND");
 	}
 }

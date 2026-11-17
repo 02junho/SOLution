@@ -227,6 +227,7 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | `error` | 400 / 404 / 500 / 502 | 잘못된 요청, 없는 주소, 서버 오류, FastAPI 연결 실패 |
 
 - 기능별 세부 상태(`OPTIMAL` 등)는 `status`를 늘리지 않고 `data` 안에 넣습니다.
+- 400·404의 사유는 `data.detail_code`로 나눕니다(예: `INPUT_NOT_CONFIRMED`, `STALE_VERSION`, `SESSION_NOT_FOUND`). Spring은 `ApiException.badRequest(코드, 문구)`·`notFound(코드, 문구)`로 던지면 공통 처리기가 `data: {"detail_code": ...}`로 내보냅니다. 코드 없이 던지면 `data`는 `null`입니다.
 - **기능마다 같은 이름을 쓰는 칸** (화면·확정 API가 기능 구분 없이 같은 방식으로 읽습니다)
   - 빠진 값(`needs_input`): `data.missing_fields[]`의 기본 칸은 `{path, label, unit}`. `path`는 요청 JSON 안의 위치, `label`은 사장님께 보여 줄 이름, `unit`은 단위(없으면 `null`). 왜 필요한지는 `message`에 씁니다.
   - 경고: `warnings[]`의 기본 칸은 `{warning_id, message, requires_ack}`. 기능에 따라 칸을 더 붙여도 됩니다(예: 구매의 `choice_keys`). 확정할 때 화면은 확인한 `warning_id`만 보냅니다.

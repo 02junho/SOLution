@@ -52,27 +52,55 @@ class PurchaseControllerTest {
 	}
 
 	@Test
-	void 업무를_못_찾으면_404_공통_오류() throws Exception {
-		given(purchaseService.run(100, 1001, null)).willThrow(ApiException.notFound("매입 업무를 찾을 수 없습니다."));
+	void 업무를_못_찾으면_404와_사유_코드() throws Exception {
+		given(purchaseService.run(100, 1001, null))
+				.willThrow(ApiException.notFound("SESSION_NOT_FOUND", "매입 업무를 찾을 수 없습니다."));
 
 		mockMvc.perform(post("/api/v1/purchase/sessions/100/results")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"input_version_id\": 1001}"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.status").value("error"))
+				.andExpect(jsonPath("$.data.detail_code").value("SESSION_NOT_FOUND"))
 				.andExpect(jsonPath("$.message").value("매입 업무를 찾을 수 없습니다."));
 	}
 
 	@Test
-	void 옛_조건이면_400_공통_오류() throws Exception {
+	void 옛_조건이면_400과_사유_코드() throws Exception {
 		given(purchaseService.run(100, 1001, null))
-				.willThrow(ApiException.badRequest("조건이 바뀌었어요. 최신 조건으로 다시 계산해 주세요."));
+				.willThrow(ApiException.badRequest("STALE_VERSION", "조건이 바뀌었어요. 최신 조건으로 다시 계산해 주세요."));
 
 		mockMvc.perform(post("/api/v1/purchase/sessions/100/results")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"input_version_id\": 1001}"))
 				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.data.detail_code").value("STALE_VERSION"))
 				.andExpect(jsonPath("$.message").value("조건이 바뀌었어요. 최신 조건으로 다시 계산해 주세요."));
+	}
+
+	@Test
+	void 입력_확인_전이면_400과_사유_코드() throws Exception {
+		given(purchaseService.run(100, 1001, null))
+				.willThrow(ApiException.badRequest("INPUT_NOT_CONFIRMED", "입력을 먼저 확인해 주세요."));
+
+		mockMvc.perform(post("/api/v1/purchase/sessions/100/results")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"input_version_id\": 1001}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.data.detail_code").value("INPUT_NOT_CONFIRMED"))
+				.andExpect(jsonPath("$.message").value("입력을 먼저 확인해 주세요."));
+	}
+
+	@Test
+	void 사유_코드가_없는_공통_오류는_data가_null() throws Exception {
+		given(purchaseService.run(100, 1001, null)).willThrow(ApiException.badRequest("요청이 올바르지 않습니다."));
+
+		mockMvc.perform(post("/api/v1/purchase/sessions/100/results")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"input_version_id\": 1001}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.data").doesNotExist())
+				.andExpect(jsonPath("$.message").value("요청이 올바르지 않습니다."));
 	}
 
 	@Test

@@ -38,6 +38,12 @@ public class PurchaseService {
 	static final String NOT_LATEST = "조건이 바뀌었어요. 최신 조건으로 다시 계산해 주세요.";
 	static final String NOT_CONFIRMED = "입력을 먼저 확인해 주세요.";
 
+	// 오류 사유 코드 (data.detail_code). 입력 확인 API·확정 API와 같은 이름을 쓴다 (상태코드·경고 점검 공유사항 11.17).
+	static final String CODE_SESSION_NOT_FOUND = "SESSION_NOT_FOUND";
+	static final String CODE_RESULT_NOT_FOUND = "RESULT_NOT_FOUND";
+	static final String CODE_STALE_VERSION = "STALE_VERSION";
+	static final String CODE_INPUT_NOT_CONFIRMED = "INPUT_NOT_CONFIRMED";
+
 	private static final ParameterizedTypeReference<ApiResponse<Map<String, Object>>> MAP_RESPONSE =
 			new ParameterizedTypeReference<>() {
 			};
@@ -69,13 +75,13 @@ public class PurchaseService {
 				.filter(row -> "purchase".equals(row.featureType()))
 				.filter(row -> currentOwner.key().equals(row.ownerKey()))
 				.filter(row -> row.inputVersionId() != null)
-				.orElseThrow(() -> ApiException.notFound(SESSION_NOT_FOUND));
+				.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, SESSION_NOT_FOUND));
 		// 옛 조건 혼입 차단(GR-04) → 입력 확인 전 계산 차단(GR-09) 순서로 검사한다.
 		if (!Objects.equals(source.versionNo(), source.currentVersion())) {
-			throw ApiException.badRequest(NOT_LATEST);
+			throw ApiException.badRequest(CODE_STALE_VERSION, NOT_LATEST);
 		}
 		if (source.inputConfirmedAt() == null) {
-			throw ApiException.badRequest(NOT_CONFIRMED);
+			throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, NOT_CONFIRMED);
 		}
 
 		String requestKey = (requestKeyOrNull == null || requestKeyOrNull.isBlank())
@@ -138,7 +144,7 @@ public class PurchaseService {
 	public ApiResponse<Map<String, Object>> detail(long resultId) {
 		StoredResult result = repository.findResult(resultId)
 				.filter(row -> currentOwner.key().equals(row.ownerKey()))
-				.orElseThrow(() -> ApiException.notFound(RESULT_NOT_FOUND));
+				.orElseThrow(() -> ApiException.notFound(CODE_RESULT_NOT_FOUND, RESULT_NOT_FOUND));
 
 		Map<String, Object> data = new LinkedHashMap<>();
 		data.put("result_id", result.resultId());

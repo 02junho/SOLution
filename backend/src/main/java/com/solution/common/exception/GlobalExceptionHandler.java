@@ -1,5 +1,6 @@
 package com.solution.common.exception;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.solution.common.client.AiServerException;
 import com.solution.common.response.ApiResponse;
+import com.solution.common.response.ResponseStatus;
 
 /**
  * 예외를 공통 응답 형식으로 바꾼다. 사장님 정보 부족(needs_input)·답 없음(infeasible)은 예외가 아니라
@@ -49,8 +51,9 @@ public class GlobalExceptionHandler {
 	}
 
 	@ExceptionHandler(ApiException.class)
-	public ResponseEntity<ApiResponse<Void>> handleApi(ApiException e) {
-		return ResponseEntity.status(e.getStatus()).body(ApiResponse.error(e.getMessage()));
+	public ResponseEntity<ApiResponse<Map<String, Object>>> handleApi(ApiException e) {
+		Map<String, Object> data = e.getDetailCode() == null ? null : Map.of("detail_code", e.getDetailCode());
+		return ResponseEntity.status(e.getStatus()).body(new ApiResponse<>(ResponseStatus.ERROR, data, e.getMessage()));
 	}
 
 	@ExceptionHandler(AiServerException.class)
