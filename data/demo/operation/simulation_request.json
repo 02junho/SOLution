@@ -1,0 +1,120 @@
+{
+  "scenario": {
+    "daily_orders": 200,
+    "share_method": "p50",
+    "takeout_ratio": 0.4
+  },
+  "repetitions": 30,
+  "random_seed": 42,
+  "execution_mode": "continuous_day",
+  "session_id": 520001,
+  "input_version_id": 530001,
+  "result_id": 7001,
+  "plans": [
+    {
+      "choice_key": "CURRENT",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION"
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_A",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF_HELP_PREPARATION"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "task_code": "PREPARATION"
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "PREPARATION_HELP_ORDER_HANDOFF"
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION"
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_C",
+      "shifts": [
+        {
+          "worker_key": "OWNER",
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "task_code": "ORDER_HANDOFF"
+        },
+        {
+          "worker_key": "OWNER",
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "task_code": "ALL_TASKS"
+        },
+        {
+          "worker_key": "STAFF_1",
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "task_code": "PREPARATION"
+        },
+        {
+          "worker_key": "STAFF_2",
+          "start_time": "11:30",
+          "end_time": "13:30",
+          "task_code": "PREPARATION_HELP_ORDER_HANDOFF"
+        }
+      ]
+    }
+  ]
+}
