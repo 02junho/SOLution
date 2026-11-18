@@ -1,0 +1,325 @@
+{
+  "schema_version": "1.0",
+  "preparation_id": "prep-001",
+  "version": 4,
+  "stage": "REVIEW",
+  "period": {
+    "start_date": "2026-11-09",
+    "end_date": "2026-11-15"
+  },
+  "statuses": {
+    "quote_status": "NEEDS_REVIEW",
+    "material_status": "COMPLETE",
+    "optimization_status": "BLOCKED"
+  },
+  "messages": [
+    {
+      "message_id": "m-1",
+      "role": "USER",
+      "text": "이번 주 아메리카노 700잔, 라떼 350잔, 바닐라라떼 210잔이에요."
+    },
+    {
+      "message_id": "m-2",
+      "role": "USER",
+      "text": "[원두상사] 원두 1kg 17,500원 / 바닐라시럽 1L 9,000원, 부가세 포함, 5만원 이상 무료.\n[카페마트] 우유 1L 12개입 28,800원. 원두 1kg 18,500원 / 시럽 1L 9,500원, 부가세 포함. 아이스컵 1,000개 42,000원 / 뚜껑 1,000개 18,000원, 부가세 포함. 10만원 미만 배송비 3,000원."
+    },
+    {
+      "message_id": "m-3",
+      "role": "ASSISTANT",
+      "text": "카페마트 우유 28,800원은 부가세 포함 가격인가요?",
+      "question_id": "question-01"
+    }
+  ],
+  "questions": [
+    {
+      "question_id": "question-01",
+      "target_type": "QUOTE_LINE",
+      "target_id": "q-3",
+      "field": "vat_status",
+      "state": "OPEN",
+      "message": "카페마트 우유 28,800원은 부가세 포함 가격인가요?",
+      "options": [
+        {
+          "value": "INCLUDED",
+          "label": "포함"
+        },
+        {
+          "value": "EXCLUDED",
+          "label": "별도"
+        },
+        {
+          "value": "UNKNOWN",
+          "label": "모르겠어요"
+        }
+      ]
+    }
+  ],
+  "sales_plan": {
+    "items": [
+      {
+        "menu_id": "ICED_AMERICANO",
+        "menu_name": "아이스 아메리카노",
+        "recent_3_day_quantity": 296,
+        "quantity": 700,
+        "unit": "CUP",
+        "source": "OWNER_INPUT"
+      },
+      {
+        "menu_id": "ICED_CAFE_LATTE",
+        "menu_name": "아이스 카페라떼",
+        "recent_3_day_quantity": 148,
+        "quantity": 350,
+        "unit": "CUP",
+        "source": "OWNER_INPUT"
+      },
+      {
+        "menu_id": "ICED_VANILLA_LATTE",
+        "menu_name": "아이스 바닐라라떼",
+        "recent_3_day_quantity": 92,
+        "quantity": 210,
+        "unit": "CUP",
+        "source": "OWNER_INPUT"
+      }
+    ],
+    "packaging_plan": {
+      "iced_takeout_quantity": 760
+    }
+  },
+  "material_requirements": {
+    "inventory_as_of": "2026-11-12T11:00:00+09:00",
+    "items": [
+      {
+        "ingredient_id": "BEANS",
+        "ingredient_name": "원두",
+        "unit": "g",
+        "usage_per_serving": [
+          {
+            "menu_id": "ICED_AMERICANO",
+            "label": "아이스 아메리카노",
+            "quantity": 18,
+            "planned_servings": 700
+          },
+          {
+            "menu_id": "ICED_CAFE_LATTE",
+            "label": "아이스 카페라떼",
+            "quantity": 18,
+            "planned_servings": 350
+          },
+          {
+            "menu_id": "ICED_VANILLA_LATTE",
+            "label": "아이스 바닐라라떼",
+            "quantity": 18,
+            "planned_servings": 210
+          }
+        ],
+        "required_quantity": 22680,
+        "available_inventory_quantity": 4000,
+        "safety_stock_quantity": 2000
+      },
+      {
+        "ingredient_id": "MILK",
+        "ingredient_name": "우유",
+        "unit": "ml",
+        "usage_per_serving": [
+          {
+            "menu_id": "ICED_CAFE_LATTE",
+            "label": "아이스 카페라떼",
+            "quantity": 200,
+            "planned_servings": 350
+          },
+          {
+            "menu_id": "ICED_VANILLA_LATTE",
+            "label": "아이스 바닐라라떼",
+            "quantity": 200,
+            "planned_servings": 210
+          }
+        ],
+        "required_quantity": 112000,
+        "available_inventory_quantity": 20000,
+        "safety_stock_quantity": 10000
+      },
+      {
+        "ingredient_id": "VANILLA",
+        "ingredient_name": "바닐라 시럽",
+        "unit": "ml",
+        "usage_per_serving": [
+          {
+            "menu_id": "ICED_VANILLA_LATTE",
+            "label": "아이스 바닐라라떼",
+            "quantity": 20,
+            "planned_servings": 210
+          }
+        ],
+        "required_quantity": 4200,
+        "available_inventory_quantity": 1000,
+        "safety_stock_quantity": 500
+      },
+      {
+        "ingredient_id": "ICED_CUP",
+        "ingredient_name": "아이스컵",
+        "unit": "each",
+        "usage_per_serving": [
+          {
+            "menu_id": null,
+            "label": "아이스 포장",
+            "quantity": 1,
+            "planned_servings": 760
+          }
+        ],
+        "required_quantity": 760,
+        "available_inventory_quantity": 300,
+        "safety_stock_quantity": 200
+      },
+      {
+        "ingredient_id": "ICED_LID",
+        "ingredient_name": "컵 뚜껑",
+        "unit": "each",
+        "usage_per_serving": [
+          {
+            "menu_id": null,
+            "label": "아이스 포장",
+            "quantity": 1,
+            "planned_servings": 760
+          }
+        ],
+        "required_quantity": 760,
+        "available_inventory_quantity": 300,
+        "safety_stock_quantity": 200
+      }
+    ]
+  },
+  "quotes": {
+    "currency": "KRW",
+    "supplier_count": 2,
+    "suppliers": [
+      {
+        "supplier_id": "A",
+        "supplier_name": "원두상사",
+        "shipping_rules": [
+          {
+            "condition": "AT_LEAST",
+            "threshold_amount": 50000,
+            "fee_amount": 0
+          }
+        ]
+      },
+      {
+        "supplier_id": "B",
+        "supplier_name": "카페마트",
+        "shipping_rules": [
+          {
+            "condition": "BELOW",
+            "threshold_amount": 100000,
+            "fee_amount": 3000
+          }
+        ]
+      }
+    ],
+    "items": [
+      {
+        "line_id": "q-1",
+        "supplier_id": "A",
+        "display_group": "a-1",
+        "item_name": "원두",
+        "ingredient_id": "BEANS",
+        "spec_text": "1kg",
+        "quantity_per_pack": 1000,
+        "unit": "g",
+        "price_per_pack": 17500,
+        "vat_status": "INCLUDED"
+      },
+      {
+        "line_id": "q-2",
+        "supplier_id": "A",
+        "display_group": "a-1",
+        "item_name": "바닐라시럽",
+        "ingredient_id": "VANILLA",
+        "spec_text": "1L",
+        "quantity_per_pack": 1000,
+        "unit": "ml",
+        "price_per_pack": 9000,
+        "vat_status": "INCLUDED"
+      },
+      {
+        "line_id": "q-3",
+        "supplier_id": "B",
+        "display_group": "b-1",
+        "item_name": "우유",
+        "ingredient_id": "MILK",
+        "spec_text": "1L × 12",
+        "quantity_per_pack": 12000,
+        "unit": "ml",
+        "price_per_pack": 28800,
+        "vat_status": "UNKNOWN"
+      },
+      {
+        "line_id": "q-4",
+        "supplier_id": "B",
+        "display_group": "b-2",
+        "item_name": "원두",
+        "ingredient_id": "BEANS",
+        "spec_text": "1kg",
+        "quantity_per_pack": 1000,
+        "unit": "g",
+        "price_per_pack": 18500,
+        "vat_status": "INCLUDED"
+      },
+      {
+        "line_id": "q-5",
+        "supplier_id": "B",
+        "display_group": "b-2",
+        "item_name": "시럽",
+        "ingredient_id": null,
+        "spec_text": "1L",
+        "quantity_per_pack": 1000,
+        "unit": "ml",
+        "price_per_pack": 9500,
+        "vat_status": "INCLUDED"
+      },
+      {
+        "line_id": "q-6",
+        "supplier_id": "B",
+        "display_group": "b-3",
+        "item_name": "아이스컵",
+        "ingredient_id": "ICED_CUP",
+        "spec_text": "1,000개",
+        "quantity_per_pack": 1000,
+        "unit": "each",
+        "price_per_pack": 42000,
+        "vat_status": "INCLUDED"
+      },
+      {
+        "line_id": "q-7",
+        "supplier_id": "B",
+        "display_group": "b-3",
+        "item_name": "뚜껑",
+        "ingredient_id": "ICED_LID",
+        "spec_text": "1,000개",
+        "quantity_per_pack": 1000,
+        "unit": "each",
+        "price_per_pack": 18000,
+        "vat_status": "INCLUDED"
+      }
+    ]
+  },
+  "issues": [
+    {
+      "code": "VAT_UNCONFIRMED",
+      "target_id": "q-3",
+      "field": "vat_status",
+      "message": "카페마트 우유 28,800원은 부가세 포함 가격인가요?"
+    },
+    {
+      "code": "INGREDIENT_UNMATCHED",
+      "target_id": "q-5",
+      "field": "ingredient_id",
+      "message": "카페마트 시럽의 종류를 확인해 주세요."
+    },
+    {
+      "code": "SHIPPING_RANGE_UNKNOWN",
+      "target_id": "B",
+      "field": "shipping_rules",
+      "message": "카페마트 10만원 이상 주문의 배송비 조건이 확인되지 않았습니다."
+    }
+  ]
+}

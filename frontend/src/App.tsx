@@ -1,3 +1,28 @@
+// import SystemCheckPage from './pages/SystemCheckPage'
+
+//export default function App() {
+//  return (
+//    <main style={{ padding: 24 }}>
+//      <h1>SOL루션</h1>
+//      <SystemCheckPage />
+//   </main>
+//  )
+//}
+
+
+
+// 독립 예제용 진입점. 팀 앱에서는 기존 App.tsx를 유지하고 페이지를 라우터에 등록합니다.
+//import PurchasePreparationPage from './pages/PurchasePreparationPage'
+//import { demoApi } from './features/purchase-preparation/demo'
+
+//export default function App() {
+//  const preparationId = new URLSearchParams(window.location.search).get('preparationId')
+//  return preparationId
+//    ? <PurchasePreparationPage preparationId={preparationId} />
+ //   : <PurchasePreparationPage preparationId="demo" api={demoApi} />
+//}
+import PurchasePreparationPage from './pages/PurchasePreparationPage'
+import QuoteIntegrationPage from './pages/QuoteIntegrationPage'
 import { useEffect, useState } from 'react'
 import {
   ConfirmationHistory,
@@ -8,9 +33,24 @@ import Workspace, { NewSession } from './features/workflow/Workspace'
 import { useWorkspace } from './features/workflow/useWorkspace'
 import OperationResultsPage from './features/operation/OperationResultsPage'
 import SystemCheckPage from './pages/SystemCheckPage'
+import { demoApi } from './features/purchase-preparation/demo'
 import type { FeatureType } from './types/api'
 
 export default function App() {
+  const params = new URLSearchParams(window.location.search)
+  const mode = params.get('mode') ?? (params.has('preparationId') ? 'common' : 'demo')
+  const preparationId = params.get('preparationId')
+  return <div className="solution-shell">
+    <nav className="solution-nav" aria-label="SOL루션 메뉴">
+      <div className="solution-brand">SOL루션</div>
+      <a href="/" aria-current={mode === 'demo' ? 'page' : undefined}>매입 준비 데모</a>
+      <a href="/?mode=quote" aria-current={mode === 'quote' ? 'page' : undefined}>견적 서버 테스트</a>
+      <a href="/?mode=system" aria-current={mode === 'system' ? 'page' : undefined}>시스템 점검</a>
+    </nav>
+    {mode === 'quote' ? <QuoteIntegrationPage /> : mode === 'system' ? <SystemCheckPage /> :
+      mode === 'common' && preparationId ? <PurchasePreparationPage preparationId={preparationId} /> :
+      <PurchasePreparationPage preparationId="demo" api={demoApi} />}
+  </div>
   const workspace = useWorkspace()
   const [route, setRoute] = useState(() => window.location.hash || '#/work')
   const [chosenFeature, setFeature] = useState<FeatureType>('purchase')
