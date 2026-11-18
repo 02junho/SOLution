@@ -280,22 +280,24 @@ def parse_answer(key: str, answer) -> object | None:
     if not text:
         return None
     if key == "is_owner_working":
-        if any(
-            word in text
-            for word in ("아니", "직원만", "안 해", "안해", "안 나", "안나")
-        ):
+        if any(word in text for word in ("아니", "안 해", "안해", "안 나", "안나")):
             return 0
+        # "직원만 일하면 어때?"처럼 묻는 말은 답으로 확정하지 않는다(LLM 해석으로 넘김).
         # "어떻게…", "예를 들면…"처럼 같은 글자로 시작하는 다른 말은 답으로 읽지 않는다(첫 낱말 전체로 본다).
         first = re.split(r"[\s,.!~]+", text, maxsplit=1)[0]
         if first in _YES_WORDS or text.startswith("일해") or "같이 일" in text:
             return 1
         return None
     if key == "hourly_wage_krw" and "최저" in text:
+        # "최저 말고 12000원", "최저보다 높게"처럼 다른 금액·거절이 섞이면 확정하지 않는다.
+        if re.search(r"\d|아니|말고|싫|보다|넘게|이상|높게|올려", text):
+            return None
         minimum = MINIMUM_WAGES.get(today().year)
         return int(minimum) if minimum is not None else None
     if "만" in text or "천" in text:
         return None
-    digits = re.findall(r"\d[\d,]*", text)
+    # 부호까지 읽어 음수는 범위 검사에서 걸러지게 한다("-20" → -20, "20건" → 20).
+    digits = re.findall(r"-?\d[\d,]*", text)
     if len(digits) != 1:
         return None
     return int(digits[0].replace(",", ""))
@@ -320,8 +322,12 @@ def fill_defaults(values: dict) -> list[str]:
     if values.get("rush_start_time") is None and values.get("rush_end_time") is None:
         values["rush_start_time"], values["rush_end_time"] = DEFAULT_RUSH
         notes.append("바쁜 시간은 11:00~14:00으로")
-    values.setdefault("rush_start_time", DEFAULT_RUSH[0])
-    values.setdefault("rush_end_time", DEFAULT_RUSH[1])
+    if values.get("rush_start_time") is None:
+        values["rush_start_time"] = DEFAULT_RUSH[0]
+        notes.append(f"바쁜 시간 시작은 {DEFAULT_RUSH[0]}으로")
+    if values.get("rush_end_time") is None:
+        values["rush_end_time"] = DEFAULT_RUSH[1]
+        notes.append(f"바쁜 시간 끝은 {DEFAULT_RUSH[1]}으로")
     return notes
 
 

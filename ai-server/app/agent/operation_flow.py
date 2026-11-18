@@ -39,6 +39,10 @@ def prompt_rule(req: InterpretRequest) -> str:
 # "비교 시작해줘"처럼 계산을 바로 시작해 달라는 말
 # (짧고 질문이 아닌 말만. "서로 돕기랑 비교하면 뭐가 나아?" 같은 질문은 계산을 시작하지 않는다)
 _RUN_WORDS = re.compile(r"(시작|실행|돌려|계산해|비교해)")
+# "비교 시작하지 마", "아직 돌리지 말아줘"처럼 하지 말라는 말은 실행 요청이 아니다.
+_NOT_RUN = re.compile(
+    r"(하지\s*마|하지\s*말|지\s*마|지\s*말|말아|않|안\s*해|아니|멈춰|취소|그만)"
+)
 
 
 def _is_run_request(text: str | None) -> bool:
@@ -49,6 +53,7 @@ def _is_run_request(text: str | None) -> bool:
         and "?" not in text
         and "뭐" not in text
         and bool(_RUN_WORDS.search(text))
+        and not _NOT_RUN.search(text)
     )
 
 
@@ -126,6 +131,9 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
 def _carried_form(req: InterpretRequest) -> dict | None:
     """값을 다시 묻는 질문에 함께 담아 둔 폼 값(아직 아무것도 저장하지 않은 첫 말에서 틀린 값이 나온 경우)."""
     if req.event_type != "question_reply" or not isinstance(req.question, dict):
+        return None
+    # 질문을 만든 뒤 입력이 바뀌었으면(다른 버전) 그때의 폼 값을 끌어오지 않는다.
+    if req.question.get("base_version_id") != req.current_version_id:
         return None
     draft_input = req.question.get("draft_input")
     form = (

@@ -5,6 +5,7 @@
 
 import json
 from copy import deepcopy
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -117,7 +118,11 @@ def test_대화로_처음_입력하면_말한_값과_기본값으로_근무표�
     assert response.data["assumptions"]
 
 
-def test_처음_입력은_매입처럼_말할_때마다_작성_중으로_저장하고_다음_값을_묻는다():
+def test_처음_입력은_매입처럼_말할_때마다_작성_중으로_저장하고_다음_값을_묻는다(
+    monkeypatch,
+):
+    # 해가 바뀌면 최저시급이 달라지므로 날짜를 고정한다(2026년 최저시급 10,320원).
+    monkeypatch.setattr(operation_fields, "today", lambda: date(2026, 11, 18))
     start = run(_say(None, "운영 실험 해 볼래"), Fake(intent="ask"))
     assert (
         start.status == ResponseStatus.OK and start.data["detail_status"] == "NO_CHANGE"
@@ -343,7 +348,33 @@ def test_운영_규칙은_운영_요청의_지시문에만_붙는다():
     assert operation_flow.prompt_rule(_req(feature_type="purchase")) == ""
 
 
-def test_영업일이_비어_있으면_오늘로_채운다():
+def test_영업일이_비어_있으면_오늘로_채운다(monkeypatch):
+    monkeypatch.setattr(operation_fields, "today", lambda: date(2026, 11, 18))
     values = {"business_date": None, "daily_orders": 100}
     operation_fields.fill_defaults(values)
-    assert values["business_date"] == operation_fields.today().isoformat()
+    assert values["business_date"] == "2026-11-18"
+
+
+def test_애매한_짧은_답은_확정하지_않는다():
+    read = operation_fields.parse_answer
+    assert read("is_owner_working", "직원만 일하면 어때?") is None
+    assert read("is_owner_working", "아니요, 직원만 일해요") == 0
+    assert read("hourly_wage_krw", "최저 말고 12000원") is None
+    assert read("hourly_wage_krw", "최저시급보다 높게") is None
+    assert read("daily_orders", "-20") == -20  # 음수는 범위 검사에서 다시 묻는다
+    assert read("daily_orders", "20건") == 20
+
+
+def test_하지_말라는_말은_계산을_시작하지_않는다():
+    from app.agent import operation_flow
+
+    assert operation_flow._is_run_request("비교 시작해줘")
+    assert not operation_flow._is_run_request("비교 시작하지 마")
+    assert not operation_flow._is_run_request("아직 돌리지 말아줘")
+
+
+def test_바쁜_시간을_한쪽만_말하면_빠진_쪽_기본값을_알린다():
+    values = {"business_date": "2026-11-18", "rush_start_time": "12:00"}
+    notes = operation_fields.fill_defaults(values)
+    assert values["rush_end_time"] == "14:00"
+    assert any("끝은 14:00" in n for n in notes)
