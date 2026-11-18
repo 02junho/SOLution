@@ -94,9 +94,7 @@ export default function App() {
           >
             저장한 계획
           </a>
-          <a href="#/system" aria-current={systemPage ? 'page' : undefined}>
-            연결 확인
-          </a>
+          {/* 연결 확인(#/system)은 개발자용이라 메뉴에서 뺐다. 주소로는 그대로 열린다. */}
         </nav>
         <div className="header-store">
           <span className="store-avatar">☕</span>
@@ -111,7 +109,6 @@ export default function App() {
           <ConfirmationHistory onOpen={setConfirmation} />
         ) : systemPage ? (
           <section className="system-page">
-            <p className="eyebrow">CONNECTION STATUS</p>
             <h1>서버 연결 확인</h1>
             <SystemCheckPage />
             <a className="button secondary" href="#/work">

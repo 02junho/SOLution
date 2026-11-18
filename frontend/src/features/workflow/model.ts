@@ -91,6 +91,28 @@ export function fieldName(path: string, label: string) {
   }
   return names[path.split('.').at(-1) ?? path] ?? label
 }
+// 안마다 한 문장 설명. 숫자만 보고도 무엇이 다른지 바로 알 수 있게 한다.
+export function choiceSentence(value: Choice, cheapest: number | null) {
+  const parts: string[] = []
+  if (typeof value.total_krw === 'number' && cheapest !== null)
+    parts.push(
+      value.total_krw <= cheapest
+        ? '가장 싸요.'
+        : `가장 싼 안보다 ${amount(value.total_krw - cheapest)} 더 들어요.`,
+    )
+  if (typeof value.delivery_count === 'number')
+    parts.push(
+      value.delivery_count === 1
+        ? '한 번에 다 받아요.'
+        : `배송은 ${value.delivery_count}번 와요.`,
+    )
+  return parts.join(' ')
+}
+// 비교용 기준선(품목마다 단위가격이 가장 싼 곳에서 따로 사기)과의 차이를 쉬운 말로 바꾼다.
+export function baselineSentence(diff: number) {
+  if (diff === 0) return '품목마다 가장 싼 곳에서 따로 살 때와 같아요.'
+  return `품목마다 가장 싼 곳에서 따로 살 때보다 ${amount(Math.abs(diff))} ${diff < 0 ? '아껴요' : '더 들어요'}.`
+}
 export function resolveChoice(
   choice: Choice,
   choices: Choice[],

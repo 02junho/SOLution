@@ -12,7 +12,7 @@
   line-height: 1.6;
   color: #252933;
   background: #f4f5f7;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 400;
   --ink: #1b2545;
   --green: #1f54d6;
@@ -109,11 +109,11 @@ label {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
 }
 small {
-  font-size: 13px;
+  font-size: 16px;
 }
 fieldset {
   border: 0;
@@ -145,7 +145,7 @@ fieldset {
 }
 .brand > span:last-child small {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 400;
   color: #787c86;
   letter-spacing: 1px;
@@ -170,7 +170,7 @@ fieldset {
 }
 .brand-symbol > span {
   position: absolute;
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
   top: 2px;
   right: 2px;
@@ -186,7 +186,7 @@ fieldset {
   align-items: center;
   color: #5e6471;
   border-bottom: 2px solid transparent;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   padding: 3px 0 0;
 }
@@ -199,12 +199,12 @@ fieldset {
   align-items: center;
   gap: 10px;
   margin-left: auto;
-  font-size: 12px;
+  font-size: 15px;
 }
 .header-store small {
   display: block;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
   margin-top: 3px;
 }
 .store-avatar {
@@ -218,7 +218,7 @@ fieldset {
 }
 .connection-link {
   margin-left: 18px;
-  font-size: 12px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -238,7 +238,7 @@ main {
   margin-bottom: 25px;
 }
 .eyebrow {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 1.6px;
   color: #5e6471;
@@ -254,7 +254,7 @@ main {
 .workspace-heading p:not(.eyebrow),
 .page-title p:not(.eyebrow) {
   color: #5e6471;
-  font-size: 12px;
+  font-size: 15px;
 }
 .workspace-actions {
   display: flex;
@@ -268,7 +268,7 @@ main {
   justify-content: center;
   gap: 9px;
   min-height: 38px;
-  font-size: 12px;
+  font-size: 15px;
   padding: 9px 15px;
   font-weight: 550;
   transition:
@@ -301,7 +301,7 @@ main {
   gap: 7px;
   padding: 3px 0;
   color: #596071;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
 }
@@ -353,7 +353,7 @@ main {
   gap: 8px;
   padding: 8px 19px;
   border-radius: 5px;
-  font-size: 13px;
+  font-size: 16px;
   transition: background 0.15s;
 }
 .feature-tabs button.active {
@@ -367,7 +367,7 @@ main {
   align-items: center;
   gap: 7px;
   color: #5e6471;
-  font-size: 12px;
+  font-size: 15px;
 }
 .tiny-dot {
   display: inline-block;
@@ -409,7 +409,7 @@ main {
   position: relative;
   min-height: 65px;
   color: #5e6471;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 450;
 }
 .steps li:not(:last-child):after {
@@ -433,7 +433,7 @@ main {
   background: #f4f5f7;
   border-radius: 50%;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 15px;
 }
 .steps li.done .step-dot {
   background: #e2e6ee;
@@ -452,7 +452,7 @@ main {
 }
 .steps small {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   font-weight: 400;
   margin-top: 4px;
@@ -466,20 +466,20 @@ main {
 }
 .conditions-summary .eyebrow {
   letter-spacing: 0;
-  font-size: 12px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 5px;
   color: #6c7384;
 }
 .conditions-summary p {
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
   margin: 14px 0;
   line-height: 1.9;
 }
 .conditions-summary small {
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   display: block;
   border-top: 1px solid #d5d9e3;
@@ -488,7 +488,7 @@ main {
 }
 .conditions-summary dl {
   margin: 12px 0;
-  font-size: 12px;
+  font-size: 15px;
 }
 .conditions-summary dl > div {
   display: flex;
@@ -508,7 +508,7 @@ main {
   display: flex;
   gap: 7px;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.9;
 }
 .panel {
@@ -533,25 +533,25 @@ main {
   gap: 9px;
 }
 .section-number {
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   border-right: 1px solid var(--line);
   padding-right: 9px;
   font-variant-numeric: tabular-nums;
 }
 .section-heading h2 {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 650;
 }
 .section-heading h3 {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
 }
 .live-label {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
 }
 .conversation-feed {
@@ -581,7 +581,7 @@ main {
   margin-bottom: 18px;
 }
 .assistant-avatar > span {
-  font-size: 15px;
+  font-size: 17px;
   position: absolute;
   right: 1px;
   top: 1px;
@@ -595,7 +595,7 @@ main {
   white-space: pre-line;
 }
 .assistant-welcome > p:last-of-type {
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
   line-height: 1.9;
   max-width: 310px;
@@ -608,7 +608,7 @@ main {
   margin-top: 22px;
 }
 .welcome-actions .button {
-  font-size: 13px;
+  font-size: 16px;
 }
 .message {
   display: flex;
@@ -625,13 +625,13 @@ main {
   min-width: 0;
 }
 .message small {
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   display: block;
   margin-bottom: 6px;
 }
 .message p {
-  font-size: 12px;
+  font-size: 15px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   background: #f3f4f8;
@@ -658,7 +658,7 @@ main {
   background: #eceff5;
   color: #666f84;
   font-family: Georgia, serif;
-  font-size: 15px;
+  font-size: 17px;
   margin-top: 20px;
   flex-shrink: 0;
 }
@@ -673,17 +673,17 @@ main {
   align-items: center;
   margin: 0 0 9px;
   gap: 8px;
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
 }
 .composer-toolbar .text-button {
-  font-size: 12px;
+  font-size: 15px;
 }
 .composer form {
   position: relative;
 }
 .composer textarea {
-  font-size: 12px;
+  font-size: 15px;
   min-height: 80px;
   line-height: 1.8;
   padding: 12px 45px 12px 13px;
@@ -698,7 +698,7 @@ main {
 .composer > small {
   display: block;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
   margin-top: 7px;
 }
 .send-button {
@@ -724,7 +724,7 @@ main {
   align-items: center;
   padding: 3px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.6;
   background: #f0f2f5;
   color: #5e6471;
@@ -812,7 +812,7 @@ main {
   line-height: 1.7;
 }
 .result-placeholder > p {
-  font-size: 12px;
+  font-size: 15px;
   line-height: 2;
   max-width: 270px;
   color: #5e6471;
@@ -829,7 +829,7 @@ main {
   border-radius: 8px;
   padding: 13px 16px;
   color: #5e6471;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.9;
   width: 100%;
   margin-top: 68px;
@@ -838,7 +838,7 @@ main {
   padding: 22px 20px 10px;
 }
 .result-intro > p:last-child {
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
   margin-top: 7px;
 }
@@ -873,7 +873,7 @@ main {
   align-items: center;
   gap: 8px;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
 }
 .radio-dot {
   width: 16px;
@@ -890,7 +890,7 @@ main {
   color: #fff;
 }
 .choice-card h3 {
-  font-size: 12px;
+  font-size: 15px;
   margin-top: 10px;
   font-weight: 600;
 }
@@ -903,7 +903,7 @@ main {
   color: #2d364a;
 }
 .choice-card small {
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
 }
 .choose-prompt {
@@ -911,7 +911,7 @@ main {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
   min-height: 100px;
   border-top: 1px solid #edeef2;
@@ -923,11 +923,11 @@ main {
 .data-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 13px;
+  font-size: 16px;
   text-align: left;
 }
 .data-table th {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 450;
   color: #5e6471;
   border-bottom: 1px solid #dfe3ec;
@@ -948,7 +948,7 @@ main {
 .data-table td small {
   display: block;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
   margin-top: 3px;
 }
 .table-scroll {
@@ -956,7 +956,7 @@ main {
   max-width: 100%;
 }
 .data-table.compact {
-  font-size: 12px;
+  font-size: 15px;
 }
 .data-table.compact th,
 .data-table.compact td {
@@ -964,7 +964,7 @@ main {
 }
 .muted {
   color: #5e6471;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.9;
 }
 .warning-list {
@@ -981,7 +981,7 @@ main {
   border: 1px solid #dfe2ea;
   border-radius: 7px;
   background: #f3f5f9;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 400;
   line-height: 1.8;
 }
@@ -992,7 +992,7 @@ main {
 }
 .warning b {
   display: block;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 650;
   margin-bottom: 3px;
 }
@@ -1009,12 +1009,12 @@ main {
   gap: 9px;
 }
 .result-footer .button {
-  font-size: 13px;
+  font-size: 16px;
 }
 .result-footer > p {
   grid-column: 1/-1;
   text-align: center;
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   margin-top: 3px;
 }
@@ -1026,7 +1026,7 @@ main {
   margin: 24px 0 10px;
 }
 .review-card h3 {
-  font-size: 13px;
+  font-size: 16px;
   color: #515c77;
 }
 .review-totals {
@@ -1036,13 +1036,13 @@ main {
   margin: 16px 0 8px;
 }
 .review-totals small {
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   display: block;
   margin-bottom: 4px;
 }
 .review-totals b {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 550;
 }
 .review-actions {
@@ -1053,7 +1053,7 @@ main {
   margin-top: 14px;
 }
 .review-actions .button {
-  font-size: 12px;
+  font-size: 15px;
   padding: 8px 10px;
 }
 .question-card {
@@ -1064,7 +1064,7 @@ main {
   margin: 18px 0;
 }
 .question-card h3 {
-  font-size: 13px;
+  font-size: 16px;
   margin: 7px 0;
 }
 .question-options {
@@ -1074,7 +1074,7 @@ main {
   margin-top: 12px;
 }
 .question-options .button {
-  font-size: 12px;
+  font-size: 15px;
   min-height: 30px;
 }
 .busy-line {
@@ -1082,7 +1082,7 @@ main {
   align-items: center;
   gap: 9px;
   color: #5e6471;
-  font-size: 13px;
+  font-size: 16px;
   padding: 12px 0;
 }
 .spinner {
@@ -1108,7 +1108,7 @@ main {
   border: 1px solid #d2d9e8;
   border-radius: 6px;
   margin-bottom: 15px;
-  font-size: 13px;
+  font-size: 16px;
 }
 .alert {
   background: #f0f2f8;
@@ -1117,7 +1117,7 @@ main {
   border-radius: 7px;
   padding: 13px 15px;
   margin: 12px 0;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.8;
 }
 .alert.error {
@@ -1142,10 +1142,10 @@ main {
   color: #596788;
 }
 .saved-banner strong {
-  font-size: 12px;
+  font-size: 15px;
 }
 .saved-banner p {
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
   margin: 4px 0;
 }
@@ -1158,11 +1158,11 @@ main {
 }
 .order-draft summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
 }
 .order-draft summary span {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   color: #5e6471;
   margin-left: 12px;
 }
@@ -1180,7 +1180,7 @@ main {
   display: flex;
   justify-content: space-between;
   color: #5e6471;
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.2px;
 }
 .modal {
@@ -1215,7 +1215,7 @@ main {
   font-weight: 600;
 }
 .modal-header p {
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
   margin-top: 6px;
 }
@@ -1252,18 +1252,18 @@ main {
   border-color: #6c7895;
 }
 .session-type strong {
-  font-size: 14px;
+  font-size: 16px;
 }
 .session-type small {
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
 }
 .new-session-form > fieldset > label {
-  font-size: 12px;
+  font-size: 15px;
 }
 .new-session-form label .muted {
   display: inline;
-  font-size: 12px;
+  font-size: 15px;
 }
 .input-methods {
   display: flex;
@@ -1277,7 +1277,7 @@ main {
   flex: 1;
   background: transparent;
   border: 0;
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
   border-radius: 4px;
   padding: 9px;
@@ -1302,7 +1302,7 @@ main {
   margin-top: 28px;
 }
 .form-section h3 {
-  font-size: 14px;
+  font-size: 16px;
   margin-bottom: 10px;
 }
 .form-section > p {
@@ -1323,7 +1323,7 @@ main {
   margin-bottom: 10px;
 }
 .row-heading strong {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   color: #5e6471;
 }
@@ -1338,7 +1338,7 @@ main {
   gap: 6px;
   background: #fff;
   width: 100%;
-  font-size: 13px;
+  font-size: 16px;
 }
 .add-button:hover:not(:disabled) {
   background: #ebeff7;
@@ -1380,7 +1380,7 @@ main {
   border-radius: 6px;
   padding: 7px 17px;
   color: #5e6471;
-  font-size: 13px;
+  font-size: 16px;
 }
 .filter-tabs button.active {
   background: #fff;
@@ -1414,7 +1414,7 @@ main {
 }
 .history-row strong {
   display: block;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -1423,7 +1423,7 @@ main {
 .history-row small {
   display: block;
   color: #5e6471;
-  font-size: 12px;
+  font-size: 15px;
   margin-top: 6px;
 }
 .history-icon {
@@ -1444,7 +1444,7 @@ main {
   text-align: center;
   padding: 25px;
   color: #5e6471;
-  font-size: 12px;
+  font-size: 15px;
 }
 .confirmation-grid {
   display: grid;
@@ -1471,7 +1471,7 @@ main {
   font-weight: 550;
 }
 .confirmation-card > p {
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
 }
 .confirmation-card-footer {
@@ -1481,7 +1481,7 @@ main {
   margin-top: 28px;
   border-top: 1px solid var(--line);
   padding-top: 13px;
-  font-size: 12px;
+  font-size: 15px;
   color: #5e6471;
 }
 .empty-state {
@@ -1499,7 +1499,7 @@ main {
   color: #505a73;
 }
 .empty-state p {
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.9;
 }
 .empty-state .button {
@@ -1540,12 +1540,12 @@ main {
   margin: 17px 0;
 }
 .assumptions h4 {
-  font-size: 13px;
+  font-size: 16px;
 }
 .assumptions ul {
   padding-left: 17px;
   margin-bottom: 0;
-  font-size: 13px;
+  font-size: 16px;
   color: #5e6471;
 }
 .system-page {
@@ -1563,7 +1563,7 @@ main {
 .system-page th,
 .system-page td {
   padding: 9px 15px;
-  font-size: 13px;
+  font-size: 16px;
 }
 .skip-link {
   position: fixed;
@@ -1684,7 +1684,7 @@ main {
   .steps li {
     min-height: 35px;
     gap: 8px;
-    font-size: 12px;
+    font-size: 15px;
   }
   .steps li:not(:last-child):after {
     display: none;
@@ -1695,7 +1695,7 @@ main {
   .step-dot {
     width: 22px;
     height: 22px;
-    font-size: 11px;
+    font-size: 14px;
   }
   .steps li.current .step-dot {
     box-shadow: none;
@@ -1730,14 +1730,14 @@ main {
     border-radius: 9px;
   }
   .brand > span:last-child small {
-    font-size: 8px;
+    font-size: 13px;
   }
   .app-header nav {
     gap: 15px;
     margin-left: auto;
   }
   .app-header nav a {
-    font-size: 13px;
+    font-size: 16px;
   }
   .header-store {
     display: none;
@@ -1754,14 +1754,14 @@ main {
     margin-top: 7px;
   }
   .workspace-heading p:not(.eyebrow) {
-    font-size: 13px;
+    font-size: 16px;
   }
   .workspace-actions {
     margin-top: 17px;
   }
   .workspace-actions .button {
     min-height: 34px;
-    font-size: 13px;
+    font-size: 16px;
     padding: 6px 12px;
   }
   .workspace-toolbar {
@@ -1771,11 +1771,11 @@ main {
     padding: 9px 0;
   }
   .feature-tabs button {
-    font-size: 12px;
+    font-size: 15px;
     padding: 7px 14px;
   }
   .session-meta {
-    font-size: 11px;
+    font-size: 14px;
     gap: 5px;
     max-width: 100%;
   }
@@ -1792,7 +1792,7 @@ main {
     padding: 12px 7px;
   }
   .steps li {
-    font-size: 8px;
+    font-size: 13px;
     gap: 5px;
     flex-direction: column;
     min-height: 52px;
@@ -1849,7 +1849,7 @@ main {
   .app-footer {
     padding: 15px 19px 25px;
     gap: 15px;
-    font-size: 8px;
+    font-size: 13px;
   }
   .app-footer span:last-child {
     max-width: 125px;
@@ -1875,7 +1875,7 @@ main {
     grid-template-columns: 1fr 1fr;
   }
   .form-grid label {
-    font-size: 13px;
+    font-size: 16px;
   }
   .form-row-card {
     padding: 12px;
@@ -1893,7 +1893,7 @@ main {
     padding: 16px 12px;
   }
   .session-type small {
-    font-size: 11px;
+    font-size: 14px;
   }
   .history-list {
     padding: 0 17px;
@@ -1903,10 +1903,10 @@ main {
     padding: 15px 0;
   }
   .history-row strong {
-    font-size: 12px;
+    font-size: 15px;
   }
   .history-row small {
-    font-size: 11px;
+    font-size: 14px;
   }
   .history-icon {
     width: 29px;
@@ -1933,10 +1933,10 @@ main {
     flex-wrap: wrap;
   }
   .review-actions .button {
-    font-size: 12px;
+    font-size: 15px;
   }
   .history-row > .status-pill {
-    font-size: 8px;
+    font-size: 13px;
     padding: 3px 5px;
   }
   .modal > .filter-tabs {
@@ -1981,12 +1981,12 @@ main {
   color: var(--green);
 }
 .explanation-heading h3 {
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 0;
 }
 .explanation-hint,
 .explanation-loading {
-  font-size: 13px;
+  font-size: 16px;
   color: var(--muted);
   line-height: 1.8;
 }
@@ -1996,17 +1996,17 @@ main {
   gap: 8px;
 }
 .explanation-error {
-  font-size: 13px;
+  font-size: 16px;
   color: #9d3434;
   overflow-wrap: anywhere;
 }
 .explanation-button {
   margin-top: 14px;
-  font-size: 12px;
+  font-size: 15px;
   min-height: 36px;
 }
 .explanation-headline {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.8;
   color: var(--ink);
@@ -2020,22 +2020,22 @@ main {
 }
 .explanation-choices dt {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink);
 }
 .explanation-choices dd {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.8;
 }
 .explanation-notes h4 {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 15px;
 }
 .explanation-notes ul,
 .explanation-caveats {
   padding-left: 18px;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--muted);
   line-height: 1.8;
 }
@@ -2097,7 +2097,140 @@ input[type='checkbox'] {
     gap: 12px;
   }
   .app-header nav a {
-    font-size: 12px;
+    font-size: 15px;
     white-space: nowrap;
+  }
+}
+
+/* ── 쉬운 화면 (시니어 사장님 기준, 11.18) ──────────────────────
+   멘토링 피드백: 폼 입력이 어려운 시니어 사장님도 쓸 수 있게.
+   넓은 화면에서도 3칸을 나란히 두지 않고 위에서 아래로 한 줄 흐름(지금 단계 → 대화 → 결과)으로 보여 준다.
+   이 블록은 앞의 배치 규칙(화면 너비별 포함)보다 뒤에 있어 우선한다. */
+.workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  max-width: 880px;
+}
+.workspace-heading,
+.workspace-toolbar,
+main > .alert,
+main > .notice {
+  max-width: 880px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.progress-column {
+  grid-column: 1/-1;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  display: block;
+}
+.progress-column > h2,
+.progress-column > .eyebrow,
+.conditions-summary,
+.safety-note {
+  display: none;
+}
+.progress-now {
+  font-size: 18px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.progress-now b {
+  font-weight: 700;
+}
+.steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+}
+.steps li {
+  min-height: 0;
+  gap: 8px;
+  font-size: 15px;
+}
+.steps li:not(:last-child):after,
+.steps small {
+  display: none;
+}
+.steps li.current .step-dot {
+  box-shadow: none;
+}
+.step-dot {
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+}
+.conversation-feed {
+  height: auto;
+  min-height: 260px;
+  max-height: 560px;
+}
+.assistant-welcome {
+  max-width: none;
+}
+.button {
+  min-height: 48px;
+  padding: 12px 20px;
+  font-size: 17px;
+  border-radius: 9px;
+}
+.question-options {
+  gap: 10px;
+}
+.question-options .button {
+  min-height: 56px;
+  font-size: 17px;
+  padding: 14px 20px;
+}
+.text-button {
+  font-size: 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.composer textarea {
+  font-size: 17px;
+}
+.send-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+}
+.composer textarea {
+  padding-right: 64px;
+}
+.input-method-note {
+  font-size: 16px;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+.eyebrow {
+  letter-spacing: 0;
+}
+.choice-card h3 {
+  font-size: 18px;
+}
+.choice-price {
+  font-size: 26px;
+}
+.choice-sentence {
+  display: block;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+@media (max-width: 690px) {
+  .steps li > span:last-child {
+    display: none;
+  }
+  .progress-now {
+    font-size: 17px;
+  }
+  .choice-grid {
+    grid-template-columns: 1fr;
   }
 }

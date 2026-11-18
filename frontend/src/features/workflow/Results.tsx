@@ -6,6 +6,8 @@ import type { ConfirmationDetail, JsonObject } from '../../types/workflow'
 import {
   amount,
   applicableWarnings,
+  baselineSentence,
+  choiceSentence,
   dateTime,
   currentQuestion,
   featureName,
@@ -14,6 +16,9 @@ import {
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import ResultExplanation from './ResultExplanation'
+
+// 설명 요청이 연결되면 true로 바꾸고 onRequest·state를 넘긴다.
+const EXPLANATION_CONNECTED = false
 
 function nameOf(
   input: JsonObject | null,
@@ -47,8 +52,8 @@ export function PurchaseLines({
       <table className="data-table">
         <thead>
           <tr>
-            <th>거래처 / 품목</th>
-            <th>묶음 수</th>
+            <th>품목 / 거래처</th>
+            <th>수량</th>
             <th>금액</th>
           </tr>
         </thead>
@@ -106,6 +111,10 @@ export default function Results({
       item.label ?? `대안 ${index + 1}`,
     ]),
   )
+  const totals = choices
+    .map((item) => resolveChoice(item, choices)?.total_krw)
+    .filter((value): value is number => typeof value === 'number')
+  const cheapest = totals.length ? Math.min(...totals) : null
   const choice = choices.find((item) => item.choice_key === selected)
   const resolved = choice ? resolveChoice(choice, choices) : null
   const warnings = applicableWarnings(
@@ -150,18 +159,22 @@ export default function Results({
           {saved
             ? '저장 완료'
             : result?.response_status === 'ok'
-              ? '비교할 준비 완료'
+              ? '골라 주세요'
               : result
                 ? '조건 확인 필요'
                 : '계산 전'}
         </span>
       </div>
-      <ResultExplanation
-        resultId={result?.result_id ?? null}
-        eligible={!!validResult}
-        busy={!!busy}
-        choiceLabels={choiceLabels}
-      />
+      {/* AI 결과 설명은 설명 요청(onRequest)을 Spring에 연결할 때 다시 붙인다.
+          그 전에는 누를 수 없는 칸이라 처음 쓰는 사장님께 보이지 않는다. */}
+      {EXPLANATION_CONNECTED && (
+        <ResultExplanation
+          resultId={result?.result_id ?? null}
+          eligible={!!validResult}
+          busy={!!busy}
+          choiceLabels={choiceLabels}
+        />
+      )}
       {saved && (
         <div className="saved-banner">
           <Icon name="check" />
@@ -259,6 +272,9 @@ export default function Results({
               >
                 {choices.map((item, i) => {
                   const value = resolveChoice(item, choices)
+                  const sentence = value
+                    ? choiceSentence(value, cheapest)
+                    : null
                   return (
                     <button
                       type="button"
@@ -277,7 +293,7 @@ export default function Results({
                       }}
                     >
                       <div className="choice-top">
-                        <span>대안 {i + 1}</span>
+                        <span>{i + 1}안</span>
                         <span className="radio-dot">
                           {selected === item.choice_key && (
                             <Icon name="check" size={12} />
@@ -288,11 +304,11 @@ export default function Results({
                       <strong className="choice-price">
                         {value ? amount(value.total_krw) : '선택 불가'}
                       </strong>
-                      <small>
-                        {value
-                          ? `배송 ${value.delivery_count ?? '—'}회${item.same_as ? ' · 앞선 안과 동일' : ''}`
+                      <small className="choice-sentence">
+                        {sentence
+                          ? `${sentence}${item.same_as ? ' 앞의 안과 같아요.' : ''}`
                           : (item.unavailable_reason ??
-                            '현재 조건에서는 만들 수 없어요.')}
+                            '지금 조건으로는 만들 수 없어요.')}
                       </small>
                     </button>
                   )
@@ -307,14 +323,12 @@ export default function Results({
                 <div className="choice-details">
                   <div className="section-heading">
                     <Icon name="box" size={18} />
-                    <h3>거래처별 구매 목록</h3>
+                    <h3>어디서 무엇을 사나요</h3>
                   </div>
                   <PurchaseLines lines={detail?.lines ?? []} input={input} />
                   {typeof resolved.diff_from_baseline_krw === 'number' && (
                     <p className="muted">
-                      비교용 기준선과의 차이{' '}
-                      {amount(resolved.diff_from_baseline_krw)} · 기준선은
-                      확정할 수 없어요.
+                      {baselineSentence(resolved.diff_from_baseline_krw)}
                     </p>
                   )}
                   <div className="warning-list">
@@ -374,7 +388,7 @@ export default function Results({
               ) : (
                 <p className="choose-prompt">
                   <Icon name="arrow" size={16} />
-                  대안을 선택하면 구매 목록을 볼 수 있어요.
+                  안을 하나 고르면 무엇을 사는지 보여 드려요.
                 </p>
               )}
               <div className="result-footer">
@@ -393,8 +407,8 @@ export default function Results({
                   {busy
                     ? '처리 중…'
                     : saved
-                      ? '확정·저장 완료'
-                      : '선택한 안으로 확정·저장'}
+                      ? '저장했어요'
+                      : '이 안으로 저장하기'}
                   <Icon name="check" size={16} />
                 </button>
                 <p>계획을 저장하며, 실제 발주·결제는 진행하지 않아요.</p>

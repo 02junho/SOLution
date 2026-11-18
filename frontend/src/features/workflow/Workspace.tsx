@@ -88,25 +88,24 @@ export function NewSession({
               }
             />
           </label>
-          <div className="input-methods" role="group" aria-label="입력 방식">
-            <button
-              type="button"
-              aria-pressed={method === 'agent'}
-              className={method === 'agent' ? 'active' : ''}
-              onClick={() => setMethod('agent')}
-            >
-              대화로 시작
-            </button>
-            <button
-              type="button"
-              aria-pressed={method === 'form'}
-              disabled={type === 'operation'}
-              className={method === 'form' ? 'active' : ''}
-              onClick={() => setMethod('form')}
-            >
-              폼으로 직접 입력
-            </button>
-          </div>
+          {/* 말로 하기를 기본으로 두고, 표 입력은 원하는 분만 고르도록 작게 둔다. */}
+          <p className="input-method-note">
+            {method === 'agent'
+              ? '말로 알려 주시면 SOL루션이 정리해 드려요.'
+              : '표에 직접 적어서 시작해요.'}{' '}
+            {type === 'purchase' && (
+              <button
+                type="button"
+                className="text-button"
+                aria-pressed={method === 'form'}
+                onClick={() =>
+                  setMethod(method === 'agent' ? 'form' : 'agent')
+                }
+              >
+                {method === 'agent' ? '표에 직접 적을게요' : '말로 할게요'}
+              </button>
+            )}
+          </p>
           {type === 'operation' && (
             <p className="muted">
               운영 업무·대화 저장은 가능하며, 설정 폼과 계산은 운영 기능에
@@ -122,7 +121,7 @@ export function NewSession({
               취소
             </button>
             <button type="submit" className="button primary">
-              {busy ? '준비 중…' : '업무 시작하기'}
+              {busy ? '준비 중…' : '시작하기'}
               <Icon name="arrow" size={16} />
             </button>
           </div>
@@ -145,21 +144,21 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
           : context?.current_version_id
             ? 2
             : 1
+  const labels = [
+    '조건 말하기',
+    '질문에 답하기',
+    '계산하기',
+    '안 고르기',
+    '저장하기',
+  ]
   return (
     <aside className="progress-column" aria-label="업무 진행 단계">
-      <p className="eyebrow">WORKFLOW</p>
-      <h2>
-        차근차근,
-        <br />한 단계씩
-      </h2>
+      {/* 한 줄 흐름: 지금 몇 번째 단계인지 먼저 한 문장으로 알려 준다. */}
+      <p className="progress-now">
+        지금 <b>{step}단계</b> / 5단계 · {labels[step - 1]}
+      </p>
       <ol className="steps">
-        {[
-          '조건 입력',
-          '질문·입력 확인',
-          '계산 실행',
-          '대안 비교',
-          '확정·저장',
-        ].map((label, i) => (
+        {labels.map((label, i) => (
           <li
             className={i + 1 === step ? 'current' : i + 1 < step ? 'done' : ''}
             key={label}
@@ -168,10 +167,7 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
             <span className="step-dot">
               {i + 1 < step ? <Icon name="check" size={14} /> : i + 1}
             </span>
-            <span>
-              {label}
-              {i + 1 === step && <small>지금 이 단계예요</small>}
-            </span>
+            <span>{label}</span>
           </li>
         ))}
       </ol>
@@ -247,9 +243,7 @@ function InputReview({
         <span
           className={`status-pill ${context.input_confirmed ? 'green' : ''}`}
         >
-          {context.input_confirmed
-            ? '입력 확인 완료'
-            : `입력 ${context.current_version}`}
+          {context.input_confirmed ? '확인했어요' : '확인 전'}
         </span>
       </div>
       {!purchase ? (
@@ -303,10 +297,9 @@ function InputReview({
         </>
       ) : (
         <p className="muted">
-          이 업무의 입력 요약을 대화에서 찾지 못했어요.{' '}
           {context.input_confirmed
-            ? '이전에 확인한 저장 조건으로 계산할 수 있어요.'
-            : '조건을 다시 입력하고 검토해 주세요.'}
+            ? '저장해 둔 조건으로 바로 계산할 수 있어요.'
+            : '조건을 다시 알려 주세요.'}
         </p>
       )}
       <div className="review-actions">
@@ -393,7 +386,6 @@ export default function Workspace({
     <>
       <div className="workspace-heading">
         <div>
-          <p className="eyebrow">OUR DAILY WORKSPACE</p>
           <h1>
             {context?.title ||
               (feature === 'purchase'
@@ -402,19 +394,22 @@ export default function Workspace({
           </h1>
           <p>조건을 정리하고, 비교하고, 사장님이 결정하세요.</p>
         </div>
-        <div className="workspace-actions">
-          <button
-            className="button secondary"
-            disabled={!!busy}
-            onClick={onHistory}
-          >
-            <Icon name="clock" size={17} />
-            이어하기
-          </button>
-          <button className="button primary" disabled={!!busy} onClick={onNew}>
-            <Icon name="plus" size={17} />새 업무
-          </button>
-        </div>
+        {/* 업무를 열기 전에는 아래 큰 버튼(말로 시작하기·하던 업무 이어하기)과 겹쳐 숨긴다. */}
+        {context && (
+          <div className="workspace-actions">
+            <button
+              className="button secondary"
+              disabled={!!busy}
+              onClick={onHistory}
+            >
+              <Icon name="clock" size={17} />
+              하던 업무
+            </button>
+            <button className="button primary" disabled={!!busy} onClick={onNew}>
+              <Icon name="plus" size={17} />새 업무
+            </button>
+          </div>
+        )}
       </div>
       <div className="workspace-toolbar">
         <div className="feature-tabs" role="group" aria-label="업무 종류">
@@ -518,7 +513,7 @@ export default function Workspace({
                   ? feature === 'purchase'
                     ? '필요한 재료와 재고, 예산을 알려주세요. 모르는 값은 확인하고 진행할게요.'
                     : '살펴보고 싶은 시간대와 매장 운영 조건을 알려주세요. 업무별로 대화를 저장해요.'
-                  : '매장 상황을 대화로 남기거나 폼으로 입력해 보세요. 조건을 확인한 뒤 계산하고 계획을 저장할 수 있어요.'}
+                  : '매장 상황을 말로 알려 주세요. SOL루션이 정리하고, 계산해서, 고를 수 있게 보여 드려요.'}
               </p>
               {!context && (
                 <div className="welcome-actions">
@@ -527,7 +522,7 @@ export default function Workspace({
                     disabled={!!busy}
                     onClick={onNew}
                   >
-                    첫 업무 시작하기 <Icon name="arrow" size={16} />
+                    말로 시작하기 <Icon name="arrow" size={16} />
                   </button>
                   <button
                     className="text-button"
@@ -597,63 +592,77 @@ export default function Workspace({
             )}
             <div ref={bottom} />
           </div>
-          <div className="composer">
-            <div className="composer-toolbar">
-              <span>
-                {question ? '질문에 답해 주세요' : '사장님 말씀을 남겨 주세요'}
-              </span>
-              <button
-                className="text-button"
-                disabled={!context || !!busy || feature === 'operation'}
-                onClick={edit}
-              >
-                폼으로 직접 입력
-              </button>
-            </div>
-            <form onSubmit={send}>
-              <label className="sr-only" htmlFor="message">
-                {question ? '질문에 대한 답변' : '메시지'}
-              </label>
-              <textarea
-                id="message"
-                rows={2}
-                placeholder={
-                  context
-                    ? '예: 이번 주 예산을 15만 원으로 바꿔줘'
-                    : '새 업무를 시작하면 대화할 수 있어요'
-                }
-                disabled={!context || !!busy}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault()
-                    void send(e)
+          {/* 업무를 시작하기 전에는 쓸 수 없는 입력칸이라 숨긴다. */}
+          {context && (
+            <div className="composer">
+              <div className="composer-toolbar">
+                <span>
+                  {question ? '질문에 답해 주세요' : '사장님 말씀을 남겨 주세요'}
+                </span>
+                {feature === 'purchase' && (
+                  <button
+                    className="text-button"
+                    disabled={!context || !!busy}
+                    onClick={edit}
+                  >
+                    표에 직접 적기
+                  </button>
+                )}
+              </div>
+              <form onSubmit={send}>
+                <label className="sr-only" htmlFor="message">
+                  {question ? '질문에 대한 답변' : '메시지'}
+                </label>
+                <textarea
+                  id="message"
+                  rows={2}
+                  placeholder={
+                    !context
+                      ? '새 업무를 시작하면 대화할 수 있어요'
+                      : feature === 'purchase'
+                        ? '예: 이번 주 예산을 15만 원으로 바꿔줘'
+                        : '예: 점심에 손님이 몰려요. 직원 2명이면 될까요?'
                   }
-                }}
-              />
-              <button
-                type="submit"
-                className="send-button"
-                aria-label="메시지 보내기"
-                disabled={!context || !!busy || !draft.trim()}
-              >
-                <Icon name="arrow" size={20} />
-              </button>
-            </form>
-            <small>
-              입력 확인 전에는 계산하지 않아요. 모르는 값은 폼에서 비워 둘 수
-              있어요.
-            </small>
-          </div>
+                  disabled={!context || !!busy}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter로 보내고, 줄바꿈은 Shift+Enter. 한글 조합 중 Enter는 글자 확정이라 보내지 않는다.
+                    if (
+                      e.key === 'Enter' &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault()
+                      void send(e)
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="send-button"
+                  aria-label="메시지 보내기"
+                  disabled={!context || !!busy || !draft.trim()}
+                >
+                  <Icon name="arrow" size={20} />
+                </button>
+              </form>
+              <small>
+                Enter를 누르면 보내져요. 모르는 값은 모른다고 말씀하셔도 돼요.
+              </small>
+            </div>
+          )}
         </section>
-        <Results
-          feature={feature}
-          key={`${context?.current_version_id}:${workspace.result?.result_id}`}
-          workspace={workspace}
-          onEdit={edit}
-          onSaved={onSaved}
-        />
+        {/* 한 번에 하나씩: 계산한 결과가 생기기 전에는 결과 칸을 보이지 않는다. */}
+        {(workspace.result || workspace.saved) && (
+          <Results
+            feature={feature}
+            key={`${context?.current_version_id}:${workspace.result?.result_id}`}
+            workspace={workspace}
+            onEdit={edit}
+            onSaved={onSaved}
+          />
+        )}
       </div>
       {formOpen && context?.feature_type === 'purchase' && (
         <PurchaseForm
