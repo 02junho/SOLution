@@ -163,7 +163,7 @@ const taskSummary = (row: WorkerRow) =>
   row.shifts.length === 1
     ? (TASK_LABEL[row.shifts[0].task_code] ?? row.shifts[0].task_code)
     : row.shifts
-        .map((s) => `${s.start_time.slice(0, 2)}~${s.end_time.slice(0, 2)} ${TASK_LABEL[s.task_code] ?? s.task_code}`)
+        .map((s) => `${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)} ${TASK_LABEL[s.task_code] ?? s.task_code}`)
         .join(' · ')
 
 function DaySchedule({ choice, detail, plan }: { choice: OperationPlan; detail: Detail; plan: PlanSummary }) {
@@ -526,6 +526,8 @@ function ReportSheet({
 export default function OperationReport({
   result,
   detail,
+  detailError,
+  onRetryDetail,
   input,
   selected,
   recommended,
@@ -537,6 +539,8 @@ export default function OperationReport({
 }: {
   result: OperationResult
   detail: Detail | null
+  detailError: string
+  onRetryDetail: () => void
   input: JsonObject | null
   selected: OperationPlan
   recommended: OperationPlan | null
@@ -598,7 +602,14 @@ export default function OperationReport({
             />
           ))}
         </div>
-        {!detail ? (
+        {!detail && detailError ? (
+          <Alert error>
+            {detailError}{' '}
+            <button type="button" className="text-button" onClick={onRetryDetail}>
+              다시 불러오기
+            </button>
+          </Alert>
+        ) : !detail ? (
           <p className="muted">배치표·시간대·재생 기록을 불러오는 중이에요…</p>
         ) : (
           <>
@@ -628,6 +639,7 @@ export default function OperationReport({
           <button
             type="button"
             className="button secondary"
+            disabled={!detail}
             onClick={() => window.print()}
             title="인쇄 창에서 'PDF로 저장'을 고르면 파일로 받을 수 있어요"
           >

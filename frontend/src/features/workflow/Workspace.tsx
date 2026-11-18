@@ -694,7 +694,7 @@ export default function Workspace({
         <OperationForm
           serverError={workspace.error}
           key={`${context.session_id}:${context.current_version_id}`}
-          initial={workspace.input}
+          initial={questionDraft(messages, context) ?? workspace.input}
           busy={!!busy}
           onSave={(input) =>
             workspace.event({ event_type: 'form', form_input: input })

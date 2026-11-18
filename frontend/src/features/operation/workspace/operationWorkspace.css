@@ -320,7 +320,8 @@ td.opw-over {
 .opw-print-root { display: none; }
 @media print {
   @page { size: A4; margin: 14mm; }
-  body > *:not(.opw-print-root) { display: none !important; }
+  /* 정리표를 열었을 때만 앱 화면을 숨긴다(다른 화면 인쇄는 그대로) */
+  body:has(> .opw-print-root) > *:not(.opw-print-root) { display: none !important; }
   .opw-print-root { display: block; color: #000; font-size: 11pt; }
   .opw-print h1 { font-size: 18pt; margin: 0 0 4pt; }
   .opw-print h2 { font-size: 12.5pt; margin: 14pt 0 6pt; }

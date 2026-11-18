@@ -18,9 +18,9 @@ export const won = (n: number | null | undefined) =>
 export const hours = (sec: number | null | undefined) =>
   typeof sec === 'number' && Number.isFinite(sec) ? `${decimal(sec / 3600, sec % 3600 ? 1 : 0)}시간` : '—'
 const signed = (sec: number) => `${sec < 0 ? '−' : '+'}${decimal(Math.abs(sec) / 60, 1)}`
-/** 현재 대비 차이(분)와 95% 범위. 범위가 0을 지나면 "차이 없음"으로 읽는다. */
+/** 현재 대비 차이(분)와 95% 범위. 범위가 0을 지나면 차이가 있다고 단정하지 않는다. */
 export function diffText(delta: number, low: number, high: number) {
-  if (low <= 0 && 0 <= high) return `차이 없음 (${signed(low)} ~ ${signed(high)}분)`
+  if (low <= 0 && 0 <= high) return `차이가 뚜렷하지 않아요 (${signed(delta)}분, ${signed(low)} ~ ${signed(high)})`
   return `${signed(delta)}분 (${signed(low)} ~ ${signed(high)})`
 }
 

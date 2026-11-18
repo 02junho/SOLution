@@ -53,6 +53,13 @@ async function load(id: number): Promise<Workspace> {
     context.latest_result_id && context.feature_type === 'operation'
       ? await loadOperationResult(context.latest_result_id, 'summary')
       : null
+  // 결과를 못 읽었으면 "비교했어요"로 넘기지 않고 다시 불러오기 안내로 보낸다.
+  if (operation && operation.status !== 'ok')
+    throw new WorkflowError(
+      operation.message ?? '운영 결과를 불러오지 못했어요.',
+      undefined,
+      operation.httpStatus,
+    )
   return {
     context,
     messages,
@@ -209,10 +216,12 @@ export function useWorkspace() {
     }
   }
   async function event(body: JsonObject) {
+    const generation = scope.current
     const ok = await sendEvent(body)
     if (ok && runAfterEvent.current) {
       runAfterEvent.current = false
-      return calculateOperation()
+      // 기다리는 동안 다른 업무를 열었으면 계산하지 않는다. 계산 실패는 따로 보이고, 보낸 말은 저장된 것으로 둔다.
+      if (scope.current === generation) await calculateOperation()
     }
     return ok
   }

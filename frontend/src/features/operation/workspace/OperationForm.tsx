@@ -53,7 +53,10 @@ export default function OperationForm({
   const [building, setBuilding] = useState(false)
   const problems = problemsOf(form)
   const wageError = wageProblem(form)
-  const set = (patch: Partial<OperationFormValues>) => setForm((f) => ({ ...f, ...patch }))
+  const set = (patch: Partial<OperationFormValues>) => {
+    setError('')
+    setForm((f) => ({ ...f, ...patch }))
+  }
   const orders = Number(form.dailyOrders) || 0
   const counts = slotCounts(form)
   const weightSum = form.menuIds.reduce((s, id) => s + (Number(form.weights[id]) || 0), 0)

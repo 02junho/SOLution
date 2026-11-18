@@ -38,9 +38,10 @@ export default function OperationComparison({
     (p): p is PlanSummary => Boolean(p),
   )
   const recommended = summary.recommendation?.choice_key ?? null
-  const fastest = [...plans].sort(
-    (a, b) => (a.metrics.post_order_wait_mean_seconds ?? Infinity) - (b.metrics.post_order_wait_mean_seconds ?? Infinity),
-  )[0]?.choice_key
+  const fastest = plans
+    .filter((p) => Number.isFinite(p.metrics.post_order_wait_mean_seconds))
+    .sort((a, b) => (a.metrics.post_order_wait_mean_seconds ?? 0) - (b.metrics.post_order_wait_mean_seconds ?? 0))[0]
+    ?.choice_key
   // 추천이 없으면(세 안 모두 기준 미달) 5분 넘게 기다린 손님이 가장 적은 안, 같으면 더 빠른 안을 먼저 골라 둔다.
   const closest = [...plans].sort(
     (a, b) =>
@@ -54,6 +55,7 @@ export default function OperationComparison({
   const [detail, setDetail] = useState<Detail | null>(null)
   const [detailError, setDetailError] = useState('')
   const [isReportOpen, setIsReportOpen] = useState(false)
+  const [detailAttempt, setDetailAttempt] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     void loadOperationResult(result.result_id, 'detail', controller.signal).then((response) => {
@@ -62,7 +64,11 @@ export default function OperationComparison({
       else setDetailError(response.message ?? '배치표와 시간대 결과를 불러오지 못했어요.')
     })
     return () => controller.abort()
-  }, [result.result_id])
+  }, [result.result_id, detailAttempt])
+  const retryDetail = () => {
+    setDetailError('')
+    setDetailAttempt((n) => n + 1)
+  }
 
   const warnings: Warning[] = summary.warnings ?? []
   const required = warnings.filter((w) => w.requires_ack)
@@ -162,10 +168,13 @@ export default function OperationComparison({
           className="button primary"
           disabled={!canSave}
           onClick={() =>
-            void onConfirm(selected, required.map((w) => w.warning_id)).then((ok) => {
-              // 확정이 끝나면 저장한 계획 목록으로 옮겨 결과를 바로 확인하게 한다.
-              if (ok) window.location.hash = '/confirmations'
-            })
+            {
+              const startedAt = window.location.hash
+              void onConfirm(selected, required.map((w) => w.warning_id)).then((ok) => {
+                // 확정이 끝나면 저장한 계획 목록으로 옮긴다. 기다리는 동안 다른 화면으로 갔으면 그대로 둔다.
+                if (ok && window.location.hash === startedAt) window.location.hash = '/confirmations'
+              })
+            }
           }
         >
           {busy ? '처리 중…' : saved ? '확정·저장 완료' : CONFIRM_LABEL[selected]}
@@ -177,6 +186,8 @@ export default function OperationComparison({
         <OperationReport
           result={result}
           detail={detail}
+          detailError={detailError}
+          onRetryDetail={retryDetail}
           input={input}
           selected={selected}
           recommended={recommended}
