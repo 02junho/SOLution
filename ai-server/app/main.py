@@ -9,6 +9,8 @@ from app.core.response import ApiResponse, ok
 from app.tools.labor.router import router as labor_router
 from app.tools.purchase.router import router as purchase_router
 
+# 라우터 추가
+from app.tools.quote.router import router as quote_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -32,3 +34,7 @@ app.include_router(agent_router, prefix="/agent")
 @app.get("/health")
 def health() -> ApiResponse[dict]:
     return ok({"ai_server": "ok", "database": check_database()})
+
+
+# quote 라우터 추가
+app.include_router(quote_router)
