@@ -93,8 +93,7 @@ def run(req: PurchaseRequest) -> ApiResponse[dict]:
             "baseline": {
                 "method": "품목마다 단위가격이 가장 싼 견적을 골라 필요량만큼 올림",
                 "lines": [
-                    {"supplier_id": req.quotes[q].supplier_id, "item_id": req.quotes[q].item_id,
-                     "pack_size": _n(req.quotes[q].pack_size), "pack_count": n,
+                    {**_line_names(req, q), "pack_size": _n(req.quotes[q].pack_size), "pack_count": n,
                      "line_krw": req.quotes[q].pack_price_krw * n}
                     for q, n in sorted(base.pack_counts.items())
                 ],
@@ -128,12 +127,20 @@ def _choice_summary(p: Prepared, key: str, label: str, plan: Plan, base: Plan) -
     }
 
 
+def _line_names(req: PurchaseRequest, q: int) -> dict:
+    """구매 목록 한 줄의 ID와 이름. 화면이 입력을 다시 찾지 않아도 품목·거래처 이름을 보여 줄 수 있게 함께 넣는다 (#80)."""
+    quote = req.quotes[q]
+    item = next(i for i in req.items if i.item_id == quote.item_id)
+    supplier = next(s for s in req.suppliers if s.supplier_id == quote.supplier_id)
+    return {"supplier_id": quote.supplier_id, "supplier_name": supplier.supplier_name,
+            "item_id": quote.item_id, "item_name": item.item_name}
+
+
 def _choice_detail(p: Prepared, key: str, plan: Plan) -> dict:
     req = p.req
     order = {s.supplier_id: k for k, s in enumerate(req.suppliers)}
     lines = [
-        {"supplier_id": req.quotes[q].supplier_id, "item_id": req.quotes[q].item_id,
-         "pack_size": _n(req.quotes[q].pack_size), "pack_unit": req.quotes[q].pack_unit,
+        {**_line_names(req, q), "pack_size": _n(req.quotes[q].pack_size), "pack_unit": req.quotes[q].pack_unit,
          "pack_price_krw": req.quotes[q].pack_price_krw, "pack_count": n,
          "line_krw": req.quotes[q].pack_price_krw * n, "vat_included": req.quotes[q].vat_included}
         for q, n in sorted(plan.pack_counts.items(), key=lambda kv: (order[req.quotes[kv[0]].supplier_id], kv[0]))
