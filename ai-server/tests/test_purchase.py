@@ -76,6 +76,21 @@ def test_명세_예시_정답과_같다():
     assert data["detail"]["baseline"]["constraint_violations"] == []
 
 
+def test_구매_목록_줄마다_품목과_거래처_이름이_있다():
+    """화면이 입력을 다시 찾지 못해도 이름을 보여 줄 수 있게 줄마다 이름을 넣는다 (#80)."""
+    data = _post(REQUEST).json()["data"]
+    item_names = {i["item_id"]: i["item_name"] for i in REQUEST["items"]}
+    supplier_names = {s["supplier_id"]: s["supplier_name"] for s in REQUEST["suppliers"]}
+    lines = [line for c in data["detail"]["choices"] for line in c["lines"]] + data["detail"]["baseline"]["lines"]
+
+    assert lines
+    for line in lines:
+        assert line["item_name"] == item_names[line["item_id"]]
+        assert line["supplier_name"] == supplier_names[line["supplier_id"]]
+    first = data["detail"]["choices"][0]["lines"][0]
+    assert (first["supplier_id"], first["supplier_name"], first["item_id"], first["item_name"]) == ("A", "거래처 A", "beans", "원두")
+
+
 def test_숫자가_서로_맞는다():
     data = _post(REQUEST).json()["data"]
     baseline_total = data["summary"]["baseline"]["total_krw"]
