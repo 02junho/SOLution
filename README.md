@@ -189,7 +189,7 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | --- | --- |
 | 0 | `.env` 필수 칸, `DEMO_SEED=true` |
 | 1 | 컨테이너 세 개(db · ai-server · backend) |
-| 2 | DB 혼자, Flyway 테이블 8개 |
+| 2 | DB 혼자, Flyway 테이블 9개 |
 | 3 | FastAPI 혼자, FastAPI → DB (`/health`) |
 | 4 | Spring 혼자, Spring → DB, Spring → FastAPI (`/api/v1/system/health`) |
 | 5 | API 문서(`/docs`) |
