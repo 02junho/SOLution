@@ -1,0 +1,56 @@
+import unittest
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+from app.quote_test_app import app
+
+
+class ToolsTest(unittest.TestCase):
+    client = TestClient(app)
+
+    def test_pack_and_vat_warning(self):
+        payload = {"store_id": "demo", "dictionary_version": 1, "use_rag": False,
+                   "dictionary": [{"item_id": "milk", "name": "우유", "base_unit": "ml"}],
+                   "items": [{"source_text": "우유 1L 12개입 한 박스 29,000원",
+                              "raw_item_name": "우유", "supplier_name": "A",
+                              "quantity_per_unit": 1, "quantity_unit": "L",
+                              "units_per_pack": 12, "order_unit": "box",
+                              "price": 29000, "price_basis": "per_pack"},
+                             {"source_text": "우유 한 박스 29,000원", "raw_item_name": "우유",
+                              "supplier_name": "A", "order_unit": "box",
+                              "price": 29000, "price_basis": "per_pack"}]}
+        response = self.client.post("/tools/quote/normalize", json=payload)
+        self.assertEqual(response.status_code, 200)
+        complete, incomplete = response.json()["items"]
+        self.assertEqual(complete["normalized_quantity_per_pack"], 12000)
+        self.assertTrue(complete["comparable"])
+        self.assertEqual(complete["issues"][0]["code"], "VAT_UNKNOWN")
+        self.assertFalse(incomplete["comparable"])
+        self.assertIsNone(incomplete["normalized_quantity_per_pack"])
+
+    def test_gross_need_and_missing_takeaway(self):
+        bean = {"item_id": "bean", "unit": "g", "amount_per_cup": 18}
+        response = self.client.post("/tools/quote/requirements", json={
+            "sales_plan": [{"menu_id": "am", "cups": 100}, {"menu_id": "latte", "cups": 50}],
+            "recipes": {"am": [bean], "latte": [bean, {"item_id": "cup", "unit": "개",
+                                                   "amount_per_cup": 1, "scope": "takeaway"}]},
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["gross_need"], 2700)
+        self.assertEqual(data["status"], "needs_input")
+        self.assertEqual(data["issues"][0]["code"], "MISSING_TAKEAWAY_CUPS")
+
+    def test_search_without_evidence(self):
+        with patch("app.rag.quote_search.retrieve", return_value=[]):
+            response = self.client.post("/tools/quote/search", json={
+                "store_id": "demo", "document_type": "assumption", "query": "근거 없는 질문",
+            })
+        self.assertEqual(response.json(), {"status": "no_evidence", "hits": []})
+
+    def test_blank_parse_rejected(self):
+        self.assertEqual(self.client.post("/tools/quote/parse", json={"text": "  "}).status_code, 400)
+
+
+if __name__ == "__main__":
+    unittest.main()
