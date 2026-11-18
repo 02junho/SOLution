@@ -37,6 +37,8 @@ services:
       DB_HOST: db
       POSTGRES_PORT: 5432
       AI_SERVER_URL: http://ai-server:8000
+      # 견적 도구(quote.tools-url)도 같은 FastAPI. 비우면 컨테이너 안에서 localhost:8000(자기 자신)을 불러 견적 API가 실패한다.
+      QUOTE_TOOLS_URL: http://ai-server:8000
       BACKEND_PORT: 8080
     ports:
       - "${BACKEND_PORT:-8080}:8080"

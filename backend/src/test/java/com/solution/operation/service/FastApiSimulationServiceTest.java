@@ -50,7 +50,9 @@ class FastApiSimulationServiceTest {
 				Map.of("repetitions", 30, "random_seed", 42), staffing);
 		var result = new FastApiSimulationService(client).compare(request, "run:simulation");
 		assertThat(body.getValue()).containsEntry("session_id", 520001L)
-				.containsEntry("input_version_id", 530001L).containsKey("plans");
+				.containsEntry("input_version_id", 530001L).containsKey("plans")
+				// 재생 기록을 남기도록 항상 요청한다 (result_id와 함께 가야 trace_refs가 온다).
+				.containsEntry("include_events", true).containsKey("result_id");
 		assertThat(result.staffing()).isEqualTo(staffing);
 		data.remove("staffing");
 		assertThatThrownBy(() -> new FastApiSimulationService(client).compare(request, "run:simulation"))

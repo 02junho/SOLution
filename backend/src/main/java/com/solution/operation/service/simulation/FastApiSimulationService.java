@@ -44,6 +44,9 @@ public class FastApiSimulationService implements SimulationService {
 		body.put("session_id", request.sessionId());
 		body.put("input_version_id", request.inputVersionId());
 		body.put("result_id", request.resultId());
+		// 대기열 재생 기록: 시뮬레이션은 include_events와 result_id가 함께 와야 안마다 1번째 반복을
+		// execution_log에 남기고 trace_refs로 돌려준다. 빠지면 결과는 저장돼도 재생 조회가 늘 비어 있다.
+		body.put("include_events", true);
 		boolean employeeContract = SimulationStaffingMapper.usesEmployees(request.expectedStaffing());
 		if (employeeContract) {
 			body.put("staffing_schema_version", SimulationStaffingMapper.VERSION);
