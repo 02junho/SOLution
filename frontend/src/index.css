@@ -2238,3 +2238,45 @@ main > .notice {
     grid-template-columns: 1fr;
   }
 }
+/* 첫 화면: 할 수 있는 일 두 가지 카드와 지금 조건 한 줄 (11.18) */
+.start-options {
+  align-self: stretch;
+  margin: 18px 0 14px;
+}
+.start-options .session-type {
+  padding: 20px 18px;
+  text-align: left;
+  cursor: pointer;
+}
+.start-options .session-type:hover:not(:disabled) {
+  border-color: var(--green);
+  background: #f5f7fd;
+}
+.start-options .session-type strong {
+  font-size: 19px;
+}
+.start-options .session-type small {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.start-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--green);
+  font-weight: 650;
+  font-size: 16px;
+}
+.progress-conditions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+  color: var(--muted);
+}
+@media (max-width: 690px) {
+  .start-options {
+    grid-template-columns: 1fr;
+  }
+}

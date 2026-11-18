@@ -152,7 +152,11 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
     <aside className="progress-column" aria-label="업무 진행 단계">
       {/* 한 줄 흐름: 지금 몇 번째 단계인지 먼저 한 문장으로 알려 준다. */}
       <p className="progress-now">
-        {step > 5 ? (
+        {!context ? (
+          <>
+            <b>이렇게 진행돼요</b> · 말로 시작하면 다섯 단계로 끝나요
+          </>
+        ) : step > 5 ? (
           <>
             <b>다 끝났어요</b> · 계획을 저장했어요
           </>
@@ -165,17 +169,35 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
       <ol className="steps">
         {labels.map((label, i) => (
           <li
-            className={i + 1 === step ? 'current' : i + 1 < step ? 'done' : ''}
+            className={
+              !context
+                ? ''
+                : i + 1 === step
+                  ? 'current'
+                  : i + 1 < step
+                    ? 'done'
+                    : ''
+            }
             key={label}
-            aria-current={i + 1 === step ? 'step' : undefined}
+            aria-current={context && i + 1 === step ? 'step' : undefined}
           >
             <span className="step-dot">
-              {i + 1 < step ? <Icon name="check" size={14} /> : i + 1}
+              {context && i + 1 < step ? <Icon name="check" size={14} /> : i + 1}
             </span>
             <span>{label}</span>
           </li>
         ))}
       </ol>
+      {/* 지금 어떤 조건으로 하고 있는지 한 줄로. 확인 카드를 접은 뒤에도 보인다. */}
+      {context?.feature_type === 'purchase' && input && !pending && (
+        <p className="progress-conditions">
+          예산 {amount(input.budget_krw)} · {amount(input.planning_days, '일')}{' '}
+          · 배송 {amount(input.max_delivery_count, '회')}까지
+          {Array.isArray(input.items) && ` · 품목 ${input.items.length}개`}
+          {Array.isArray(input.suppliers) &&
+            ` · 거래처 ${input.suppliers.length}곳`}
+        </p>
+      )}
       <div className="conditions-summary">
         <div className="eyebrow">
           <span
@@ -500,7 +522,7 @@ export default function Workspace({
         </Alert>
       )}
       <div className="workspace-grid">
-        {context && <Progress workspace={workspace} />}
+        <Progress workspace={workspace} />
         <section
           className="panel conversation-panel"
           aria-label="업무 대화와 입력"
@@ -509,6 +531,12 @@ export default function Workspace({
             <div className="section-heading">
               <h2>대화</h2>
             </div>
+            {context && (
+              <span className="live-label">
+                <span className="tiny-dot green" />
+                자동 저장
+              </span>
+            )}
           </div>
           <div className="conversation-feed">
             <div className="assistant-welcome">
@@ -526,13 +554,35 @@ export default function Workspace({
               </p>
               {!context && (
                 <div className="welcome-actions">
-                  <button
-                    className="button primary"
-                    disabled={!!busy}
-                    onClick={onNew}
-                  >
-                    말로 시작하기 <Icon name="arrow" size={16} />
-                  </button>
+                  {/* 할 수 있는 일 두 가지를 바로 보여 주고, 누르면 그 업무로 새 업무 창을 연다. */}
+                  <div className="session-type-options start-options">
+                    {(['purchase', 'operation'] as const).map((value) => (
+                      <button
+                        type="button"
+                        className="session-type"
+                        key={value}
+                        disabled={!!busy}
+                        onClick={() => {
+                          onFeature(value)
+                          onNew()
+                        }}
+                      >
+                        <Icon
+                          name={value === 'purchase' ? 'box' : 'clock'}
+                          size={24}
+                        />
+                        <strong>{featureName(value)}</strong>
+                        <small>
+                          {value === 'purchase'
+                            ? '이번 주에 무엇을 어디서 살지 비교해요'
+                            : '바쁜 시간에 몇 명이 일하면 좋을지 살펴봐요'}
+                        </small>
+                        <span className="start-link">
+                          말로 시작하기 <Icon name="arrow" size={16} />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                   <button
                     className="text-button"
                     disabled={!!busy}

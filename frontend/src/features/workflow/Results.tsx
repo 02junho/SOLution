@@ -170,6 +170,14 @@ export default function Results({
         <div className="section-heading">
           <h2>결과</h2>
         </div>
+        {/* 지금 결과가 어떤 상태인지 짧게 (고르는 중·저장 완료·조건 확인 필요) */}
+        <span className={`status-pill ${saved ? 'green' : ''}`}>
+          {saved
+            ? '저장 완료'
+            : result?.response_status === 'ok'
+              ? '고르는 중'
+              : '조건 확인 필요'}
+        </span>
       </div>
       {/* AI 결과 설명은 설명 요청(onRequest)을 Spring에 연결할 때 다시 붙인다.
           그 전에는 누를 수 없는 칸이라 처음 쓰는 사장님께 보이지 않는다. */}
