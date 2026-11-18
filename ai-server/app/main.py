@@ -8,6 +8,7 @@ from app.core.errors import register_exception_handlers
 from app.core.response import ApiResponse, ok
 from app.tools.labor.router import router as labor_router
 from app.tools.purchase.router import router as purchase_router
+from app.tools.simulation.router import router as simulation_router
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ register_exception_handlers(app)
 app.include_router(purchase_router, prefix="/tools/purchase")
 app.include_router(labor_router, prefix="/tools/labor")
 app.include_router(agent_router, prefix="/agent")
+app.include_router(simulation_router, prefix="/tools/simulation")
 
 
 @app.get("/health")
