@@ -91,6 +91,28 @@ export function fieldName(path: string, label: string) {
   }
   return names[path.split('.').at(-1) ?? path] ?? label
 }
+// 업무 이름을 비워 두면 날짜를 넣어 하던 업무 목록에서 서로 구분되게 한다. 예: "11월 18일 매입 준비"
+export function defaultTitle(feature: string, now = new Date()) {
+  const day = now.toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+  })
+  return `${day} ${feature === 'operation' ? '운영' : '매입'} 준비`
+}
+// 양을 읽기 쉬운 단위로: 2700g → 2.7kg, 12000ml → 12L, 50ea → 50개. 계산 값은 그대로 두고 보여 주는 말만 바꾼다.
+export function quantity(value: unknown, unit: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '확인 필요'
+  const text = (n: number) =>
+    n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
+  if (unit === 'g' && Math.abs(value) >= 1000) return `${text(value / 1000)}kg`
+  if (unit === 'ml' && Math.abs(value) >= 1000)
+    return `${text(value / 1000)}L`
+  if (unit === 'ea') return `${text(value)}개`
+  return `${text(value)}${unit}`
+}
+// 견적 한 묶음: 1000g → 1kg, 50ea → 50개 묶음
+export const packLabel = (size: unknown, unit: string) =>
+  `${quantity(size, unit)}${unit === 'ea' ? ' 묶음' : ''}`
 // 안마다 한 문장 설명. 숫자만 보고도 무엇이 다른지 바로 알 수 있게 한다.
 export function choiceSentence(value: Choice, cheapest: number | null) {
   const parts: string[] = []

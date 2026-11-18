@@ -6,11 +6,13 @@ import type { JsonObject } from '../../types/workflow'
 import {
   amount,
   currentQuestion,
+  defaultTitle,
   questionDraft,
   fieldName,
   dateTime,
   featureName,
   object,
+  quantity,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import PurchaseForm from './PurchaseForm'
@@ -47,7 +49,7 @@ export function NewSession({
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          void onCreate(type, method, title.trim())
+          void onCreate(type, method, title.trim() || defaultTitle(type))
         }}
         className="new-session-form"
       >
@@ -81,11 +83,7 @@ export function NewSession({
               maxLength={200}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={
-                type === 'purchase'
-                  ? '예: 이번 주 매입 준비'
-                  : '예: 점심 시간 운영 실험'
-              }
+              placeholder={`비워 두면 "${defaultTitle(type)}"`}
             />
           </label>
           {/* 말로 하기를 기본으로 두고, 표 입력은 원하는 분만 고르도록 작게 둔다. */}
@@ -228,10 +226,16 @@ function InputReview({
   workspace: WorkspaceController
   onEdit: () => void
 }) {
-  const { context, input, busy, saved } = workspace
+  const { context, input, busy, saved, result } = workspace
+  // 이 조건으로 계산을 마쳤으면 "계산 전" 카드는 접는다. 결과 칸의 "조건 수정"으로 고칠 수 있다.
+  const calculated =
+    !!context?.input_confirmed &&
+    result?.response_status === 'ok' &&
+    result.input_version_id === context.current_version_id
   if (
     !context?.current_version_id ||
-    currentQuestion(workspace.messages, context)
+    currentQuestion(workspace.messages, context) ||
+    calculated
   )
     return null
   const purchase = context.feature_type === 'purchase'
@@ -280,10 +284,10 @@ function InputReview({
                     <tr key={i}>
                       <td>{String(item.item_name ?? '품목')}</td>
                       <td>
-                        {amount(item.gross_need, String(item.base_unit ?? ''))}
+                        {quantity(item.gross_need, String(item.base_unit ?? ''))}
                       </td>
                       <td>
-                        {amount(
+                        {quantity(
                           item.usable_inventory,
                           String(item.base_unit ?? ''),
                         )}
@@ -361,6 +365,10 @@ export default function Workspace({
   )
   const [draft, setDraft] = useState('')
   const question = currentQuestion(messages, context)
+  const questionText = question?.question?.text ?? '빠진 입력을 알려 주세요.'
+  const lastAssistant = messages
+    .filter((message) => message.role === 'assistant')
+    .at(-1)?.content
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (messages.length || busy)
@@ -563,12 +571,16 @@ export default function Workspace({
             {question && (
               <div className="question-card">
                 <p className="eyebrow">한 가지만 더 확인할게요</p>
-                <h3>{question.question?.text ?? '빠진 입력을 알려 주세요.'}</h3>
-                {question.missing_fields?.map((field) => (
-                  <p className="muted" key={field.path}>
-                    {fieldName(field.path, field.label)}
-                  </p>
-                ))}
+                {/* 바로 위 말풍선과 같은 문장이면 다시 쓰지 않는다. 같은 말이 세 번 보이지 않게. */}
+                {questionText !== lastAssistant && <h3>{questionText}</h3>}
+                {question.missing_fields
+                  ?.map((field) => fieldName(field.path, field.label))
+                  .filter((label) => label !== questionText)
+                  .map((label) => (
+                    <p className="muted" key={label}>
+                      {label}
+                    </p>
+                  ))}
                 <div className="question-options">
                   {question.question?.choices?.map((answer) => (
                     <button

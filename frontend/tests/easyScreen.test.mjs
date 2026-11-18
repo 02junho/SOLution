@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import {
   baselineSentence,
   choiceSentence,
+  defaultTitle,
+  packLabel,
+  quantity,
 } from '../src/features/workflow/model.ts'
 
 // 쉬운 화면(시니어 사장님 기준): 안 카드와 비교 문장이 숫자 대신 쉬운 말로 나온다.
@@ -39,4 +42,21 @@ test('기준선과의 차이를 아끼는지 더 드는지로 말한다', () => 
     baselineSentence(0),
     '품목마다 가장 싼 곳에서 따로 살 때와 같아요.',
   )
+})
+
+test('양은 kg·L·개로 읽기 쉽게 보여 준다', () => {
+  assert.equal(quantity(2700, 'g'), '2.7kg')
+  assert.equal(quantity(500, 'g'), '500g')
+  assert.equal(quantity(10400, 'ml'), '10.4L')
+  assert.equal(quantity(130, 'ea'), '130개')
+  assert.equal(quantity(null, 'g'), '확인 필요')
+  assert.equal(packLabel(1000, 'g'), '1kg')
+  assert.equal(packLabel(12000, 'ml'), '12L')
+  assert.equal(packLabel(50, 'ea'), '50개 묶음')
+})
+
+test('업무 이름을 비우면 날짜가 들어간 이름을 쓴다', () => {
+  const day = new Date(2026, 10, 18)
+  assert.equal(defaultTitle('purchase', day), '11월 18일 매입 준비')
+  assert.equal(defaultTitle('operation', day), '11월 18일 운영 준비')
 })

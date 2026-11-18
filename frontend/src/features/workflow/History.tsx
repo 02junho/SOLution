@@ -174,8 +174,8 @@ export function SessionHistory({
             <span>
               <strong>{session.title}</strong>
               <small>
-                {featureName(session.feature_type)} · 입력{' '}
-                {session.current_version} · {dateTime(session.updated_at)}
+                {featureName(session.feature_type)} ·{' '}
+                {dateTime(session.updated_at)}
               </small>
             </span>
             <span className="status-pill">
@@ -220,7 +220,6 @@ export function ConfirmationHistory({
     <section className="history-page">
       <div className="page-title">
         <div>
-          <p className="eyebrow">SAVED PLANS</p>
           <h1>저장한 계획</h1>
           <p>사장님이 직접 확인하고 선택한 계획을 모았어요.</p>
         </div>

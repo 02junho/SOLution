@@ -8,6 +8,7 @@ import {
   applicableWarnings,
   baselineSentence,
   choiceSentence,
+  packLabel,
   dateTime,
   currentQuestion,
   featureName,
@@ -37,6 +38,13 @@ function nameOf(
   return String(
     entry?.[section === 'items' ? 'item_name' : 'supplier_name'] ??
       (typeof id === 'string' ? id : section === 'items' ? '품목' : '거래처'),
+  )
+}
+// 문구 초안이 어느 거래처 것인지: 문구에 이름이 없으면 같은 결과의 구매 목록 줄에서 찾는다.
+function supplierName(message: JsonObject, lines: JsonObject[]) {
+  const line = lines.find((item) => item.supplier_id === message.supplier_id)
+  return String(
+    message.supplier_name ?? line?.supplier_name ?? message.supplier_id ?? '거래처',
   )
 }
 export function PurchaseLines({
@@ -71,7 +79,7 @@ export function PurchaseLines({
                     line.supplier_name ??
                       nameOf(input, 'suppliers', line.supplier_id),
                   )}{' '}
-                  · {amount(line.pack_size, String(line.pack_unit ?? ''))}
+                  · {packLabel(line.pack_size, String(line.pack_unit ?? ''))}
                 </small>
               </td>
               <td>{amount(line.pack_count, '개')}</td>
@@ -367,7 +375,8 @@ export default function Results({
                   {detail?.order_messages?.map((message) => (
                     <details className="order-draft" key={message.supplier_id}>
                       <summary>
-                        거래처에 보낼 문구 초안 <span>직접 확인 후 사용</span>
+                        {supplierName(message, detail?.lines ?? [])}에 보낼
+                        문구 초안 <span>직접 확인 후 사용</span>
                       </summary>
                       <pre>{message.text}</pre>
                       <button
@@ -509,7 +518,14 @@ export function ConfirmationModal({
           )}
           {orderMessages.map((message, index) => (
             <details className="order-draft" key={index}>
-              <summary>저장 당시의 거래처별 문구</summary>
+              <summary>
+                저장 당시{' '}
+                {supplierName(
+                  message,
+                  Array.isArray(lines) ? lines.map(object) : [],
+                )}
+                에 보낼 문구
+              </summary>
               <pre>{String(message.text ?? '')}</pre>
             </details>
           ))}

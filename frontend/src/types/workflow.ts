@@ -74,7 +74,11 @@ export type PurchaseResult = {
     choices?: {
       choice_key: string
       lines?: JsonObject[]
-      order_messages?: { supplier_id: string; text: string }[]
+      order_messages?: {
+        supplier_id: string
+        supplier_name?: string
+        text: string
+      }[]
     }[]
   } | null
 }

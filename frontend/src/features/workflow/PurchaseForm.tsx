@@ -155,16 +155,20 @@ export default function PurchaseForm({
         <fieldset disabled={busy}>
           <div className="form-toolbar">
             <span className="eyebrow">매입·재고 조건</span>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                setDraft(purchaseExample())
-                setError('')
-              }}
-            >
-              합성 예제 불러오기
-            </button>
+            {/* 개발 확인용 버튼이라 사장님 화면에서는 숨긴다. 시연도 개발 서버로 하므로 DEV가 아니라
+                VITE_SHOW_EXAMPLES=true일 때만 보인다 (예: VITE_SHOW_EXAMPLES=true npm run dev). */}
+            {import.meta.env.VITE_SHOW_EXAMPLES === 'true' && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setDraft(purchaseExample())
+                  setError('')
+                }}
+              >
+                합성 예제 불러오기
+              </button>
+            )}
           </div>
           {(error || serverError) && (
             <Alert error>{error || serverError}</Alert>
