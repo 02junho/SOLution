@@ -2196,12 +2196,16 @@ main > .notice {
   font-size: 17px;
 }
 .send-button {
-  width: 44px;
+  width: auto;
   height: 44px;
+  gap: 6px;
+  padding: 0 16px;
+  font-size: 16px;
+  font-weight: 650;
   border-radius: 9px;
 }
 .composer textarea {
-  padding-right: 64px;
+  padding-right: 130px;
 }
 .input-method-note {
   font-size: 16px;

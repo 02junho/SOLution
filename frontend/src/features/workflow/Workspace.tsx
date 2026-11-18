@@ -643,14 +643,16 @@ export default function Workspace({
                 <button
                   type="submit"
                   className="send-button"
-                  aria-label="메시지 보내기"
                   disabled={!context || !!busy || !draft.trim()}
                 >
-                  <Icon name="arrow" size={20} />
+                  {/* 그림만으로는 알아보기 어려워 글자를 함께 둔다. Enter를 모르는 분도 눌러서 보낸다. */}
+                  보내기
+                  <Icon name="arrow" size={18} />
                 </button>
               </form>
               <small>
-                Enter를 누르면 보내져요. 모르는 값은 모른다고 말씀하셔도 돼요.
+                Enter나 보내기 버튼으로 보내요. 모르는 값은 모른다고
+                말씀하셔도 돼요.
               </small>
             </div>
           )}
