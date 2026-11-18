@@ -9,7 +9,7 @@ const { createRoot } = await import('react-dom/client')
 import { useWorkspace } from '../src/features/workflow/useWorkspace.ts'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
-let current, root, version, confirmations, post, requests
+let current, root, version, confirmations, post, requests, storedInput
 const originalFetch = globalThis.fetch
 const ok = (data, message = null) =>
   new Response(JSON.stringify({ status: 'ok', data, message }), {
@@ -23,6 +23,7 @@ function Harness() {
   return React.createElement('div')
 }
 beforeEach(async () => {
+  storedInput = null
   version = 1
   confirmations = []
   requests = []
@@ -40,6 +41,7 @@ beforeEach(async () => {
       return ok({ items: confirmations, next_cursor: null })
     const id = Number(url.split('/').at(-1))
     return ok({
+      current_input: storedInput,
       session_id: id,
       current_version: version,
       current_version_id: version * 10,
@@ -169,4 +171,17 @@ test('별도 조회가 서로 다른 시점이면 다른 버전의 확정을 현
     await current.open(1)
   })
   assert.equal(current.saved.confirmation_id, 8)
+})
+
+test('대화 없는 업무도 서버에 저장된 현재 입력을 복원한다', async () => {
+  storedInput = {
+    budget_krw: 200000,
+    planning_days: 7,
+    items: [{ item_id: 'milk', usable_inventory: null }],
+  }
+  await act(async () => {
+    await current.open(1003)
+  })
+  assert.deepEqual(current.input, storedInput)
+  assert.deepEqual(current.messages, [])
 })

@@ -184,6 +184,23 @@ class WorkSessionApiIntegrationTest {
 	}
 
 	@Test
+	void 대화가_없어도_현재_입력을_객체로_반환하고_다른_매장에는_숨긴다() throws Exception {
+		insertSession(500, 10, 2);
+		insertVersion(1001, 500, 1, true);
+		insertVersion(1002, 500, 2, true);
+		jdbcTemplate.update("UPDATE work_version SET input_json = '{\"budget_krw\":100000}'::jsonb WHERE input_version_id=1001");
+		jdbcTemplate.update("UPDATE work_version SET input_json = '{\"budget_krw\":200000,\"items\":[{\"item_id\":\"milk\",\"usable_inventory\":null}]}'::jsonb WHERE input_version_id=1002");
+		mockMvc.perform(get("/api/v1/work-sessions/500"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.current_input.budget_krw").value(200000))
+				.andExpect(jsonPath("$.data.current_input.items[0].item_id").value("milk"))
+				.andExpect(jsonPath("$.data.current_input.items[0].usable_inventory").value(nullValue()));
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM session_message", Integer.class)).isZero();
+		jdbcTemplate.update("UPDATE work_session SET store_id=20 WHERE session_id=500");
+		mockMvc.perform(get("/api/v1/work-sessions/500")).andExpect(status().isNotFound());
+	}
+
+	@Test
 	void 현재_입력_버전이_없으면_이전_버전의_입력확인과_결과를_가져오지_않는다() throws Exception {
 		insertSession(500, 10, 2);
 		insertVersion(1001, 500, 1, true);
@@ -191,6 +208,7 @@ class WorkSessionApiIntegrationTest {
 
 		mockMvc.perform(get("/api/v1/work-sessions/500"))
 				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.current_input").value(nullValue()))
 				.andExpect(jsonPath("$.data.current_version_id").value(nullValue()))
 				.andExpect(jsonPath("$.data.input_confirmed").value(false))
 				.andExpect(jsonPath("$.data.latest_result_id").value(nullValue()));

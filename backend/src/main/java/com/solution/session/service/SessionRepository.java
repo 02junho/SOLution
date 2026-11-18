@@ -27,7 +27,7 @@ public class SessionRepository {
 	public record SessionContextRow(long sessionId, long storeId, String featureType, String inputMethod,
 			String title, int currentVersion, Long currentVersionId, OffsetDateTime inputConfirmedAt, String step,
 			Long latestResultId, boolean hasConfirmation, OffsetDateTime createdAt, OffsetDateTime updatedAt,
-			String ownerKey) {
+			String ownerKey, String currentInputJson) {
 	}
 
 	/** 업무 목록 한 줄. 화면 카드에 필요한 요약만 담는다. */
@@ -64,7 +64,7 @@ public class SessionRepository {
 		List<SessionContextRow> rows = jdbcTemplate.query("""
 				SELECT s.session_id, s.store_id, s.feature_type, s.input_method, s.title,
 				       s.current_version, s.step, s.created_at, s.updated_at, st.owner_key,
-				       v.input_version_id AS current_version_id, v.input_confirmed_at,
+				       v.input_version_id AS current_version_id, v.input_confirmed_at, v.input_json::text AS current_input_json,
 				       (SELECT r.result_id FROM work_result r
 				         WHERE r.input_version_id = v.input_version_id
 				         ORDER BY r.created_at DESC, r.result_id DESC
@@ -90,7 +90,7 @@ public class SessionRepository {
 				rs.getBoolean("has_confirmation"),
 				rs.getObject("created_at", OffsetDateTime.class),
 				rs.getObject("updated_at", OffsetDateTime.class),
-				rs.getString("owner_key")),
+				rs.getString("owner_key"), rs.getString("current_input_json")),
 				sessionId);
 		return rows.stream().findFirst();
 	}

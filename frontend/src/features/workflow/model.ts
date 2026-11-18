@@ -11,9 +11,13 @@ export const object = (value: unknown): JsonObject =>
   value != null && typeof value === 'object' && !Array.isArray(value)
     ? (value as JsonObject)
     : {}
-export const amount = (value: unknown, suffix = '원') =>
+export const amount = (
+  value: unknown,
+  suffix = '원',
+  options?: Intl.NumberFormatOptions,
+) =>
   typeof value === 'number' && Number.isFinite(value)
-    ? `${value.toLocaleString('ko-KR')}${suffix}`
+    ? `${value.toLocaleString('ko-KR', options)}${suffix}`
     : '확인 필요'
 export const dateTime = (value: string) =>
   new Date(value).toLocaleString('ko-KR', {
