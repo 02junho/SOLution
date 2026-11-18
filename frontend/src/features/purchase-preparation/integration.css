@@ -1,0 +1,20 @@
+.qi-controls,.qi-input {display:grid;gap:8px}
+.qi-controls label,.qi-input label {display:grid;gap:3px;font-size:12px}
+.qi-controls input,.qi-input textarea {width:100%}
+.qi-input {padding:10px;border-top:1px solid #dfe3eb}
+.qi-input[open] > * {margin-bottom:6px}
+.qi-input .qi-check {display:flex;align-items:center;gap:6px}
+.qi-actions {display:flex;flex-wrap:wrap;gap:6px}
+.qi-grid,.qi-feedback {margin-top:12px}
+.qi pre {max-width:100%;overflow:auto;font-size:12px;background:#f0f2f5;padding:8px}
+.qi summary {overflow-wrap:anywhere;cursor:pointer}
+.solution-shell {display:grid;grid-template-columns:156px minmax(0,1fr);min-height:100vh}
+.solution-nav {border-right:1px solid #dfe3eb;padding:15px 11px}
+.solution-nav a {display:block;color:#244da9;padding:8px 5px;font-size:13px;overflow-wrap:anywhere}
+.solution-nav a[aria-current] {border-radius:5px;background:#e6edfd;font-weight:700}
+.solution-brand {color:#244da9;font-weight:750;margin-bottom:22px}
+@media (max-width:860px) {
+ .solution-shell {grid-template-columns:minmax(0,1fr)}
+ .solution-nav {display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-right:0;border-bottom:1px solid #dfe3eb}
+ .solution-brand {margin:0 8px 0 0}
+}
