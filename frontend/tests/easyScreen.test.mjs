@@ -53,6 +53,8 @@ test('양은 kg·L·개로 읽기 쉽게 보여 준다', () => {
   // 바꾸면 반올림돼 차이가 사라지는 값은 원래 단위로 둔다
   assert.equal(quantity(1001, 'g'), '1,001g')
   assert.equal(quantity(0.001, 'g'), '0.001g')
+  assert.equal(quantity(0.0001, 'g'), '0.0001g')
+  assert.equal(quantity(2.5, 'ea'), '2.5개')
   assert.equal(quantity(12500, 'ml'), '12.5L')
   assert.equal(packLabel(1000, 'g'), '1kg')
   assert.equal(packLabel(12000, 'ml'), '12L')

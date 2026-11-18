@@ -108,8 +108,9 @@ export function quantity(value: unknown, unit: string) {
   const exact = Math.abs(value) >= 1000 && Number.isInteger(value / 10)
   if (unit === 'g' && exact) return `${text(value / 1000, 2)}kg`
   if (unit === 'ml' && exact) return `${text(value / 1000, 2)}L`
-  if (unit === 'ea') return `${text(value, 3)}개`
-  return `${text(value, 3)}${unit}`
+  // 원래 단위로 둘 때는 소수 10자리까지 보여 준다(0.0001g도 그대로). 0.1+0.2 같은 계산 오차 꼬리는 자른다.
+  if (unit === 'ea') return `${text(value, 10)}개`
+  return `${text(value, 10)}${unit}`
 }
 // 견적 한 묶음: 1000g → 1kg, 50ea → 50개 묶음
 export const packLabel = (size: unknown, unit: string) =>
