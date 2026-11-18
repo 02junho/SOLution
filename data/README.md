@@ -24,6 +24,8 @@
 | `demo/suppliers.csv` | 거래처 최소 주문금액 · 배송비 · 무료배송 기준 금액 | 신준호 |
 | `demo/inventory.csv` | 재고 · 안전재고 · 보관 한도 | 신준호 |
 | `demo/purchase_conditions.json` | 예산 · 배송 횟수 한도 · 계획 기간 | 신준호 |
+| `demo/expanded/quotes.csv` | 거래처 12곳 견적 (시연 업무 1005). 품목·재고·조건은 위 1004 자료와 같음 | 최정경 |
+| `demo/expanded/suppliers.csv` | 거래처 12곳 조건 (원두·우유·포장재 전문점 3곳씩 + 종합 3곳). 값마다 근거는 드라이브 「시연 자료 확인 요청 2 - 거래처 12곳 (11.17)」 | 신준호 |
 | `demo/time_slots.csv` | 시간대 구간별 손님 비중 · 인원 | 최가영 |
 | `demo/operation_conditions.json` | 하루 손님 수 · 반복 횟수 | 최가영 |
 | `demo/process_times.csv` | 메뉴별 주문·제조·전달 시간, 머신 사용 시간 | 최가영 |

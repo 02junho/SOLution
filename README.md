@@ -163,14 +163,15 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 | 구매 업무 1002 (입력 버전 100201) | 예산만 100,000원 | `infeasible` · 예산 부족 |
 | 구매 업무 1003 (입력 버전 100301) | 우유 재고 빈칸 | `needs_input` · 우유 재고 질문 |
 | 구매 업무 1004 (입력 버전 100401) | `data/demo` 시연 자료 (품목 5 · 거래처 4) | `ok` · 안 1 125,500원 · 안 2 127,500원 · 기준선 119,500원(배송 3회 · 최소 주문 미달로 주문 불가) |
+| 구매 업무 1005 (입력 버전 100501) | `data/demo/expanded` 시연 자료 (품목 5 · 거래처 12: 원두·우유·포장재 전문점 3곳씩 + 종합 3곳) | `ok` · 안 1 113,280원 · 안 2 127,500원 · 기준선 166,090원(배송 4회 · 최소 주문 미달 · 보관 한도 초과로 주문 불가). 배송 한도를 3회로 바꾸면 안 1 101,090원 |
 
-네 업무 모두 입력 확인이 끝난 상태라, http://localhost:8080/docs 에서 바로 부를 수 있습니다.
+다섯 업무 모두 입력 확인이 끝난 상태라, http://localhost:8080/docs 에서 바로 부를 수 있습니다.
 
 ```bash
 curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Type: application/json' -d '{"input_version_id": 100101}'
 ```
 
-응답의 `result_id`로 `GET /api/v1/purchase/results/{result_id}`를 부르면 상세(거래처별 목록·주문 문구)를 봅니다. CI의 compose 단계도 이 네 건으로 끝까지 확인합니다. 이미 시연 데이터를 넣은 DB라면 `docker compose up -d --build backend`로 다시 띄우면 없는 1004만 추가됩니다. 업무 시작(`POST /api/v1/work-sessions`)에는 `store_id` 1을 쓰면 됩니다.
+응답의 `result_id`로 `GET /api/v1/purchase/results/{result_id}`를 부르면 상세(거래처별 목록·주문 문구)를 봅니다. CI의 compose 단계도 이 다섯 건으로 끝까지 확인합니다. 이미 시연 데이터를 넣은 DB라면 `docker compose up -d --build backend`로 다시 띄우면 없는 업무(1004·1005)만 추가됩니다. 업무 시작(`POST /api/v1/work-sessions`)에는 `store_id` 1을 쓰면 됩니다.
 
 ### 6. 연결을 하나씩 확인하기
 
@@ -192,9 +193,9 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | 3 | FastAPI 혼자, FastAPI → DB (`/health`) |
 | 4 | Spring 혼자, Spring → DB, Spring → FastAPI (`/api/v1/system/health`) |
 | 5 | API 문서(`/docs`) |
-| 6 | 시연 데이터 (매장 1, 구매 업무 1001~1004) |
+| 6 | 시연 데이터 (매장 1, 구매 업무 1001~1005) |
 | 7 | 구매 정상: 계산 → 저장 → 상세 재조회, 주문 문구 |
-| 8 | 구매 나머지: 예산 부족(infeasible), 재고 빈칸(needs_input), 거래처 4곳(ok) |
+| 8 | 구매 나머지: 예산 부족(infeasible), 재고 빈칸(needs_input), 거래처 4곳(ok), 거래처 12곳(ok) |
 | 9 | 같은 요청 키로 두 번 보내면 결과 1건 |
 | 10 | FastAPI 실행 기록(`execution_log`) |
 

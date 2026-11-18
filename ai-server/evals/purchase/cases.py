@@ -93,6 +93,67 @@ DEMO = {
 }
 
 
+# ── 거래처 12곳 시연 자료 (data/demo/expanded, 최정경 확인 11.18) · 시연 업무 1005와 같은 입력 ─────
+# 품목·재고·판매 계획은 1004(DEMO)와 같고 거래처·견적만 늘렸다. 값마다 근거는 드라이브 「시연 자료 확인 요청 2」.
+EXPANDED = {
+    "store_id": 1, "session_id": 100, "input_version_id": 1001,
+    "planning_days": 7, "budget_krw": 200000, "max_delivery_count": 2,
+    "items": copy.deepcopy(DEMO["items"]),
+    "suppliers": [
+        {"supplier_id": s, "supplier_name": n, "minimum_order_krw": mo, "delivery_fee_krw": fee, "free_delivery_min_krw": free}
+        for s, n, mo, fee, free in [
+            ("R1", "원두 로스터리 가 (대량 납품)", 76000, 2900, 78800),
+            ("R2", "원두 로스터리 나 (일반 납품)", 0, 3000, 50000),
+            ("R3", "원두 로스터리 다 (소분 판매)", 0, 3000, None),
+            ("M1", "유제품 대리점 가 (지역 직배송)", 0, 0, None),
+            ("M2", "유제품 대리점 나 (낱개 판매)", 0, 3000, 30000),
+            ("M3", "유제품 대리점 다 (6개 묶음)", 0, 4000, 50000),
+            ("P1", "포장재 도매 가 (박스 단위)", 0, 0, None),
+            ("P2", "포장재 도매 나 (100개 묶음)", 0, 3000, 50000),
+            ("P3", "포장재 소매 다 (50개 낱줄)", 0, 3000, None),
+            ("C", "카페 도매몰", 0, 5000, 150000),
+            ("D", "동네 식자재마트", 0, 2000, None),
+            ("G", "온라인 대형몰", 0, 3000, 19800),
+        ]
+    ],
+    "quotes": [
+        {"supplier_id": s, "item_id": i, "pack_size": size, "pack_unit": u, "pack_price_krw": p, "vat_included": v}
+        for s, i, size, u, p, v in [
+            ("R1", "beans", 1000, "g", 19000, True),
+            ("R2", "beans", 1000, "g", 25000, True),
+            ("R3", "beans", 1000, "g", 22700, True),
+            ("R3", "beans", 500, "g", 14800, True),
+            ("M1", "milk", 12000, "ml", 21600, True),
+            ("M2", "milk", 1000, "ml", 2050, True),
+            ("M3", "milk", 6000, "ml", 11100, None),
+            ("P1", "ice_cup", 1000, "ea", 48900, True),
+            ("P1", "hot_cup", 1000, "ea", 30900, True),
+            ("P1", "lid", 1000, "ea", 19620, True),
+            ("P2", "ice_cup", 100, "ea", 5500, True),
+            ("P2", "hot_cup", 100, "ea", 3200, True),
+            ("P2", "lid", 100, "ea", 1790, True),
+            ("P3", "ice_cup", 50, "ea", 3100, True),
+            ("P3", "hot_cup", 50, "ea", 1650, True),
+            ("P3", "lid", 50, "ea", 1170, True),
+            ("C", "beans", 1000, "g", 23000, True),
+            ("C", "milk", 12000, "ml", 34000, True),
+            ("C", "ice_cup", 50, "ea", 4000, True),
+            ("C", "hot_cup", 50, "ea", 4500, True),
+            ("C", "lid", 100, "ea", 3000, True),
+            ("D", "beans", 1000, "g", 26000, True),
+            ("D", "milk", 6000, "ml", 19800, True),
+            ("D", "ice_cup", 50, "ea", 5000, True),
+            ("D", "hot_cup", 50, "ea", 5500, True),
+            ("D", "lid", 100, "ea", 3500, True),
+            ("G", "beans", 1000, "g", 27000, True),
+            ("G", "milk", 12000, "ml", 32890, True),
+            ("G", "ice_cup", 100, "ea", 6100, True),
+            ("G", "hot_cup", 100, "ea", 3200, True),
+            ("G", "lid", 100, "ea", 1790, True),
+        ]
+    ],
+}
+
 def _with(base: dict, fn) -> dict:
     req = copy.deepcopy(base)
     fn(req)
@@ -124,6 +185,13 @@ def named_cases() -> list[dict]:
          "expect": {"status": "infeasible", "violations": ["storage"], "oracle": True}},
         {"id": "E06", "name": "시연 자료 (품목 5 · 거래처 4, 업무 1004)", "source": "신준호 계산 (11.15), 최정경 자료 확인 (11.17)", "request": DEMO,
          "expect": {"status": "ok", "p1": 125500, "p2": 127500, "baseline": 119500, "baseline_violations": ["delivery_count", "minimum_order"]}},
+        {"id": "E18", "name": "시연 자료 (품목 5 · 거래처 12, 업무 1005)", "source": "신준호 계산 (11.17), 최정경 자료 확인 (11.18)", "request": EXPANDED,
+         # 안 1: 원두 로스터리 다(1kg × 2 + 500g) + 온라인 대형몰(19,800원 이상 무료배송). 안 2: 카페 도매몰 한 곳(1004와 같음).
+         "expect": {"status": "ok", "p1": 113280, "p2": 127500, "baseline": 166090, "baseline_violations": ["delivery_count", "minimum_order", "storage"]}},
+        {"id": "E19", "name": "거래처 12곳 · 배송 한도 3회", "source": "신준호 계산 (11.17), 최정경 자료 확인 (11.18)",
+         # 배송을 하나 더 쓸 수 있으면 우유는 직배송 대리점(12L 21,600원, 배송비 없음), 컵·뚜껑은 50개 낱줄로 바뀐다.
+         "request": _with(EXPANDED, lambda r: r.update(max_delivery_count=3)),
+         "expect": {"status": "ok", "p1": 101090, "p2": 127500, "baseline": 166090, "baseline_violations": ["delivery_count", "minimum_order", "storage"]}},
         {"id": "E07", "name": "폐기 조건 · 우유 한도에 딱 맞음", "source": "API 명세 손계산 (11.16)",
          "request": _with(SPEC, lambda r: r["items"][1].update(max_end_inventory=5000)),
          "expect": {"status": "ok", "p1": 120400, "p2": "unavailable", "baseline": 135800, "baseline_violations": ["spoilage"]}},
