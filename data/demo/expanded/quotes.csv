@@ -1,0 +1,32 @@
+supplier_id,item_id,pack_size,pack_unit,pack_price_krw,vat_included,source
+R1,beans,1000,g,19000,Y,가정
+R2,beans,1000,g,25000,Y,공개 판매가
+R3,beans,1000,g,22700,Y,공개 판매가
+R3,beans,500,g,14800,Y,공개 판매가
+M1,milk,12000,ml,21600,Y,공개 판매가
+M2,milk,1000,ml,2050,Y,공개 판매가
+M3,milk,6000,ml,11100,,공개 판매가
+P1,ice_cup,1000,ea,48900,Y,공개 판매가
+P1,hot_cup,1000,ea,30900,Y,공개 판매가
+P1,lid,1000,ea,19620,Y,공개 판매가
+P2,ice_cup,100,ea,5500,Y,공개 판매가
+P2,hot_cup,100,ea,3200,Y,공개 판매가
+P2,lid,100,ea,1790,Y,공개 판매가
+P3,ice_cup,50,ea,3100,Y,공개 판매가
+P3,hot_cup,50,ea,1650,Y,공개 판매가
+P3,lid,50,ea,1170,Y,공개 판매가
+C,beans,1000,g,23000,Y,가정
+C,milk,12000,ml,34000,Y,가정
+C,ice_cup,50,ea,4000,Y,가정
+C,hot_cup,50,ea,4500,Y,가정
+C,lid,100,ea,3000,Y,가정
+D,beans,1000,g,26000,Y,가정
+D,milk,6000,ml,19800,Y,가정
+D,ice_cup,50,ea,5000,Y,가정
+D,hot_cup,50,ea,5500,Y,가정
+D,lid,100,ea,3500,Y,가정
+G,beans,1000,g,27000,Y,가정
+G,milk,12000,ml,32890,Y,공개 판매가
+G,ice_cup,100,ea,6100,Y,공개 판매가
+G,hot_cup,100,ea,3200,Y,공개 판매가
+G,lid,100,ea,1790,Y,공개 판매가
