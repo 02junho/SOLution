@@ -14,6 +14,10 @@ import {
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import ResultExplanation from './ResultExplanation'
+// 운영 결과 비교·확정 요약 화면 연결
+import OperationComparison from '../operation/workspace/OperationComparison'
+import OperationConfirmationSummary from '../operation/workspace/OperationConfirmationSummary'
+import { CHOICE_TITLE } from '../operation/workspace/format'
 
 function nameOf(
   input: JsonObject | null,
@@ -93,6 +97,8 @@ export default function Results({
   const type = context?.feature_type ?? feature
   const pending = currentQuestion(workspace.messages, context)
   const result = pending ? null : workspace.result
+  // 운영 결과(구매 결과와 모양이 달라 따로 받는다)
+  const operation = pending || type !== 'operation' ? null : workspace.operation
   const saved = pending ? null : workspace.saved
   const [selected, setSelected] = useState(
     () => saved?.selected_choice_key ?? '',
@@ -149,18 +155,19 @@ export default function Results({
         <span className="status-pill">
           {saved
             ? '저장 완료'
-            : result?.response_status === 'ok'
+            : (result ?? operation)?.response_status === 'ok'
               ? '비교할 준비 완료'
-              : result
+              : (result ?? operation)
                 ? '조건 확인 필요'
                 : '계산 전'}
         </span>
       </div>
       <ResultExplanation
-        resultId={result?.result_id ?? null}
-        eligible={!!validResult}
+        resultId={result?.result_id ?? operation?.result_id ?? null}
+        eligible={!!validResult || operation?.response_status === 'ok'}
         busy={!!busy}
         choiceLabels={choiceLabels}
+        subject={type === 'operation' ? '세 운영안을 비교' : '구매안을 계산'}
       />
       {saved && (
         <div className="saved-banner">
@@ -177,7 +184,39 @@ export default function Results({
           </div>
         </div>
       )}
-      {!result ? (
+      {/* 운영 결과 비교 화면. 구매 결과 표시는 아래 그대로 */}
+      {operation ? (
+        operation.response_status !== 'ok' ? (
+          <div className="result-feedback">
+            <Alert>
+              {operation.summary.message ?? '조건을 확인하고 다시 계산해 주세요.'}
+            </Alert>
+            {operation.summary.missing_fields?.map((field) => (
+              <p key={field.path}>{field.label}</p>
+            ))}
+            {operation.summary.violations?.map((violation, i) => (
+              <p key={i}>{violation.message}</p>
+            ))}
+            <button className="button secondary" disabled={!!busy} onClick={onEdit}>
+              조건 수정하기
+            </button>
+          </div>
+        ) : (
+          <OperationComparison
+            result={operation}
+            input={input}
+            savedChoice={saved?.selected_choice_key ?? null}
+            valid={
+              !!context?.input_confirmed &&
+              operation.is_latest_version &&
+              operation.input_version_id === context.current_version_id
+            }
+            busy={!!busy}
+            onConfirm={(choice, warnings) => workspace.confirm(choice, warnings)}
+            onEdit={onEdit}
+          />
+        )
+      ) : !result ? (
         <div className="result-placeholder">
           <div className="result-illustration" aria-hidden="true">
             <div className="mini-card">
@@ -211,7 +250,7 @@ export default function Results({
             {pending
               ? '빠진 입력을 채운 뒤 새 조건을 확인하고 다시 계산해 주세요. 이전 계획은 저장한 계획에서 볼 수 있어요.'
               : type === 'operation'
-                ? '운영 결과 화면은 운영 계산 기능과 연결할 예정이에요. 지금은 업무와 대화를 저장할 수 있어요.'
+                ? '입력 확인 후 계산하면, 세 운영안의 대기시간과 인건비를 같은 손님 조건으로 여기에서 비교해요.'
                 : '입력 확인 후 계산하면, 조건에 맞는 구매안과 거래처별 목록을 여기에서 비교해요.'}
           </p>
           <div className="placeholder-note">
@@ -219,7 +258,9 @@ export default function Results({
             <span>
               계획 저장까지 도와드려요.
               <br />
-              발주와 결제는 사장님이 직접 진행해 주세요.
+              {type === 'operation'
+                ? '근무표 적용과 채용은 사장님이 직접 진행해 주세요.'
+                : '발주와 결제는 사장님이 직접 진행해 주세요.'}
             </span>
           </div>
         </div>
@@ -497,7 +538,7 @@ export function ConfirmationModal({
               choice.label ??
                 (detail.feature_type === 'purchase'
                   ? '구매 계획'
-                  : '운영 계획'),
+                  : `운영 계획 · ${CHOICE_TITLE[choice.choice_key as keyof typeof CHOICE_TITLE] ?? ''}`),
             )}
           </h3>
           {typeof choice.total_krw === 'number' && (
@@ -518,6 +559,10 @@ export function ConfirmationModal({
               <pre>{String(message.text ?? '')}</pre>
             </details>
           ))}
+          {/* 확정한 운영안 요약 */}
+          {detail.feature_type === 'operation' && (
+            <OperationConfirmationSummary choice={choice} />
+          )}
           {detail.feature_type === 'operation' && (
             <Alert>
               모의 조건으로 계산한 운영 계획이에요. 실제 운영 성과를 보장하지

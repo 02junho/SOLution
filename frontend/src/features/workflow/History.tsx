@@ -4,6 +4,8 @@ import { Alert, Empty, Icon, Modal } from '../../components/common/Ui'
 import type { FeatureType } from '../../types/api'
 import type { Confirmation, Page, SessionSummary } from '../../types/workflow'
 import { dateTime, featureName } from './model'
+// 운영: 저장한 계획 카드에 고른 운영안 이름 표시
+import { CHOICE_TITLE } from '../operation/workspace/format'
 
 type Filter = FeatureType | 'all'
 function Filters({
@@ -265,7 +267,7 @@ export function ConfirmationHistory({
             <h2>
               {confirmation.feature_type === 'purchase'
                 ? '저장한 구매 계획'
-                : '저장한 운영 계획'}
+                : `운영 계획 · ${CHOICE_TITLE[confirmation.selected_choice_key] ?? '저장한 안'}`}
             </h2>
             <p>
               입력 {confirmation.version_no} ·{' '}
