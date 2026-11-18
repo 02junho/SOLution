@@ -358,6 +358,9 @@ def test_영업일이_비어_있으면_오늘로_채운다(monkeypatch):
 def test_애매한_짧은_답은_확정하지_않는다():
     read = operation_fields.parse_answer
     assert read("is_owner_working", "직원만 일하면 어때?") is None
+    assert read("is_owner_working", "직원 둘이 같이 일해요") is None
+    assert read("is_owner_working", "네, 직원끼리 같이 일해요") is None
+    assert read("is_owner_working", "네, 같이 일해요") == 1
     assert read("is_owner_working", "아니요, 직원만 일해요") == 0
     assert read("hourly_wage_krw", "최저 말고 12000원") is None
     assert read("hourly_wage_krw", "최저시급보다 높게") is None

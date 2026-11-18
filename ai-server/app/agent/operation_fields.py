@@ -283,6 +283,9 @@ def parse_answer(key: str, answer) -> object | None:
         if any(word in text for word in ("아니", "안 해", "안해", "안 나", "안나")):
             return 0
         # "직원만 일하면 어때?"처럼 묻는 말은 답으로 확정하지 않는다(LLM 해석으로 넘김).
+        # "직원 둘이 같이 일해요"처럼 직원만 일한다는 말도 사장님 근무로 읽지 않는다.
+        if re.search(r"직원\s*(만|끼리|둘|들만|들끼리)", text):
+            return None
         # "어떻게…", "예를 들면…"처럼 같은 글자로 시작하는 다른 말은 답으로 읽지 않는다(첫 낱말 전체로 본다).
         first = re.split(r"[\s,.!~]+", text, maxsplit=1)[0]
         if first in _YES_WORDS or text.startswith("일해") or "같이 일" in text:
