@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { workflowApi, WorkflowError } from '../../api/workflowApi.ts'
+import { request } from '../../api/client.ts'
+import type { OperationResult } from '../operation/types'
 import type { FeatureType } from '../../types/api'
 import type {
   Confirmation,
@@ -10,11 +12,23 @@ import type {
 } from '../../types/workflow'
 import { confirmationKey, currentInput, RequestKeys } from './model.ts'
 
+// 운영 결과 API (api/operationApi.ts와 같은 주소). node 테스트가 확장자 있는 경로만 읽어서 여기서 직접 부른다.
+const loadOperationResult = (resultId: number, view: 'summary' | 'detail') =>
+  request<OperationResult>(`/v1/operation/results/${resultId}?view=${view}`)
+// 같은 실행을 다시 보낼 때는 같은 Idempotency-Key를 쓴다(필수, API v0.4).
+const runOperation = (sessionId: number, inputVersionId: number, key: string) =>
+  request<OperationResult>(`/v1/operation/sessions/${sessionId}/results`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: JSON.stringify({ input_version_id: inputVersionId }),
+  })
 type Workspace = {
   context: SessionContext | null
   messages: Message[]
   input: JsonObject | null
   result: PurchaseResult | null
+  // 운영 실험 결과(Spring 운영 API). 구매 결과와 모양이 달라 따로 둔다.
+  operation: OperationResult | null
   saved: Confirmation | null
 }
 const empty: Workspace = {
@@ -22,6 +36,7 @@ const empty: Workspace = {
   messages: [],
   input: null,
   result: null,
+  operation: null,
   saved: null,
 }
 async function load(id: number): Promise<Workspace> {
@@ -34,6 +49,17 @@ async function load(id: number): Promise<Workspace> {
     context.latest_result_id && context.feature_type === 'purchase'
       ? await workflowApi.result(context.latest_result_id)
       : null
+  const operation =
+    context.latest_result_id && context.feature_type === 'operation'
+      ? await loadOperationResult(context.latest_result_id, 'summary')
+      : null
+  // 결과를 못 읽었으면 "비교했어요"로 넘기지 않고 다시 불러오기 안내로 보낸다.
+  if (operation && operation.status !== 'ok')
+    throw new WorkflowError(
+      operation.message ?? '운영 결과를 불러오지 못했어요.',
+      undefined,
+      operation.httpStatus,
+    )
   return {
     context,
     messages,
@@ -42,6 +68,11 @@ async function load(id: number): Promise<Workspace> {
       currentInput(messages, context.current_version_id),
     result:
       result?.input_version_id === context.current_version_id ? result : null,
+    operation:
+      operation?.status === 'ok' &&
+      operation.data?.input_version_id === context.current_version_id
+        ? operation.data
+        : null,
     saved:
       confirmations.items.find(
         (item) =>
@@ -63,6 +94,8 @@ export function useWorkspace() {
   )
   const [pendingSessions, setPendingSessions] = useState<number[]>([])
   const keys = useRef(new RequestKeys())
+  // 운영 대화에서 "비교 시작해줘"라고 하면 대화 응답에 계산 시작 표시(action: run_operation)가 온다.
+  const runAfterEvent = useRef(false)
   const open = useCallback(async (id: number) => {
     if (locked.current) {
       queuedOpen.current = id
@@ -183,6 +216,16 @@ export function useWorkspace() {
     }
   }
   async function event(body: JsonObject) {
+    const generation = scope.current
+    const ok = await sendEvent(body)
+    if (ok && runAfterEvent.current) {
+      runAfterEvent.current = false
+      // 기다리는 동안 다른 업무를 열었으면 계산하지 않는다. 계산 실패는 따로 보이고, 보낸 말은 저장된 것으로 둔다.
+      if (scope.current === generation) await calculateOperation()
+    }
+    return ok
+  }
+  async function sendEvent(body: JsonObject) {
     return act(
       '입력을 확인하고 있어요',
       async (context) => {
@@ -213,6 +256,9 @@ export function useWorkspace() {
             pending.key,
           )
           clearPending(id)
+          runAfterEvent.current =
+            context.feature_type === 'operation' &&
+            (response.data as JsonObject | null)?.action === 'run_operation'
           return response.message ?? '입력을 반영했어요.'
         } catch (cause) {
           if (
@@ -258,12 +304,46 @@ export function useWorkspace() {
       return '입력을 확인했어요. 이제 이 조건으로 계산할 수 있어요.'
     })
   }
+  function calculateOperation() {
+    return act(
+      '세 운영안을 30번씩 돌려 비교하고 있어요. 보통 10~30초, 주문이 많으면 1분 넘게 걸려요',
+      async (context) => {
+        if (!context.current_version_id) throw new Error('먼저 입력을 저장해 주세요.')
+        // 운영은 "세 운영안 비교하기" 한 번으로 입력 확인과 계산을 이어서 한다(확인 단계 안내를 따로 띄우지 않음).
+        if (!context.input_confirmed)
+          await workflowApi.confirmInput(context.current_version_id, context.current_version)
+        const signature = `operation:${context.session_id}:${context.current_version_id}`
+        const started = Date.now()
+        const response = await runOperation(
+          context.session_id,
+          context.current_version_id,
+          keys.current.for(signature),
+        )
+        if (response.status === 'error' || !response.data) {
+          const code = (response.data as unknown as JsonObject | null)?.detail_code
+          // 응답 대기 한도(Spring → FastAPI 120초)를 넘겼으면 주문 수를 줄이도록 안내한다.
+          throw new WorkflowError(
+            Date.now() - started >= 115_000
+              ? '계산이 제한 시간(120초) 안에 끝나지 않았어요. 하루 주문 건수를 줄이거나 잠시 뒤 다시 실행해 주세요.'
+              : (response.message ?? '운영 계산을 완료하지 못했어요.'),
+            typeof code === 'string' ? code : undefined,
+            response.httpStatus,
+          )
+        }
+        keys.current.done(signature)
+        return response.data.response_status === 'ok'
+          ? '세 운영안을 비교했어요. 차이를 보고 직접 선택해 주세요.'
+          : (response.message ?? '조건을 다시 확인해 주세요.')
+      },
+    )
+  }
   function calculate() {
+    if (workspace.context?.feature_type === 'operation') return calculateOperation()
     return act('조건에 맞는 구매안을 계산하고 있어요', async (context) => {
       if (!context.input_confirmed || !context.current_version_id)
         throw new Error('입력을 먼저 확인해 주세요.')
       if (context.feature_type !== 'purchase')
-        throw new Error('운영 계산 화면은 준비 중이에요.')
+        throw new Error('운영 계산은 운영 업무에서 실행해 주세요.')
       const signature = `calculate:${context.session_id}:${context.current_version_id}`
       const response = await workflowApi.calculate(
         context.session_id,
@@ -281,7 +361,8 @@ export function useWorkspace() {
   }
   function confirm(choice: string, warnings: string[]) {
     return act('선택한 계획을 저장하고 있어요', async (context) => {
-      const result = workspace.result
+      const operation = context.feature_type === 'operation'
+      const result = operation ? workspace.operation : workspace.result
       if (
         !result ||
         !context.current_version_id ||
@@ -309,7 +390,7 @@ export function useWorkspace() {
         key,
       )
       return response.is_new
-        ? '구매 계획을 저장했어요. 저장한 계획에서 다시 볼 수 있어요.'
+        ? `${operation ? '운영' : '구매'} 계획을 저장했어요. 저장한 계획에서 다시 볼 수 있어요.`
         : '이미 저장된 계획을 불러왔어요.'
     })
   }

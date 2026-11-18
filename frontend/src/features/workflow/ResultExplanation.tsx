@@ -28,6 +28,7 @@ type Props = {
   state?: ExplanationState
   choiceLabels?: Record<string, string>
   onRequest?: () => void
+  subject?: string
 }
 
 export default function ResultExplanation({
@@ -37,6 +38,7 @@ export default function ResultExplanation({
   state = { status: 'unconnected' },
   choiceLabels = {},
   onRequest,
+  subject = '구매안을 계산',
 }: Props) {
   const hasResult = eligible && resultId !== null
   const current: ExplanationState =
@@ -78,8 +80,7 @@ export default function ResultExplanation({
       </div>
       {!hasResult ? (
         <p className="explanation-hint">
-          입력을 확인하고 구매안을 계산하면, 결과에 대한 설명을 확인할 수
-          있어요.
+          입력을 확인하고 {subject}하면, 결과에 대한 설명을 확인할 수 있어요.
         </p>
       ) : loading ? (
         <p className="explanation-loading">

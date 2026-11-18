@@ -1,0 +1,412 @@
+/* 운영 실험(업무 화면 01 폼 · 02 결과). 팀 공통 카드·표·버튼(index.css)을 그대로 쓰고, 운영에만 있는 요소만 여기 둔다. */
+
+.operation-form .form-section h3 {
+  margin-bottom: 6px;
+}
+.opw-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.chip-button {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #3d4556;
+}
+.chip-button.active {
+  border-color: #616d89;
+  background: #eff2f9;
+  box-shadow: 0 0 0 1px #616d89;
+}
+.opw-info {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: help;
+}
+.opw-tip {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  top: 24px;
+  left: -120px;
+  width: 280px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #2d364a;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.opw-info:hover .opw-tip,
+.opw-info:focus .opw-tip {
+  display: block;
+}
+.opw-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.opw-plan-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.opw-plan-list div {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbfc;
+  font-size: 12px;
+}
+.opw-plan-list b {
+  min-width: 92px;
+}
+.opw-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.opw-menus {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px;
+  margin: 10px 0 6px;
+}
+.opw-menu {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.opw-menu.on {
+  background: #f5f7fb;
+}
+.opw-menu small {
+  color: var(--muted);
+}
+.opw-menu-weight input {
+  width: 46px;
+  text-align: right;
+}
+.opw-warn {
+  color: #b2402f;
+}
+.opw-problems {
+  margin: 0;
+  padding-left: 18px;
+}
+.opw-shift-line {
+  display: block;
+  color: #3d4556;
+}
+
+/* 02 결과 */
+.opw-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.opw-tags {
+  display: inline-flex;
+  gap: 4px;
+  min-height: 20px;
+}
+.opw-rows {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 4px;
+}
+.opw-rows div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+.opw-rows dt {
+  color: #5e6471;
+}
+.opw-rows dd {
+  margin: 0;
+  font-weight: 600;
+  color: #2d364a;
+  text-align: right;
+}
+.opw-total {
+  max-width: 360px;
+  margin-top: 12px;
+}
+.opw-gantt {
+  position: relative;
+  margin-top: 10px;
+}
+.opw-axis {
+  position: relative;
+  height: 18px;
+  margin-left: 64px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.opw-axis span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.opw-gantt-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.opw-gantt-row > span {
+  font-size: 12px;
+  font-weight: 600;
+}
+.opw-gantt-row small {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--muted);
+}
+.opw-track {
+  position: relative;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--soft);
+}
+.opw-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: #6f7ea3;
+}
+.opw-track i.owner {
+  background: #a3abbc;
+}
+.opw-track i.help {
+  background: #3f8f7b;
+}
+.opw-track i.break {
+  background: repeating-linear-gradient(45deg, #d7dae1, #d7dae1 3px, #eceef2 3px, #eceef2 6px);
+}
+.opw-legend {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 0 64px;
+}
+.status-pill.opw-help {
+  background: #e3f1ec;
+  color: #2f6e5e;
+}
+.status-pill.opw-owner {
+  background: #eceef2;
+}
+.status-pill.opw-break {
+  background: #f1f2f4;
+  color: #6b7080;
+}
+td.opw-over {
+  color: #b2402f;
+  font-weight: 600;
+}
+.opw-assumptions {
+  margin: 10px 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 1100px) {
+  .opw-choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── 02 결과 칸: 요약 + 확정 ───────────────────────── */
+.opw-pad { padding: 0 20px; }
+.opw-compact { display: grid; gap: 6px; margin: 6px 0 10px; }
+.opw-compact-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px;
+  width: 100%; padding: 9px 14px; text-align: left; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--paper); border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+}
+.opw-compact-row:hover:not(:disabled) { border-color: var(--green); }
+.opw-compact-row.selected { border-color: var(--green); box-shadow: 0 0 0 2px #1f54d622; background: #f5f8ff; }
+.opw-compact-row:disabled { cursor: default; opacity: 0.8; }
+.opw-compact-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.opw-compact-num { display: grid; gap: 1px; justify-items: end; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.opw-compact-num small { font-weight: 400; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.opw-tag { font-style: normal; font-size: 11px; padding: 2px 8px; border-radius: 30px; background: var(--soft); color: var(--muted); }
+.opw-tag.rec { background: #e3ebff; color: var(--green); font-weight: 600; }
+.opw-open-report { width: 100%; justify-content: center; margin-bottom: 12px; }
+
+/* ── 넓은 비교 화면 ───────────────────────────────── */
+.modal.wide:has(.opw-wide) { max-width: min(1240px, 96vw); }
+.opw-wide { padding: 20px 26px 24px; display: grid; gap: 18px; }
+.opw-report-head { display: flex; align-items: flex-start; gap: 10px; }
+.opw-report-head p { margin: 0; }
+.status-pill.opw-sim { background: #fff4e0; color: #8a5a00; white-space: nowrap; }
+.opw-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.opw-plan-card {
+  display: grid; align-content: start; background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+}
+.opw-plan-card.selected { border-color: var(--green); box-shadow: 0 0 0 2px #1f54d622; }
+.opw-plan-pick {
+  display: grid; gap: 6px; padding: 16px 16px 10px; text-align: left; font: inherit; color: var(--ink);
+  background: transparent; border: 0; border-radius: 12px 12px 0 0; cursor: pointer;
+}
+.opw-plan-pick:disabled { cursor: default; }
+.opw-plan-pick h3 { margin: 0; font-size: 16px; }
+.opw-more { padding: 0 16px 12px; font-size: 12px; }
+.opw-more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.opw-big { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.opw-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--paper); min-width: 0; }
+.opw-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) {
+  .opw-plan-grid, .opw-two { grid-template-columns: 1fr; }
+}
+
+/* ── 04 폼: 시간대 표·실험 방법 ───────────────────── */
+.opw-slot-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.opw-slot-table th, .opw-slot-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.opw-slot-table th:first-child, .opw-slot-table td:first-child { text-align: left; }
+.opw-slot-table tfoot td, .opw-slot-table tfoot th { font-weight: 700; border-bottom: 0; }
+.opw-cell-input { width: 72px; padding: 5px 7px; text-align: right; font: inherit; border: 1px solid var(--line); border-radius: 6px; }
+.opw-cell-input:focus { outline: 2px solid #1f54d655; border-color: var(--green); }
+.opw-method { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13px; margin: 0; }
+.opw-method dt { color: var(--muted); }
+.opw-method dd { margin: 0; }
+
+/* ── 대기열 재생: 공용 QueueReplay(features/operation)를 팀 색으로 덮기(원본 파일은 그대로) ── */
+.opw-replay .op-replay { background: var(--soft); border-radius: 10px; padding: 14px; }
+.opw-replay .op-replay svg { width: 100%; height: auto; }
+.opw-replay .op-replay-canvas { overflow-x: auto; }
+.opw-replay .op-replay-canvas svg { min-width: 520px; }
+.opw-replay .op-replay-status { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 12px; font-size: 12px; }
+.opw-replay .op-replay-status strong { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.opw-replay svg rect { fill: #fff; stroke: var(--line); }
+.opw-replay svg g:nth-child(even) > rect { fill: #f5f8ff; }
+.opw-replay svg text { fill: var(--ink); }
+.opw-replay svg circle { fill: var(--green); }
+.opw-replay svg path { fill: #8fa9ec; }
+.opw-replay .op-scrub { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-top: 10px; }
+.opw-replay .op-scrub input { flex: 1; min-width: 0; accent-color: var(--green); }
+.opw-replay .op-replay-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 12px; }
+.opw-replay .op-replay-controls button {
+  font: inherit; font-weight: 600; padding: 7px 16px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--green); background: var(--green); color: #fff;
+}
+.opw-replay .op-replay-controls button.op-secondary { background: #fff; color: var(--green); border-color: var(--line); }
+.opw-replay .op-replay-controls button:focus-visible { outline: 3px solid #1f54d655; outline-offset: 2px; }
+.opw-replay .op-replay-controls select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.opw-replay .op-muted { color: var(--muted); font-size: 12px; }
+.opw-replay .op-tag { display: inline-flex; border-radius: 30px; padding: 2px 8px; background: #fff4e0; color: #8a5a00; font-size: 11px; font-weight: 600; }
+.opw-replay .op-notice { font-size: 12px; color: #8a5a00; background: #fff4e0; border-radius: 8px; padding: 8px 10px; }
+
+/* ── 정리표 PDF (인쇄할 때만 보임) ───────────────── */
+.opw-print-root { display: none; }
+@media print {
+  @page { size: A4; margin: 14mm; }
+  /* 정리표를 열었을 때만 앱 화면을 숨긴다(다른 화면 인쇄는 그대로) */
+  body:has(> .opw-print-root) > *:not(.opw-print-root) { display: none !important; }
+  .opw-print-root { display: block; color: #000; font-size: 11pt; }
+  .opw-print h1 { font-size: 18pt; margin: 0 0 4pt; }
+  .opw-print h2 { font-size: 12.5pt; margin: 14pt 0 6pt; }
+  .opw-print table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .opw-print th, .opw-print td { border: 1px solid #bbb; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  .opw-print thead th, .opw-print tbody th { background: #f0f2f6; }
+  .opw-print tr.picked td { font-weight: 700; }
+  .opw-print-warn { color: #8a5a00; }
+  .opw-print-note { font-size: 10pt; }
+  .opw-print ul { padding-left: 16pt; font-size: 9.5pt; }
+}
+
+/* ── 폼 정리 ───────────────────────────────────── */
+.opw-form-head { margin-bottom: 14px; }
+.opw-form-head p { margin: 4px 0 0; line-height: 1.7; }
+.opw-toggle {
+  display: flex; flex-direction: row; align-items: flex-start; gap: 10px; margin: 4px 0 14px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: #fafbfd; cursor: pointer;
+}
+.opw-toggle input[type='checkbox'] { margin-top: 2px; }
+.opw-toggle span { display: grid; gap: 3px; }
+.opw-toggle b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.opw-toggle small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.opw-fixed { display: grid; gap: 5px; align-content: start; font-size: 12px; }
+.opw-fixed b { font-size: 14px; font-weight: 600; padding: 10px 0 2px; }
+.opw-fixed small { color: var(--muted); font-size: 12px; }
+.opw-invalid input { border-color: #d64545; background: #fff7f7; }
+.opw-invalid small { color: #c03030; font-weight: 600; }
+.opw-menu > span:first-child { display: flex; align-items: baseline; gap: 4px; }
+.opw-form-footer { align-items: center; flex-wrap: wrap; }
+.opw-footer-problems {
+  flex: 1 1 260px; margin: 0; padding: 8px 12px 8px 26px; border-radius: 8px;
+  background: #fff4f2; color: #b3261e; font-size: 12px; line-height: 1.7;
+}
+
+/* ── 계산 전 조건 확인 ─────────────────────────── */
+.opw-review-plans { list-style: none; margin: 12px 0 6px; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.opw-review-plans li { display: grid; grid-template-columns: 84px 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.opw-review-plans li:last-child { border-bottom: 0; }
+.opw-review-plans span { color: var(--muted); }
+.opw-review-note { font-size: 12px; }
+
+/* ── 확인 체크(공통 label이 세로 배치라 가로로 맞춤) ── */
+.warning.opw-ack { flex-direction: row; align-items: flex-start; cursor: pointer; }
+.warning.opw-ack input[type='checkbox'] { margin-top: 4px; }
+.warning.opw-ack b { display: block; }
+
+/* ── 피드백 반영: 글꼴·정렬 통일 ─────────────────── */
+.opw-form-head strong { display: block; font-size: 15px; font-weight: 700; color: var(--ink); }
+.opw-form-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); line-height: 1.7; }
+.opw-intro-title { display: block; font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.opw-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.opw-slot-details { margin-top: 10px; }
+.opw-slot-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--green); padding: 4px 0; }
+.opw-slot-details .opw-slot-table { max-width: 420px; margin-top: 6px; }
+.opw-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.opw-field { display: grid; grid-template-rows: auto auto auto; gap: 6px; align-content: start; }
+.opw-field-label { font-size: 13px; font-weight: 500; color: var(--ink); }
+.opw-field-box {
+  display: flex; align-items: center; min-height: 44px; padding: 0 14px; font-size: 14px; font-weight: 600;
+  border: 1px dashed var(--line); border-radius: 8px; background: #fafbfd; color: var(--ink);
+}
+.opw-field-note { font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.5; }
+.opw-invalid .opw-field-note { color: #c03030; font-weight: 600; }
+.opw-menus { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opw-menu-card {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #f7f9fc; min-width: 0;
+}
+.opw-menu-name { display: grid; gap: 2px; min-width: 0; }
+.opw-menu-name b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opw-menu-name small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.opw-menu-card .opw-menu-weight { display: flex; align-items: center; gap: 4px; font-size: 13px; flex: none; }
+.opw-menu-card .opw-menu-weight input { width: 56px; min-height: 34px; padding: 4px 8px; text-align: right; }
+@media (max-width: 640px) {
+  .opw-pair, .opw-menus { grid-template-columns: 1fr; }
+}
+.opw-caution { color: #8a5a00; background: #fff7e6; border-radius: 8px; padding: 10px 14px; margin: 20px 0 8px; }
+/* 공통 .form-section > p(위 여백 -3px)보다 우선해서 위 칸과 띄운다 */
+.form-section > .opw-caution { margin-top: 20px; }
+/* ── 저장한 계획(확정 기록) 운영 요약 ── */
+.opw-confirm-summary { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+.opw-confirm-title { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.opw-confirm-title b { color: var(--ink); font-size: 16px; margin-left: 6px; }
+.opw-need { color: #b45309; }
+.opw-choice-row { display: grid; gap: 8px; margin: 4px 0 16px; }
+.opw-choice-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.opw-next { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: #eef3ff; color: var(--ink); font-size: 13px; }

@@ -15,6 +15,10 @@ import {
 import type { WorkspaceController } from './useWorkspace'
 import PurchaseForm from './PurchaseForm'
 import Results from './Results'
+// 운영 실험 폼·입력 확인 화면 연결
+import OperationForm from '../operation/workspace/OperationForm'
+import OperationInputReview from '../operation/workspace/OperationInputReview'
+import { isOperationDraft } from '../operation/workspace/operationInput'
 
 export function NewSession({
   feature,
@@ -60,10 +64,7 @@ export function NewSession({
                 className={`session-type ${type === value ? 'selected' : ''}`}
                 aria-pressed={type === value}
                 key={value}
-                onClick={() => {
-                  setType(value)
-                  if (value === 'operation') setMethod('agent')
-                }}
+                onClick={() => setType(value)}
               >
                 <Icon name={value === 'purchase' ? 'box' : 'clock'} size={24} />
                 <strong>{featureName(value)}</strong>
@@ -100,7 +101,6 @@ export function NewSession({
             <button
               type="button"
               aria-pressed={method === 'form'}
-              disabled={type === 'operation'}
               className={method === 'form' ? 'active' : ''}
               onClick={() => setMethod('form')}
             >
@@ -109,8 +109,8 @@ export function NewSession({
           </div>
           {type === 'operation' && (
             <p className="muted">
-              운영 업무·대화 저장은 가능하며, 설정 폼과 계산은 운영 기능에
-              연결할 예정이에요.
+              대화로 "하루 150건 정도, 사장님도 일해요"처럼 말씀하시면 조건을 채워 드려요.
+              폼으로 직접 넣어도 돼요. 채운 뒤에도 대화나 폼으로 바꿀 수 있어요.
             </p>
           )}
           <div className="modal-footer">
@@ -132,13 +132,13 @@ export function NewSession({
   )
 }
 function Progress({ workspace }: { workspace: WorkspaceController }) {
-  const { context, saved, input, result } = workspace
+  const { context, saved, input, result, operation } = workspace
   const pending = currentQuestion(workspace.messages, context)
   const step = pending
     ? 2
     : saved
       ? 5
-      : result?.response_status === 'ok'
+      : result?.response_status === 'ok' || operation?.response_status === 'ok'
         ? 4
         : context?.input_confirmed
           ? 3
@@ -201,6 +201,22 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
               <dd>{amount(input.max_delivery_count, '회')}</dd>
             </div>
           </dl>
+        ) : !pending && input && context?.feature_type === 'operation' ? (
+          <dl>
+            {/* 운영 입력 요약(하루 주문·라스트 오더·비교할 안) */}
+            <div>
+              <dt>하루 주문</dt>
+              <dd>{amount(object(object(input.simulation).scenario).daily_orders, '건')}</dd>
+            </div>
+            <div>
+              <dt>라스트 오더</dt>
+              <dd>{String(object(object(input.simulation).scenario).last_order_time ?? '18:45')}</dd>
+            </div>
+            <div>
+              <dt>비교할 안</dt>
+              <dd>현재 · 서로 돕기 · 한 명 추가</dd>
+            </div>
+          </dl>
         ) : (
           <p>
             {pending
@@ -252,10 +268,9 @@ function InputReview({
             : `입력 ${context.current_version}`}
         </span>
       </div>
+      {/* 운영은 운영 입력 확인 화면을 보여 준다 */}
       {!purchase ? (
-        <p className="muted">
-          운영 조건 검토 화면은 운영 설정 기능과 연결할 예정이에요.
-        </p>
+        <OperationInputReview input={input} confirmed={context.input_confirmed} />
       ) : input ? (
         <>
           <div className="review-totals">
@@ -313,33 +328,36 @@ function InputReview({
         <button
           className="text-button"
           type="button"
-          disabled={!!busy || context.feature_type === 'operation'}
+          disabled={!!busy}
           onClick={onEdit}
         >
           조건 수정
         </button>
-        {!context.input_confirmed ? (
+        {/* 운영은 입력 확인과 계산을 '세 운영안 비교하기' 한 번으로 한다 */}
+        {!context.input_confirmed && context.feature_type !== 'operation' ? (
           <button
             className="button primary"
-            disabled={!!busy || !input || !purchase}
+            disabled={!!busy || !input}
             onClick={() => workspace.confirmInput()}
           >
-            {purchase
-              ? '이 조건으로 계산해도 좋아요'
-              : '운영 조건 확인 연결 예정'}{' '}
+            이 조건으로 계산해도 좋아요{' '}
             <Icon name="check" size={15} />
           </button>
         ) : (
           <button
             className="button primary"
-            disabled={!!busy || context.feature_type !== 'purchase' || !!saved}
+            disabled={
+              !!busy ||
+              !!saved ||
+              (context.feature_type === 'operation' && isOperationDraft(input))
+            }
             onClick={() => workspace.calculate()}
           >
-            {context.feature_type === 'operation'
-              ? '운영 계산 연결 예정'
-              : saved
-                ? '이미 저장한 조건이에요'
-                : '구매안 계산하기'}
+            {saved
+              ? '이미 저장한 조건이에요'
+              : purchase
+                ? '구매안 계산하기'
+                : '세 운영안 비교하기'}
             <Icon name="arrow" size={15} />
           </button>
         )}
@@ -387,7 +405,7 @@ export default function Workspace({
     if (await workspace.event(body)) setDraft('')
   }
   function edit() {
-    if (context?.feature_type === 'purchase') setFormOpen(true)
+    if (context) setFormOpen(true)
   }
   return (
     <>
@@ -604,7 +622,7 @@ export default function Workspace({
               </span>
               <button
                 className="text-button"
-                disabled={!context || !!busy || feature === 'operation'}
+                disabled={!context || !!busy}
                 onClick={edit}
               >
                 폼으로 직접 입력
@@ -618,9 +636,13 @@ export default function Workspace({
                 id="message"
                 rows={2}
                 placeholder={
-                  context
-                    ? '예: 이번 주 예산을 15만 원으로 바꿔줘'
-                    : '새 업무를 시작하면 대화할 수 있어요'
+                  !context
+                    ? '새 업무를 시작하면 대화할 수 있어요'
+                    : context.feature_type === 'operation'
+                      ? context.current_version_id
+                        ? '예: 하루 주문을 50건 늘려줘'
+                        : '예: 하루 150건 정도, 사장님도 일해요'
+                      : '예: 이번 주 예산을 15만 원으로 바꿔줘'
                 }
                 disabled={!context || !!busy}
                 value={draft}
@@ -649,7 +671,7 @@ export default function Workspace({
         </section>
         <Results
           feature={feature}
-          key={`${context?.current_version_id}:${workspace.result?.result_id}`}
+          key={`${context?.current_version_id}:${workspace.result?.result_id}:${workspace.operation?.result_id}`}
           workspace={workspace}
           onEdit={edit}
           onSaved={onSaved}
@@ -657,6 +679,19 @@ export default function Workspace({
       </div>
       {formOpen && context?.feature_type === 'purchase' && (
         <PurchaseForm
+          serverError={workspace.error}
+          key={`${context.session_id}:${context.current_version_id}`}
+          initial={questionDraft(messages, context) ?? workspace.input}
+          busy={!!busy}
+          onSave={(input) =>
+            workspace.event({ event_type: 'form', form_input: input })
+          }
+          onClose={() => setFormOpen(false)}
+        />
+      )}
+      {/* 운영 실험 폼 */}
+      {formOpen && context?.feature_type === 'operation' && (
+        <OperationForm
           serverError={workspace.error}
           key={`${context.session_id}:${context.current_version_id}`}
           initial={questionDraft(messages, context) ?? workspace.input}
