@@ -129,6 +129,9 @@ def check_plan(req: dict, summary: dict, detail: dict) -> list[str]:
             problems.append(f"{key}: 묶음 수가 양의 정수가 아닙니다 ({n})")
         if line["line_krw"] != line["pack_price_krw"] * n:
             problems.append(f"{key}: 줄 금액이 맞지 않습니다 {line}")
+        if (line.get("item_name") != items.get(line["item_id"], {}).get("item_name")
+                or line.get("supplier_name") != suppliers.get(line["supplier_id"], {}).get("supplier_name")):
+            problems.append(f"{key}: 줄의 품목·거래처 이름이 요청과 다릅니다 {sig}")
         goods[line["supplier_id"]] = goods.get(line["supplier_id"], 0) + line["pack_price_krw"] * n
         bought[line["item_id"]] += line["pack_size"] * n
 
