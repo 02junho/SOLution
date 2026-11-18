@@ -63,6 +63,8 @@ def run(body: ScheduleRequest):
     avoid = [(seconds(w.start_time), seconds(w.end_time)) for w in body.avoid_break_windows]
     for original in body.plans:
         plan = original.model_copy(deep=True)
+        # 같은 안에서 이미 정한 다른 사람의 휴게. 둘이 같이 쉬면 매장이 비므로 되도록 겹치지 않게 둔다.
+        taken = [(seconds(b.start_time), seconds(b.end_time)) for s in plan.shifts for b in s.breaks]
         for worker in body.workers:
             shifts = sorted((s for s in plan.shifts if s.worker_key == worker.worker_key),
                             key=lambda s: s.start_time)
@@ -93,11 +95,13 @@ def run(body: ScheduleRequest):
                                            min(seconds(shift.end_time)-additional, last-additional-60)+1, 60):
                             interval = (start, start+additional)
                             if not any(overlap(interval, rest) for rest in rests):
-                                candidates.append((any(overlap(interval, window) for window in avoid), start, shift))
+                                candidates.append((any(overlap(interval, rest) for rest in taken),
+                                                   any(overlap(interval, window) for window in avoid), start, shift))
                 if candidates:
                     target = first + (span - additional) // 2
-                    _, start, shift = min(candidates, key=lambda row: (row[0], abs(row[1] - target), row[1]))
+                    _, _, start, shift = min(candidates, key=lambda row: (row[0], row[1], abs(row[2] - target), row[2]))
                     shift.breaks.append(Break(start_time=clock(start), end_time=clock(start+additional), is_paid=False))
+                    taken.append((start, start+additional))
                     shift.breaks.sort(key=lambda b: b.start_time)
                     rest_total += additional
             if rest_total < required_break_seconds(span-rest_total):
