@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import time
 import math
 
+from app.agent import operation_flow
 from app.agent.interpreter import Interpreter
 from app.agent.privacy import sanitize
 from app.agent.schemas import Change, InterpretDraft, InterpretRequest, Unresolved
@@ -71,6 +72,11 @@ def run(req: InterpretRequest, interpreter: Interpreter) -> ApiResponse[dict]:
 
     req = InterpretRequest.model_validate(sanitize(req.model_dump()))
     draft = InterpretDraft.model_validate(sanitize(interpreter.interpret(req).model_dump()))
+    if req.feature_type == "operation":
+        # 운영은 근무표까지 만드는 별도 흐름(operation_flow.py). 잡담·처리 불가만 아래 공통 흐름으로 온다.
+        handled = operation_flow.handle(req, draft)
+        if handled is not None:
+            return handled
     if draft.intent == "unsupported":
         return infeasible({"detail_status": "UNSUPPORTED", "evidence": draft.evidence},
                           draft.reply or "이번 서비스에서는 처리할 수 없는 요청이에요.")
