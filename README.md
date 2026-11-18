@@ -150,7 +150,7 @@ cd frontend && npm test
 cd frontend && npm install && npm run dev
 ```
 
-http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI → DB`가 모두 `ok`로 나오면 연결이 끝난 것입니다. `/api` 요청은 Vite가 Spring(8080)으로 넘겨 줍니다.
+http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI → DB`가 모두 `ok`로 나오면 연결이 끝난 것입니다. `/api` 요청은 Vite가 Spring(8080)으로 넘겨 줍니다. 5173이 이미 쓰이고 있어 Vite가 5174 등 다른 번호로 뜨거나 `127.0.0.1`로 열어도 그대로 쓸 수 있습니다.
 
 ### 5. 시연용 기본 데이터 (`DEMO_SEED=true`)
 
