@@ -20,9 +20,9 @@ spring:
   jackson:
     # API·JSON 필드는 snake_case (Code Convention)
     property-naming-strategy: SNAKE_CASE
-  http:
-    converters:
-      preferred-json-mapper: jackson2
+  #http:
+  #  converters:
+  #    preferred-json-mapper: jackson2
 
 server:
   port: ${BACKEND_PORT:8080}
