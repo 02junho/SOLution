@@ -89,7 +89,8 @@ class CompareRequest(BaseModel):
     plans: list[dict] | None = None
     choices: list[dict] | None = None
     staffing_schema_version: str | None = None
-    request_key: str | None = Field(default=None, max_length=100)
+    # Spring은 화면 키(최대 100자) 뒤에 ":simulation"(11자)을 붙여 보낸다.
+    request_key: str | None = Field(default=None, max_length=111)
 
 
 class SensitivityRequest(CompareRequest):

@@ -189,7 +189,17 @@ def test_three_plan_comparison_changes_only_lunch():
     assert {r["plan_id"] for r in roster_for_base("CURRENT")} == {"CURRENT"}
 
 
-def test_trace_write_is_best_effort_without_database(day):
+def test_trace_write_is_best_effort_without_database(day, monkeypatch):
+    try:
+        import app.core.db as db
+    except Exception:  # DB 패키지가 없는 환경은 기록 생략 경로를 그대로 탄다
+        db = None
+    if db is not None:
+        # CI에 DB가 떠 있어도 실제 DB에 쓰지 않도록 연결을 실패로 고정한다.
+        def unavailable():
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(db, "get_pool", unavailable)
     refs = write_traces(
         day, session_id=1, input_version_id=2, result_id=3, request_key="k"
     )

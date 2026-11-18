@@ -13,11 +13,12 @@ from .preprocess import load, SLOTS, QUARTERS
 LABELS = [f"{a}-{b}" for a, b, *_ in SLOTS]
 DAY_START = 7 * 3600
 DAY_END = 19 * 3600
+# Illustrative daily orders for demand_level, not measured. One table for every path.
 DEMAND_PRESETS = {
-    "low": 30,
-    "medium": 60,
-    "high": 120,
-}  # only illustrative, not measured
+    "low": 60,
+    "medium": 100,
+    "high": 150,
+}
 
 
 @lru_cache(maxsize=1)

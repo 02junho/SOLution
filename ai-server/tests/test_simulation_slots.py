@@ -102,7 +102,13 @@ def test_recommendation_ranks_by_scheduled_hours_and_names_runner_up():
 # ---------------------------------------------------------------- 구간별 추천
 def _fake_records(p90_by_slot):
     by_slot = [
-        {"arrived_in_slot": 20, "p90_post_order_receipt_sec": v} for v in p90_by_slot
+        {
+            "arrived_in_slot": 20,
+            "cohort_completed_eventually": 20,
+            "p90_post_order_receipt_sec": v,
+            "served90_post_order_receipt_sec": v,
+        }
+        for v in p90_by_slot
     ]
     return [{"by_slot": by_slot}] * 5
 
@@ -394,3 +400,52 @@ def test_report_lists_meaningful_rows_first():
     assert meaningful_part.count("- **") == sum(
         r["is_meaningful"] for r in data["experiments"]
     )
+
+
+# ---------------------------------------------------------------- 통과 판정(손님 비율)
+def test_served_by_counts_customers_not_interpolated_p90():
+    from app.tools.simulation.day_simulation import percentile, served_by
+
+    waits = [290, 301]
+    assert percentile(waits) < 300  # 보간 P90은 300초 아래로 나오지만
+    assert served_by(waits) > 300  # 5분 안에 받은 손님은 50%뿐이라 통과가 아니다
+    assert served_by([100] * 9 + [400]) == 100  # 10명 중 9명(90%)이 100초 안
+    assert served_by([100] * 8 + [400] * 2) == 400  # 80%면 통과 못 함
+
+
+def test_slot_with_few_customers_is_not_judged():
+    record = {
+        "by_slot": [
+            {
+                "arrived_in_slot": 5,
+                "cohort_completed_eventually": 5,
+                "p90_post_order_receipt_sec": 900.0,
+                "served90_post_order_receipt_sec": 900.0,
+            }
+        ]
+    }
+    assert slot_plan.slot_cohort_pass(record, 0, 300.0) is None
+
+
+def test_request_key_allows_spring_stage_suffix():
+    key = "k" * 100 + ":simulation"
+    assert CompareRequest(request_key=key).request_key == key
+    with pytest.raises(ValidationError):
+        CompareRequest(request_key=key + "x")
+
+
+def test_menu_step_without_equipment_runs():
+    body = {
+        "scenario": {"daily_orders": 30},
+        "repetitions": 2,
+        "selected_menus": [
+            {
+                "menu_id": "iced_americano",
+                "sales_weight": 1.0,
+                "manufacture_sec": 60,
+                "steps": [{"name": "manual", "duration_sec": 60, "worker": True}],
+            }
+        ],
+    }
+    data = compare(body, engine="reference")
+    assert data["results"]

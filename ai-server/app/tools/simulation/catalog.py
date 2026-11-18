@@ -40,6 +40,8 @@ def validate_menus(menus):
         for step in steps:
             if not isinstance(step, dict):
                 raise ValueError("step must be an object")
+            # 장비 없는 단계는 equipment를 빼고 보내도 된다. 엔진이 키를 바로 읽으므로 None으로 채운다.
+            step.setdefault("equipment", None)
             _real(step.get("duration_sec"), "step.duration_sec", lower=0.1)
             if type(step.get("worker")) is not bool:
                 raise ValueError("step.worker must be boolean")

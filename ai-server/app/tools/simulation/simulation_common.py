@@ -9,9 +9,11 @@ import copy
 import random
 import statistics
 from .catalog import SLOTS, config_for
-from .demand import scenario as base_scenario, draw_orders
+from .demand import DEMAND_PRESETS, scenario as base_scenario, draw_orders
 
-DEMAND_LEVEL = {"low": 60, "medium": 100, "high": 150}
+DEMAND_LEVEL = DEMAND_PRESETS
+# 시간대 판정은 그 시간대에 주문한 손님이 이 수 이상일 때만 한다(소표본 제외).
+MIN_SLOT_ORDERS = 10
 
 
 def _validate(body):
@@ -26,6 +28,16 @@ def _validate(body):
     if body.get("execution_mode", "continuous_day") != "continuous_day":
         raise ValueError("execution_mode must be continuous_day")
     return n, seed, config_for(body)
+
+
+def target_text(quality, repetitions):
+    """추천 기준 문장. 실제 판정 기준(quality_targets)과 반복 수를 그대로 쓴다."""
+    limit = quality["max_p90_post_order_receipt_sec"]
+    limit_text = f"{limit / 60:g}분" if limit % 60 == 0 else f"{limit:g}초"
+    rate = f"{quality['min_run_pass_rate'] * 100:g}%"
+    return (
+        f"주문 후 받기까지 손님 90%가 {limit_text} 이내, {repetitions}번 중 {rate} 이상"
+    )
 
 
 def _scenario(value):
@@ -161,7 +173,7 @@ def aggregate(records, plan, include_events):
         },
         "menu_order_counts": {
             k: summarize([r["menu_order_counts"].get(k, 0) for r in records])
-            for k in records[0]["menu_order_counts"]
+            for k in sorted({k for r in records for k in r["menu_order_counts"]})
         },
         "by_slot": [],
         "first_run_metrics": normalize_metrics(

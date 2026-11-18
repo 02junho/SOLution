@@ -192,12 +192,18 @@ def test_engine_detail_stays_in_each_choice_for_the_screen():
 
 
 def test_no_feasible_plan_becomes_reference_warning_not_fake_choice():
-    data, _ = _run(_request("simulation_request.json"), daily_orders=400)
-    if data["recommendation"] is None:
-        assert any(
-            w["warning_id"] == "NO_FEASIBLE_PLAN" and w["requires_ack"] is False
-            for w in data["warnings"]
-        )
+    request = _request("simulation_request.json")
+    # 어떤 안도 넘을 수 없는 기준(주문 후 1초 안에 받기)으로 고정해 추천 없음 분기를 반드시 탄다.
+    request["quality_targets"] = {
+        "max_p90_post_order_receipt_sec": 1,
+        "min_run_pass_rate": 1.0,
+    }
+    data, _ = _run(request)
+    assert data["recommendation"] is None
+    assert any(
+        w["warning_id"] == "NO_FEASIBLE_PLAN" and w["requires_ack"] is False
+        for w in data["warnings"]
+    )
     spring_accepts(data)
 
 
@@ -470,3 +476,23 @@ def test_order_queue_wait_is_only_the_order_line():
             plan["stage_queue_wait_sec"]["order"]["mean"], abs=0.01
         )
         assert order_line <= plan["metrics"]["avg_queue_wait_sec"]["mean"] + 1e-6
+
+
+def test_rejects_employee_that_is_not_object():
+    request = _request("staffing_proposal/simulation_request.json")
+    request["choices"][0]["staffing"]["employees"][0] = "STAFF_1"
+    with pytest.raises(ValueError, match="객체"):
+        parse(request)
+
+
+def test_quality_rule_shows_the_targets_actually_used():
+    request = _request("simulation_request.json")
+    # 누구나 넘는 기준으로 추천을 확실히 만든 뒤, 설명이 그 기준을 그대로 보여 주는지 본다.
+    request["quality_targets"] = {
+        "max_p90_post_order_receipt_sec": 3600,
+        "min_run_pass_rate": 0.5,
+    }
+    data, _ = _run(request)
+    rule = data["recommendation"]["quality_rule"]
+    assert "60분 이내" in rule and "30번 중 50% 이상" in rule
+    assert "60분 이내" in data["recommendation"]["reason"]

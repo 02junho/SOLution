@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import statistics
 
+from .simulation_common import MIN_SLOT_ORDERS, target_text
 from .staffing_input import EMPLOYEE_SCHEMA_VERSION, StaffingInput
 
 REQUIRED_REPETITIONS = 30
@@ -112,6 +113,14 @@ def _comparison(plan: dict) -> dict | None:
     }
 
 
+def _quality_rule(data: dict) -> str:
+    """추천 기준 설명. 고정 문구가 아니라 이번 계산에 실제로 쓴 기준(quality_targets)을 보여 준다."""
+    return (
+        f"하루 전체와 손님 {MIN_SLOT_ORDERS}명 이상인 시간대마다 "
+        f"{target_text(data['quality_targets'], data['repetitions'])}"
+    )
+
+
 def build(data: dict, staffing: StaffingInput) -> dict:
     """router가 붙이는 session_id·input_version_id·result_id·request_key·trace_refs는 그대로 둔다."""
     reps = data["repetitions"]
@@ -165,7 +174,7 @@ def build(data: dict, staffing: StaffingInput) -> dict:
             "reason": chosen["reason"],
             "outcome": chosen["outcome"],
             "runner_up_choice_key": chosen.get("runner_up_choice_key"),
-            "quality_rule": "하루 전체와 손님 10명 이상인 시간대마다 주문 후 수령 P90이 300초 이하인 반복이 80% 이상",
+            "quality_rule": _quality_rule(data),
         }
     else:
         warnings.append(

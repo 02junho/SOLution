@@ -16,6 +16,8 @@ from .simulation_common import (
     sample_menu_jobs,
     aggregate,
     summarize,
+    target_text,
+    MIN_SLOT_ORDERS,
 )
 from .day_simulation import DayCafe, roster_for_base, profile
 from .catalog import SLOTS
@@ -26,7 +28,6 @@ from .staffing_input import simulated_staffing
 
 BASE_PLANS = ("CURRENT", "ALT_A", "ALT_C")
 QUALITY_KEYS = {"max_p90_post_order_receipt_sec", "min_run_pass_rate"}
-MIN_SLOT_ORDERS = 10
 SIMULATED_CONDITIONS_MESSAGE = (
     "모의 조건: 가정에 근거한 값이며 실제 매장과 다를 수 있어요."
 )
@@ -83,19 +84,23 @@ def quality_from(body):
 
 
 def _pass(record, p90_limit=300.0, min_slot_n=MIN_SLOT_ORDERS):
+    """손님 90% 이상이 p90_limit 안에 받았는지(하루 전체와 손님이 min_slot_n 이상인 시간대마다).
+
+    보간 P90이 아니라 실제 손님 비율로 판정한다(served90 <= limit 와 같음). 화면의 P90 숫자는 보간 값 그대로.
+    """
     if record["arrived_orders"] == 0:
         return None
     if record["completed_eventually"] != record["arrived_orders"]:
         return False
     if (
-        record["p90_post_order_receipt_sec"] is None
-        or record["p90_post_order_receipt_sec"] > p90_limit
+        record["served90_post_order_receipt_sec"] is None
+        or record["served90_post_order_receipt_sec"] > p90_limit
     ):
         return False
     for band in record["by_slot"]:
         if band["cohort_completed_eventually"] >= min_slot_n and (
-            band["p90_post_order_receipt_sec"] is None
-            or band["p90_post_order_receipt_sec"] > p90_limit
+            band["served90_post_order_receipt_sec"] is None
+            or band["served90_post_order_receipt_sec"] > p90_limit
         ):
             return False
     return True
@@ -188,8 +193,9 @@ def _summarize_plan(label, records, rejected_per_run, quality, include_events):
         bool(rate >= quality["min_run_pass_rate"]) if rate is not None else None
     )
     agg["quality_policy"] = (
-        "Each run: post-order-to-receipt P90 <= max_p90_post_order_receipt_sec for the full day and "
-        "for every slot cohort with >= 10 orders; passes when >= min_run_pass_rate of runs pass."
+        "Each run: at least 90% of customers receive their drink within max_p90_post_order_receipt_sec "
+        "after ordering, for the full day and for every slot cohort with >= 10 orders; "
+        "passes when >= min_run_pass_rate of runs pass."
     )
     return agg
 
@@ -228,7 +234,8 @@ def _rank(results):
     return feasible + others
 
 
-def _choose(results):
+def _choose(results, quality, repetitions):
+    target = target_text(quality, repetitions)
     ranked = _rank(results)
     feasible = [p for p in ranked if p["passes_quality_targets"] is True]
     if not feasible:
@@ -243,13 +250,13 @@ def _choose(results):
             "outcome": "NO_FEASIBLE_PLAN",
             "choice_key": None,
             "runner_up_choice_key": None,
-            "reason": "세 운영안 모두 목표(주문 후 받기까지 손님 90%가 5분 이내, 30번 중 80% 이상)에 못 미쳤어요.",
+            "reason": f"세 운영안 모두 목표({target})에 못 미쳤어요.",
         }
     return {
         "outcome": "RECOMMENDATION_AVAILABLE",
         "choice_key": ranked[0]["choice_key"],
         "runner_up_choice_key": ranked[1]["choice_key"] if len(ranked) > 1 else None,
-        "reason": "목표(주문 후 받기까지 손님 90%가 5분 이내, 30번 중 80% 이상)를 넘은 안 중 근무 시간이 가장 적은 안이에요.",
+        "reason": f"목표({target})를 넘은 안 중 근무 시간이 가장 적은 안이에요.",
         "evaluated_candidates": len(results),
         "feasible_candidates": len(feasible),
         "is_global_optimum": False,
@@ -387,7 +394,7 @@ def compare(
             else compare_to(current["per_run"], p["per_run"])
         )
 
-    recommendation = _choose(out)
+    recommendation = _choose(out, quality, repetitions)
     winner = next(
         (p for p in out if p["choice_key"] == recommendation["choice_key"]), None
     )

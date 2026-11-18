@@ -68,6 +68,8 @@ def parse(body: dict) -> StaffingInput | None:
                 raise ValueError(f"{key} 안의 직원 근무가 비어 있습니다.")
             shifts, kept = [], []
             for e in employees:
+                if not isinstance(e, dict):
+                    raise ValueError(f"{key} 안의 직원 근무 항목은 객체여야 합니다.")
                 support = e.get("can_support") or []
                 shift = {
                     "worker_key": _text(e.get("staff_id"), "staff_id"),

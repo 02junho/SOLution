@@ -10,7 +10,7 @@ orders carried over from one slot change the next one.
 from __future__ import annotations
 
 from .catalog import SLOTS, PLAN_IDS
-from .simulation_common import summarize
+from .simulation_common import MIN_SLOT_ORDERS, summarize
 from .day_simulation import profile, roster, seconds
 
 BASE_STAFF = 2
@@ -37,12 +37,14 @@ def slot_roster(choice_keys: list[str]) -> list[dict]:
 
 
 def slot_cohort_pass(record: dict, index: int, p90_limit: float) -> bool | None:
-    """None when no order arrived in the slot. Every accepted order is completed by the engine."""
+    """Same rule as the day check (simulation_service._pass): at least 90% of the slot's customers
+    within p90_limit. None (not judged) when fewer than MIN_SLOT_ORDERS customers ordered in the slot.
+    The engine completes every accepted order, so cohort_completed_eventually == arrived_in_slot."""
     band = record["by_slot"][index]
-    if band["arrived_in_slot"] == 0:
+    if band["cohort_completed_eventually"] < MIN_SLOT_ORDERS:
         return None
-    p90 = band["p90_post_order_receipt_sec"]
-    return p90 is not None and p90 <= p90_limit
+    served = band["served90_post_order_receipt_sec"]
+    return served is not None and served <= p90_limit
 
 
 def slot_pass_rate(records: list[dict], index: int, p90_limit: float) -> float | None:

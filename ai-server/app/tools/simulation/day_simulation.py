@@ -30,6 +30,19 @@ def percentile(values, q=0.90):
     return round(xs[lo] + (xs[hi] - xs[lo]) * (point - lo), 3)
 
 
+def served_by(values, share=0.90):
+    """Time by which at least `share` of the customers were served (nearest rank, no interpolation).
+
+    `served_by(waits) <= limit` is exactly "share of customers waited <= limit", so pass checks use it.
+    The interpolated percentile() stays for display only.
+    """
+    if not values:
+        return None
+    xs = sorted(values)
+    need = max(1, math.ceil(len(xs) * share - 1e-9))
+    return round(xs[need - 1], 3)
+
+
 def profile(plan_id):
     if plan_id == "CURRENT":
         return [[["order", "handoff"]], [["preparation"]]]
@@ -381,6 +394,7 @@ class DayCafe(SlotCafe):
                     if post_order_waits
                     else None,
                     "p90_post_order_receipt_sec": percentile(post_order_waits),
+                    "served90_post_order_receipt_sec": served_by(post_order_waits),
                     "equipment_utilization": equipment_util,
                     "employee_utilization": staff_util,
                 }
@@ -477,6 +491,7 @@ class DayCafe(SlotCafe):
             if post_order_waits
             else None,
             "p90_post_order_receipt_sec": percentile(post_order_waits),
+            "served90_post_order_receipt_sec": served_by(post_order_waits),
             "overtime_to_drain_min": round(drain_sec / 60, 3),
             "stage_queue_wait_sec": stage_wait,
             "main_queue_bottleneck_stage": bottleneck,
