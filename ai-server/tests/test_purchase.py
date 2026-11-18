@@ -91,6 +91,14 @@ def test_숫자가_서로_맞는다():
         assert sum(line["line_krw"] for line in lines) == choice["goods_krw"]
 
 
+def test_구매_목록_줄에_품목과_거래처_이름이_실린다():
+    data = _post(REQUEST).json()["data"]
+    detail = next(c for c in data["detail"]["choices"] if c["choice_key"] == "purchase_1")
+
+    assert [(l["item_name"], l["supplier_name"]) for l in detail["lines"]] == [
+        ("원두", "거래처 A"), ("우유", "거래처 B"), ("우유", "거래처 B")]
+
+
 def test_원두는_원두_예제_정답과_같다():
     data = _post(REQUEST).json()["data"]
     beans_need = next(n for n in data["detail"]["buy_needs"] if n["item_id"] == "beans")

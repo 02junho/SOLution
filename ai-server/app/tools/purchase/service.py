@@ -131,8 +131,11 @@ def _choice_summary(p: Prepared, key: str, label: str, plan: Plan, base: Plan) -
 def _choice_detail(p: Prepared, key: str, plan: Plan) -> dict:
     req = p.req
     order = {s.supplier_id: k for k, s in enumerate(req.suppliers)}
+    items, suppliers = _names(req)
+    # 화면과 저장한 계획이 코드(beans, R3) 대신 이름을 보여 주도록 줄마다 이름을 함께 싣는다.
     lines = [
-        {"supplier_id": req.quotes[q].supplier_id, "item_id": req.quotes[q].item_id,
+        {"supplier_id": req.quotes[q].supplier_id, "supplier_name": suppliers[req.quotes[q].supplier_id],
+         "item_id": req.quotes[q].item_id, "item_name": items[req.quotes[q].item_id],
          "pack_size": _n(req.quotes[q].pack_size), "pack_unit": req.quotes[q].pack_unit,
          "pack_price_krw": req.quotes[q].pack_price_krw, "pack_count": n,
          "line_krw": req.quotes[q].pack_price_krw * n, "vat_included": req.quotes[q].vat_included}
@@ -145,6 +148,11 @@ def _choice_detail(p: Prepared, key: str, plan: Plan) -> dict:
         stock_after.append({"item_id": item.item_id, "bought": _n(bought), "after_delivery": _n(after),
                             "end_of_period": _n(after - item.gross_need)})
     return {"choice_key": key, "lines": lines, "stock_after": stock_after, "order_messages": _order_messages(p, plan)}
+
+
+def _names(req) -> tuple[dict, dict]:
+    return ({i.item_id: i.item_name for i in req.items},
+            {s.supplier_id: s.supplier_name for s in req.suppliers})
 
 
 def _order_messages(p: Prepared, plan: Plan) -> list[dict]:
