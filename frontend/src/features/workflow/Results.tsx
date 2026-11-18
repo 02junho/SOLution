@@ -157,7 +157,11 @@ export default function Results({
     }
   }
   return (
-    <section className="panel results-panel" aria-label="계산 결과와 최종 저장">
+    <section
+      id="results"
+      className="panel results-panel"
+      aria-label="계산 결과와 최종 저장"
+    >
       <div className="panel-header">
         <div className="section-heading">
           <span className="section-number">02</span>
@@ -188,7 +192,7 @@ export default function Results({
           <Icon name="check" />
           <div>
             <strong>이 조건의 계획을 저장했어요</strong>
-            <p>확정 당시의 내용을 다시 확인할 수 있어요.</p>
+            <p>저장한 계획에서 언제든 다시 볼 수 있어요.</p>
             <button
               className="text-button"
               onClick={() => onSaved(saved.confirmation_id)}
@@ -472,7 +476,7 @@ export function ConfirmationModal({
   return (
     <Modal
       title="저장한 계획"
-      description="확정 당시 저장된 내용을 그대로 보여드려요."
+      description="저장할 때의 내용을 그대로 보여 드려요."
       wide
       onClose={onClose}
     >
@@ -492,8 +496,8 @@ export function ConfirmationModal({
               className={`status-pill ${detail.is_current_version ? 'green' : ''}`}
             >
               {detail.is_current_version
-                ? '현재 조건의 확정'
-                : '과거 확정 이력'}
+                ? '지금 조건으로 저장한 계획'
+                : '예전 조건으로 저장한 계획'}
             </span>
           </div>
           <h3>

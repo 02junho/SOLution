@@ -131,20 +131,23 @@ export function NewSession({
 function Progress({ workspace }: { workspace: WorkspaceController }) {
   const { context, saved, input, result } = workspace
   const pending = currentQuestion(workspace.messages, context)
+  // 6은 저장까지 모두 끝난 상태. 계산했지만 조건을 고쳐야 하면(재고 빈칸·계산 불가) 2단계로 돌아간다.
   const step = pending
     ? 2
     : saved
-      ? 5
+      ? 6
       : result?.response_status === 'ok'
         ? 4
-        : context?.input_confirmed
-          ? 3
-          : context?.current_version_id
-            ? 2
-            : 1
+        : result
+          ? 2
+          : context?.input_confirmed
+            ? 3
+            : context?.current_version_id
+              ? 2
+              : 1
   const labels = [
     '조건 말하기',
-    '질문에 답하기',
+    pending ? '질문에 답하기' : '조건 확인하기',
     '계산하기',
     '안 고르기',
     '저장하기',
@@ -153,7 +156,15 @@ function Progress({ workspace }: { workspace: WorkspaceController }) {
     <aside className="progress-column" aria-label="업무 진행 단계">
       {/* 한 줄 흐름: 지금 몇 번째 단계인지 먼저 한 문장으로 알려 준다. */}
       <p className="progress-now">
-        지금 <b>{step}단계</b> / 5단계 · {labels[step - 1]}
+        {step > 5 ? (
+          <>
+            <b>다 끝났어요</b> · 계획을 저장했어요
+          </>
+        ) : (
+          <>
+            지금 <b>{step}단계</b> / 5단계 · {labels[step - 1]}
+          </>
+        )}
       </p>
       <ol className="steps">
         {labels.map((label, i) => (
@@ -371,9 +382,20 @@ export default function Workspace({
     .at(-1)?.content
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (messages.length || busy)
-      bottom.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    // 대화 칸 안에서만 맨 아래로 내린다. 화면 전체를 움직이면 결과로 내려간 화면이 다시 위로 튄다.
+    const feed = bottom.current?.parentElement
+    if ((messages.length || busy) && feed) feed.scrollTop = feed.scrollHeight
   }, [messages.length, busy])
+  // 계산을 마치면 결과 칸으로 내려 준다. 처음 업무를 열 때 이미 있던 결과로는 움직이지 않는다.
+  const resultId = workspace.result?.result_id
+  const shownResult = useRef(resultId)
+  useEffect(() => {
+    if (!resultId || resultId === shownResult.current) return
+    shownResult.current = resultId
+    // effect는 화면을 그린 뒤라 결과 칸이 이미 있다. 부드러운 스크롤(smooth)은 환경에 따라
+    // 움직이지 않아 바로 이동한다.
+    document.getElementById('results')?.scrollIntoView({ block: 'start' })
+  }, [resultId])
   async function send(e: FormEvent, answer?: string) {
     e.preventDefault()
     const text = (answer ?? draft).trim()
@@ -471,7 +493,11 @@ export default function Workspace({
           </button>
         </Alert>
       )}
-      {workspace.notice && (
+      {/* 같은 문장이 결과 칸이나 바로 위 말풍선에 이미 있으면 위쪽 안내는 다시 띄우지 않는다
+          (계산 불가·질문 문장이 두 번 보이고, 실패인데 성공 모양으로 보이던 것). */}
+      {workspace.notice &&
+        workspace.notice !== workspace.result?.summary.message &&
+        workspace.notice !== lastAssistant && (
         <div className="notice" role="status">
           <Icon name="check" size={16} />
           {workspace.notice}
