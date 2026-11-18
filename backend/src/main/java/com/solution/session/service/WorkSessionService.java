@@ -75,7 +75,7 @@ public class WorkSessionService {
 		WorkSessionContextResponse data = new WorkSessionContextResponse(
 				row.sessionId(), row.storeId(), row.featureType(), row.inputMethod(), row.title(),
 				row.currentVersion(), row.currentVersionId(), row.inputConfirmedAt() != null, row.step(),
-				row.latestResultId(), row.hasConfirmation(), row.createdAt(), row.updatedAt());
+				row.latestResultId(), row.hasConfirmation(), row.createdAt(), row.updatedAt(), row.currentInputJson());
 		return ApiResponse.ok(data);
 	}
 

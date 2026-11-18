@@ -37,7 +37,9 @@ async function load(id: number): Promise<Workspace> {
   return {
     context,
     messages,
-    input: currentInput(messages, context.current_version_id),
+    input:
+      context.current_input ??
+      currentInput(messages, context.current_version_id),
     result:
       result?.input_version_id === context.current_version_id ? result : null,
     saved:
