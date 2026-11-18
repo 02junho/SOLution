@@ -574,10 +574,13 @@ export default function Workspace({
                 {/* 바로 위 말풍선과 같은 문장이면 다시 쓰지 않는다. 같은 말이 세 번 보이지 않게. */}
                 {questionText !== lastAssistant && <h3>{questionText}</h3>}
                 {question.missing_fields
-                  ?.map((field) => fieldName(field.path, field.label))
-                  .filter((label) => label !== questionText)
-                  .map((label) => (
-                    <p className="muted" key={label}>
+                  ?.map((field) => ({
+                    path: field.path,
+                    label: fieldName(field.path, field.label),
+                  }))
+                  .filter(({ label }) => label !== questionText)
+                  .map(({ path, label }) => (
+                    <p className="muted" key={path}>
                       {label}
                     </p>
                   ))}

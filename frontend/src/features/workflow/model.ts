@@ -102,13 +102,14 @@ export function defaultTitle(feature: string, now = new Date()) {
 // 양을 읽기 쉬운 단위로: 2700g → 2.7kg, 12000ml → 12L, 50ea → 50개. 계산 값은 그대로 두고 보여 주는 말만 바꾼다.
 export function quantity(value: unknown, unit: string) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '확인 필요'
-  const text = (n: number) =>
-    n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
-  if (unit === 'g' && Math.abs(value) >= 1000) return `${text(value / 1000)}kg`
-  if (unit === 'ml' && Math.abs(value) >= 1000)
-    return `${text(value / 1000)}L`
-  if (unit === 'ea') return `${text(value)}개`
-  return `${text(value)}${unit}`
+  const text = (n: number, digits: number) =>
+    n.toLocaleString('ko-KR', { maximumFractionDigits: digits })
+  // kg·L로 바꿔도 값이 그대로 보일 때만 바꾼다(10g·10ml 단위). 1001g처럼 반올림되면 원래 단위로 둔다.
+  const exact = Math.abs(value) >= 1000 && Number.isInteger(value / 10)
+  if (unit === 'g' && exact) return `${text(value / 1000, 2)}kg`
+  if (unit === 'ml' && exact) return `${text(value / 1000, 2)}L`
+  if (unit === 'ea') return `${text(value, 3)}개`
+  return `${text(value, 3)}${unit}`
 }
 // 견적 한 묶음: 1000g → 1kg, 50ea → 50개 묶음
 export const packLabel = (size: unknown, unit: string) =>
