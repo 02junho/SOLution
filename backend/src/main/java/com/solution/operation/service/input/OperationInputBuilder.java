@@ -4,7 +4,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.LinkedHashMap;
 
@@ -31,9 +33,9 @@ import com.solution.operation.dto.input.OperationInputDraftRequest;
  * 휴게를 피하는 구간으로도 쓴다.
  * 출퇴근 나누기는 하지 않는다(시간대별 인원 배치는 노동 쪽 배치표 생성 기능의 일).
  *
- * <p>⚠️ 같은 규칙의 빌더가 대화 쪽(ai-server app/agent/operation_fields.build())에도 있다. 두 빌더는 같은 기준 파일
- * (data/demo/operation/input_builder_cases.json)과 비교하는 테스트로 묶여 있다(OperationInputBuilderCasesTest,
- * test_agent_operation.py). 규칙을 바꾸면 이 빌더 → 기준 파일 다시 뽑기 → Python 빌더 순서로 같이 고친다.
+ * <p>⚠️ 대화 입력(#97)에도 같은 규칙의 Python 빌더(ai-server app/agent/operation_fields.build())가 들어온다.
+ * 이 빌더 결과는 기준 파일(data/demo/operation/input_builder_cases.json)로 고정해 두고(OperationInputBuilderCasesTest),
+ * Python 쪽도 같은 기준 파일로 테스트한다. 규칙을 바꾸면 이 빌더 → 기준 파일 다시 뽑기 → Python 빌더 순서로 같이 고친다.
  *
  * <p>숫자(대기·비용)는 계산하지 않는다. 계산은 simulation·labor 도구가 한다.
  */
@@ -51,6 +53,10 @@ public final class OperationInputBuilder {
 	public static final String RUSH_END = "14:00";
 	/** 해마다 고시되는 최저시급(labor 정책 policies.MINIMUM_WAGES와 같은 값). 없는 해는 계산하지 않는다. */
 	static final Map<Integer, Integer> MINIMUM_WAGES = Map.of(2026, 10_320, 2027, 10_700);
+	/** 고를 수 있는 메뉴(시뮬레이션 엔진 ai-server app/tools/simulation/menu_catalog.json의 menu_id와 같다. 테스트로 맞춘다). */
+	static final Set<String> MENU_IDS = Set.of("iced_americano", "iced_green_tea_latte", "iced_cafe_latte",
+			"hot_cafe_latte", "blueberry_yogurt_smoothie", "hot_americano", "iced_vanilla_latte", "iced_milk_tea",
+			"iced_lemon_ade", "iced_choco_latte");
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
 	private OperationInputBuilder() { }
@@ -86,7 +92,7 @@ public final class OperationInputBuilder {
 		}
 		if (form.hourlyWageKrw() < minimum) {
 			throw ApiException.badRequest(CODE,
-					String.format("직원 시급은 %d년 최저시급(%,d원) 이상으로 입력해 주세요.", date.getYear(), minimum));
+					String.format(Locale.KOREA, "직원 시급은 %d년 최저시급(%,d원) 이상으로 입력해 주세요.", date.getYear(), minimum));
 		}
 		String lastOrder = time(form.lastOrderTime(), DEFAULT_LAST_ORDER, "라스트 오더");
 		if (lastOrder.compareTo("18:30") < 0 || lastOrder.compareTo(DAY_END) > 0) {
@@ -99,6 +105,10 @@ public final class OperationInputBuilder {
 		}
 		boolean owner = form.isOwnerWorking();
 		boolean minor = Boolean.TRUE.equals(form.isStaffMinor());
+		if (minor) {
+			// 근무표가 07-19시로 고정이라 연소자 하루 7시간 한도를 넘는다. 계산 단계(노동)에서 막히기 전에 여기서 알린다.
+			throw ApiException.badRequest(CODE, "연소자 직원은 하루 7시간까지만 일할 수 있어, 07-19시 근무로 비교하는 이번 운영 실험에서는 계산할 수 없어요.");
+		}
 		String lead = owner ? "OWNER" : "STAFF_1";
 		String maker = owner ? "STAFF_1" : "STAFF_2";
 		String extra = owner ? "STAFF_2" : "STAFF_3";
@@ -131,8 +141,12 @@ public final class OperationInputBuilder {
 		// 안마다 1번째 반복의 손님·직원 움직임을 재생 기록(execution_log, simulation_trace)으로 남긴다. 화면 대기열 재생용.
 		simulation.put("include_events", true);
 		if (form.selectedMenuIds() != null && !form.selectedMenuIds().isEmpty()) {
-			if (form.selectedMenuIds().stream().anyMatch(id -> id == null || id.isBlank())) {
+			if (form.selectedMenuIds().stream().anyMatch(id -> id == null || !MENU_IDS.contains(id))) {
 				throw ApiException.badRequest(CODE, "메뉴 선택을 다시 확인해 주세요.");
+			}
+			if (form.menuWeights() == null || form.menuWeights().isEmpty()) {
+				// 기본 비중이 0인 메뉴도 있어서, 메뉴를 고르면 비중도 같이 받아야 계산할 수 있다.
+				throw ApiException.badRequest(CODE, "메뉴를 고르면 판매 비중도 함께 넣어 주세요.");
 			}
 			simulation.put("selected_menu_ids", List.copyOf(new TreeSet<>(form.selectedMenuIds())));
 		}

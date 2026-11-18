@@ -1,5 +1,6 @@
 package com.solution.operation.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,8 +39,10 @@ class OperationInputControllerTest {
 	@Test
 	void 잘못된_시각은_사유_코드와_함께_400() throws Exception {
 		mvc.perform(post("/api/v1/operation/input-drafts").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"daily_orders\":150,\"is_owner_working\":true,\"hourly_wage_krw\":10320,\"last_order_time\":\"17:00\"}"))
+				.content("{\"business_date\":\"2026-11-18\",\"daily_orders\":150,\"is_owner_working\":true,"
+						+ "\"hourly_wage_krw\":10320,\"last_order_time\":\"17:00\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.data.detail_code").value("INVALID_REQUEST"));
+				.andExpect(jsonPath("$.data.detail_code").value("INVALID_REQUEST"))
+				.andExpect(jsonPath("$.message").value(containsString("라스트 오더")));
 	}
 }

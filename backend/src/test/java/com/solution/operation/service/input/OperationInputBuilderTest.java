@@ -3,9 +3,15 @@ package com.solution.operation.service.input;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -156,23 +162,51 @@ class OperationInputBuilderTest {
 
 	@Test
 	void 판매_비중은_고른_메뉴와_같고_합계가_100이어야_한다() {
-		var ok = new OperationInputDraftRequest(null, 150, null, List.of("latte", "americano"), true, 10320, null, null, null,
-				Map.of("americano", 0.6, "latte", 0.4), 50, 25);
+		var ok = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte", "iced_americano"), true, 10320, null,
+				null, null, Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.4), 50, 25);
 		Map<String, Object> simulation = (Map<String, Object>) OperationInputBuilder.build(ok, DAY).get("simulation");
-		assertThat((Map<String, Object>) simulation.get("menu_weights")).containsEntry("americano", 0.6).containsEntry("latte", 0.4);
+		assertThat(simulation.get("selected_menu_ids")).isEqualTo(List.of("iced_americano", "iced_cafe_latte"));
+		assertThat((Map<String, Object>) simulation.get("menu_weights")).containsEntry("iced_americano", 0.6)
+				.containsEntry("iced_cafe_latte", 0.4);
 		assertThat(simulation).containsEntry("order_time_sec", 50).containsEntry("handoff_time_sec", 25);
-		var wrongSum = new OperationInputDraftRequest(null, 150, null, List.of("latte", "americano"), true, 10320, null, null, null,
-				Map.of("americano", 0.6, "latte", 0.3), null, null);
+		var wrongSum = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte", "iced_americano"), true, 10320,
+				null, null, null, Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.3), null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(wrongSum, DAY)).hasMessageContaining("100%");
-		var extraMenu = new OperationInputDraftRequest(null, 150, null, List.of("latte"), true, 10320, null, null, null,
-				Map.of("americano", 0.5, "latte", 0.5), null, null);
+		var extraMenu = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte"), true, 10320, null, null, null,
+				Map.of("iced_americano", 0.5, "iced_cafe_latte", 0.5), null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(extraMenu, DAY)).hasMessageContaining("고른 메뉴");
 	}
 
 	@Test
-	void 고른_메뉴는_정렬해_넣는다() {
-		var menus = new OperationInputDraftRequest(null, 150, null, List.of("latte", "americano"), true, 10320, null, null, null, null, null, null);
-		Map<String, Object> simulation = (Map<String, Object>) OperationInputBuilder.build(menus, DAY).get("simulation");
-		assertThat(simulation.get("selected_menu_ids")).isEqualTo(List.of("americano", "latte"));
+	void 메뉴를_고르면_비중도_있어야_한다() {
+		// 기본 비중이 0인 메뉴(hot_americano)만 고르면 계산 단계에서 막히므로 초안에서 먼저 거부한다.
+		var noWeights = new OperationInputDraftRequest(null, 150, null, List.of("hot_americano"), true, 10320, null, null, null,
+				null, null, null);
+		assertThatThrownBy(() -> OperationInputBuilder.build(noWeights, DAY)).hasMessageContaining("판매 비중");
+	}
+
+	@Test
+	void 엔진에_없는_메뉴는_거부한다() {
+		var unknown = new OperationInputDraftRequest(null, 150, null, List.of("latte"), true, 10320, null, null, null,
+				Map.of("latte", 1.0), null, null);
+		assertThatThrownBy(() -> OperationInputBuilder.build(unknown, DAY)).hasMessageContaining("메뉴");
+	}
+
+	@Test
+	void 메뉴_목록은_엔진_메뉴_목록과_같다() throws Exception {
+		String catalog = Files.readString(Path.of("../ai-server/app/tools/simulation/menu_catalog.json"));
+		Set<String> engine = new TreeSet<>();
+		Matcher m = Pattern.compile("\"menu_id\"\\s*:\\s*\"([^\"]+)\"").matcher(catalog);
+		while (m.find()) {
+			engine.add(m.group(1));
+		}
+		assertThat(new TreeSet<>(OperationInputBuilder.MENU_IDS)).isEqualTo(engine);
+	}
+
+	@Test
+	void 연소자_직원은_계산할_수_없다고_알린다() {
+		// 07-19시 근무는 연소자 하루 7시간 한도를 넘어 노동 계산에서 막힌다.
+		var minor = new OperationInputDraftRequest(null, 150, null, null, false, 10320, true, null, null, null, null, null);
+		assertThatThrownBy(() -> OperationInputBuilder.build(minor, DAY)).hasMessageContaining("연소자");
 	}
 }

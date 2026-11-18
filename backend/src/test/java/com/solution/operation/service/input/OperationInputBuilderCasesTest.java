@@ -21,14 +21,14 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 운영 입력 완성본 기준 파일(data/demo/operation/input_builder_cases.json)과 이 빌더 결과가 같은지 본다.
  *
- * <p>같은 규칙으로 완성본을 만드는 곳이 두 군데다: 폼은 이 빌더(Spring), 대화는 ai-server
- * app/agent/operation_fields.build()(Python). 두 쪽 테스트가 같은 기준 파일을 보므로 한쪽만 바꾸면 그쪽 테스트가 실패한다.
+ * <p>이 테스트는 기준 파일의 사례마다 폼 값으로 이 빌더를 돌려, 결과가 기록된 완성본과 같은지 확인한다.
+ * 대화 입력(#97)이 들어오면 Python 빌더(ai-server app/agent/operation_fields.build())도 같은 기준 파일로 테스트한다.
  *
  * <p>빌더 규칙을 일부러 바꿀 때:
  * <ol>
  *   <li>이 빌더를 고친다.</li>
- *   <li>기준 파일을 새로 뽑는다: {@code UPDATE_BUILDER_CASES=1 ./gradlew test --no-daemon --tests '*OperationInputBuilderCasesTest'}</li>
- *   <li>Python operation_fields.build()를 같은 규칙으로 고치고 {@code pytest tests/test_agent_operation.py}로 확인한다.</li>
+ *   <li>기준 파일을 새로 뽑는다: {@code UPDATE_BUILDER_CASES=1 ./gradlew test --no-daemon --rerun-tasks --tests '*OperationInputBuilderCasesTest'}</li>
+ *   <li>(#97 이후) Python 빌더를 같은 규칙으로 고치고 {@code pytest tests/test_agent_operation.py}로 확인한다.</li>
  * </ol>
  */
 class OperationInputBuilderCasesTest {

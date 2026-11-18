@@ -161,7 +161,7 @@
    }
   }
  },
- "no_owner_minor": {
+ "no_owner": {
   "form": {
    "business_date": "2026-11-18",
    "daily_orders": 276,
@@ -169,7 +169,7 @@
    "selected_menu_ids": null,
    "is_owner_working": false,
    "hourly_wage_krw": 11000,
-   "is_staff_minor": true,
+   "is_staff_minor": false,
    "rush_start_time": null,
    "rush_end_time": null,
    "menu_weights": null,
@@ -206,19 +206,19 @@
      {
       "worker_key": "STAFF_1",
       "is_owner": false,
-      "is_minor": true,
+      "is_minor": false,
       "hourly_wage_krw": 11000
      },
      {
       "worker_key": "STAFF_2",
       "is_owner": false,
-      "is_minor": true,
+      "is_minor": false,
       "hourly_wage_krw": 11000
      },
      {
       "worker_key": "STAFF_3",
       "is_owner": false,
-      "is_minor": true,
+      "is_minor": false,
       "hourly_wage_krw": 11000
      }
     ],
@@ -627,8 +627,8 @@
    "daily_orders": 200,
    "last_order_time": null,
    "selected_menu_ids": [
-    "latte",
-    "americano"
+    "iced_cafe_latte",
+    "iced_americano"
    ],
    "is_owner_working": true,
    "hourly_wage_krw": 10700,
@@ -636,8 +636,8 @@
    "rush_start_time": null,
    "rush_end_time": null,
    "menu_weights": {
-    "americano": 0.6,
-    "latte": 0.4
+    "iced_americano": 0.6,
+    "iced_cafe_latte": 0.4
    },
    "order_time_sec": null,
    "handoff_time_sec": null
@@ -658,12 +658,12 @@
     "execution_mode": "continuous_day",
     "include_events": true,
     "selected_menu_ids": [
-     "americano",
-     "latte"
+     "iced_americano",
+     "iced_cafe_latte"
     ],
     "menu_weights": {
-     "americano": 0.6,
-     "latte": 0.4
+     "iced_americano": 0.6,
+     "iced_cafe_latte": 0.4
     }
    },
    "labor": {
