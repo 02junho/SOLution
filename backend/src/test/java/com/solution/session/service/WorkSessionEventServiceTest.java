@@ -72,7 +72,7 @@ class WorkSessionEventServiceTest {
 
 	private SessionContextRow ctx(int currentVersion, Long currentVersionId, String owner) {
 		return new SessionContextRow(100L, 10L, "purchase", "agent", "제목", currentVersion, currentVersionId,
-				null, "input", null, false, OffsetDateTime.now(), OffsetDateTime.now(), owner);
+				null, "input", null, false, OffsetDateTime.now(), OffsetDateTime.now(), owner, null);
 	}
 
 	@Test

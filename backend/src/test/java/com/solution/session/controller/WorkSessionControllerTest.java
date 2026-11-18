@@ -118,7 +118,7 @@ class WorkSessionControllerTest {
 				100, 10, "purchase", "agent", "이번 주 매입 준비", 2, 1002L, false, "input",
 				null, false,
 				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"),
-				OffsetDateTime.parse("2026-11-13T10:12:00+09:00"))));
+				OffsetDateTime.parse("2026-11-13T10:12:00+09:00"), null)));
 
 		mockMvc.perform(get("/api/v1/work-sessions/100"))
 				.andExpect(status().isOk())

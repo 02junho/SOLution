@@ -2,6 +2,8 @@ package com.solution.session.dto;
 
 import java.time.OffsetDateTime;
 
+import com.fasterxml.jackson.annotation.JsonRawValue;
+
 /**
  * GET /api/v1/work-sessions/{session_id} 응답 — 중단했던 업무를 다시 열 때 복원할 문맥.
  * 작성: 엄혜원 (공통 흐름·오케스트레이션 도메인)
@@ -22,5 +24,6 @@ public record WorkSessionContextResponse(
 		Long latestResultId,
 		boolean hasConfirmation,
 		OffsetDateTime createdAt,
-		OffsetDateTime updatedAt) {
+		OffsetDateTime updatedAt,
+		@JsonRawValue String currentInput) {
 }
