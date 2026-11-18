@@ -13,6 +13,7 @@ import json
 import logging
 from typing import Protocol
 
+from app.agent import operation_flow
 from app.agent.schemas import InterpretDraft, InterpretRequest, Unresolved
 from app.agent.privacy import sanitize
 from app.core.config import get_settings
@@ -72,7 +73,8 @@ class LlmInterpreter:
         while self.call_count < 4:
             self.call_count += 1
             try:
-                raw = self._call(settings, _SYSTEM, prompt)
+                # 운영 요청에만 운영 규칙을 붙인다(operation_flow.py에서 관리).
+                raw = self._call(settings, _SYSTEM + operation_flow.prompt_rule(req), prompt)
             except LlmUnavailable as exc:
                 if exc.retryable and not exc.refused and failures < 2:
                     failures += 1
@@ -131,7 +133,10 @@ def _build_user_prompt(req: InterpretRequest) -> str:
     """LLM에 줄 입력. 전체 DTO가 아니라 해석에 필요한 작은 요약만 담는다."""
     req = InterpretRequest.model_validate(sanitize(req.model_dump()))
     lines = [f"업무 종류: {'매입' if req.feature_type == 'purchase' else '운영'}"]
-    if req.current_input:
+    operation = operation_flow.prompt_summary(req)  # 운영은 근무표 대신 바꿀 수 있는 값만 요약
+    if operation is not None:
+        lines.append(f"지금까지의 입력(요약): {operation}")
+    elif req.current_input:
         # 큰 입력은 잘라서 요약만 전달한다.
         summary = json.dumps(req.current_input, ensure_ascii=False)
         if len(summary) > 1500:
