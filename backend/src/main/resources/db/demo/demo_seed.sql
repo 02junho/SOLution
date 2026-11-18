@@ -168,3 +168,118 @@ VALUES
   ]
 }'::jsonb, 'demo-owner', now())
 ON CONFLICT (input_version_id) DO NOTHING;
+
+-- 운영 업무 3건. 입력 확인을 마친 상태라 바로 운영 계산 실행(POST /api/v1/operation/sessions/{id}/results)을 부를 수 있다.
+-- 입력은 운영 입력 만들기(POST /api/v1/operation/input-drafts, OperationInputBuilder)가 만든 모양 그대로다.
+-- 2001 사장님 + 직원 1명 07~19시(한 명 추가 안은 바쁜 시간에 직원 1명 더), 하루 150건
+-- 2002 같은 인원, 하루 276건(을지로입구 상권 평균)
+-- 2003 직원 2명 07~19시, 하루 150건
+INSERT INTO work_session (session_id, store_id, feature_type, input_method, title, current_version, step)
+VALUES (2001, 1, 'operation', 'form', '[시연] 운영 실험 (평일 150건)', 1, 'review'),
+       (2002, 1, 'operation', 'form', '[시연] 운영 실험 (바쁜 날 276건)', 1, 'review'),
+       (2003, 1, 'operation', 'form', '[시연] 운영 실험 (사장님 근무 안 함)', 1, 'review')
+ON CONFLICT (session_id) DO NOTHING;
+
+INSERT INTO work_version (input_version_id, session_id, version_no, schema_version, input_json,
+                          input_confirmed_by, input_confirmed_at)
+VALUES
+(200101, 2001, 1, 'operation.v1', '{
+  "business_date": "2026-11-18", "wage_year": 2026, "assumptions_version": "operation.v1",
+  "simulation": {"scenario": {"daily_orders": 150, "last_order_time": "18:45", "share_method": "p50", "takeout_ratio": 0.4}, "repetitions": 30, "random_seed": 42, "execution_mode": "continuous_day", "include_events": true},
+  "labor": {
+    "timezone": "Asia/Seoul", "rule_policy_version": "labor.kr.2026.v1", "auto_break": true,
+    "avoid_break_windows": [{"start_time": "11:00", "end_time": "14:00"}],
+    "cost_options": {"include_employer_insurance": false, "include_weekly_holiday": false},
+    "workers": [
+      {"worker_key": "OWNER", "is_owner": true, "is_minor": null, "hourly_wage_krw": null},
+      {"worker_key": "STAFF_1", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320},
+      {"worker_key": "STAFF_2", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320}
+    ],
+    "plans": [
+      {"choice_key": "CURRENT", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_A", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "11:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "OWNER", "start_time": "11:00", "end_time": "14:00", "task_code": "ORDER_HANDOFF_HELP_PREPARATION", "breaks": []},
+        {"worker_key": "OWNER", "start_time": "14:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "11:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "14:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_C", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []}
+      ]}
+    ]
+  }
+}'::jsonb, 'demo-owner', now()),
+(200201, 2002, 1, 'operation.v1', '{
+  "business_date": "2026-11-18", "wage_year": 2026, "assumptions_version": "operation.v1",
+  "simulation": {"scenario": {"daily_orders": 276, "last_order_time": "18:45", "share_method": "p50", "takeout_ratio": 0.4}, "repetitions": 30, "random_seed": 42, "execution_mode": "continuous_day", "include_events": true},
+  "labor": {
+    "timezone": "Asia/Seoul", "rule_policy_version": "labor.kr.2026.v1", "auto_break": true,
+    "avoid_break_windows": [{"start_time": "11:00", "end_time": "14:00"}],
+    "cost_options": {"include_employer_insurance": false, "include_weekly_holiday": false},
+    "workers": [
+      {"worker_key": "OWNER", "is_owner": true, "is_minor": null, "hourly_wage_krw": null},
+      {"worker_key": "STAFF_1", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320},
+      {"worker_key": "STAFF_2", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320}
+    ],
+    "plans": [
+      {"choice_key": "CURRENT", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_A", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "11:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "OWNER", "start_time": "11:00", "end_time": "14:00", "task_code": "ORDER_HANDOFF_HELP_PREPARATION", "breaks": []},
+        {"worker_key": "OWNER", "start_time": "14:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "11:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "14:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_C", "shifts": [
+        {"worker_key": "OWNER", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []}
+      ]}
+    ]
+  }
+}'::jsonb, 'demo-owner', now()),
+(200301, 2003, 1, 'operation.v1', '{
+  "business_date": "2026-11-18", "wage_year": 2026, "assumptions_version": "operation.v1",
+  "simulation": {"scenario": {"daily_orders": 150, "last_order_time": "18:45", "share_method": "p50", "takeout_ratio": 0.4}, "repetitions": 30, "random_seed": 42, "execution_mode": "continuous_day", "include_events": true},
+  "labor": {
+    "timezone": "Asia/Seoul", "rule_policy_version": "labor.kr.2026.v1", "auto_break": true,
+    "avoid_break_windows": [{"start_time": "11:00", "end_time": "14:00"}],
+    "cost_options": {"include_employer_insurance": false, "include_weekly_holiday": false},
+    "workers": [
+      {"worker_key": "STAFF_1", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320},
+      {"worker_key": "STAFF_2", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320},
+      {"worker_key": "STAFF_3", "is_owner": false, "is_minor": false, "hourly_wage_krw": 10320}
+    ],
+    "plans": [
+      {"choice_key": "CURRENT", "shifts": [
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_A", "shifts": [
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "11:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "11:00", "end_time": "14:00", "task_code": "ORDER_HANDOFF_HELP_PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_1", "start_time": "14:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "07:00", "end_time": "11:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "14:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []}
+      ]},
+      {"choice_key": "ALT_C", "shifts": [
+        {"worker_key": "STAFF_1", "start_time": "07:00", "end_time": "19:00", "task_code": "ORDER_HANDOFF", "breaks": []},
+        {"worker_key": "STAFF_2", "start_time": "07:00", "end_time": "19:00", "task_code": "PREPARATION", "breaks": []},
+        {"worker_key": "STAFF_3", "start_time": "11:00", "end_time": "14:00", "task_code": "PREPARATION_HELP_ORDER_HANDOFF", "breaks": []}
+      ]}
+    ]
+  }
+}'::jsonb, 'demo-owner', now())
+ON CONFLICT (input_version_id) DO NOTHING;
