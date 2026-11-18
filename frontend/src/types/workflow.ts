@@ -13,6 +13,7 @@ export type SessionSummary = {
 export type SessionContext = SessionSummary & {
   store_id: number
   input_method: 'agent' | 'form'
+  current_input?: JsonObject | null
   current_version_id: number | null
   input_confirmed: boolean
   latest_result_id: number | null
@@ -68,6 +69,13 @@ export type PurchaseResult = {
     assumptions?: string[]
     baseline?: JsonObject
     missing_fields?: { path: string; label: string }[]
+    suggested_changes?: {
+      path: string
+      label: string
+      unit: string | null
+      current: number | null
+      suggested: number
+    }[]
     message?: string
   }
   detail: {

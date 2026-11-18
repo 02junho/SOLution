@@ -261,6 +261,25 @@ export default function Results({
               {result.summary.missing_fields?.map((field) => (
                 <p key={field.path}>{field.label}</p>
               ))}
+              {result.response_status === 'infeasible' &&
+                !!result.summary.suggested_changes?.length && (
+                  <section aria-label="조건 변경 제안">
+                    <h3>계산을 위해 이런 변경을 제안해요</h3>
+                    <ul>
+                      {result.summary.suggested_changes.map((change) => (
+                        <li key={change.path}>
+                          {change.label} →{' '}
+                          {amount(change.suggested, change.unit ?? '', {
+                            maximumSignificantDigits: 21,
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="muted">
+                      조건 수정하기에서 제안 값을 검토하고 직접 입력해 주세요.
+                    </p>
+                  </section>
+                )}
               <button
                 className="button secondary"
                 disabled={!!busy}

@@ -91,7 +91,7 @@ class WorkSessionServiceTest {
 				100L, 10L, "purchase", "agent", "제목", 2, 1002L,
 				OffsetDateTime.parse("2026-11-13T10:15:00+09:00"), "review", 2001L, true,
 				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"),
-				OffsetDateTime.parse("2026-11-13T10:20:00+09:00"), "owner-demo")));
+				OffsetDateTime.parse("2026-11-13T10:20:00+09:00"), "owner-demo", null)));
 
 		WorkSessionContextResponse data = service.getContext(100L).data();
 		assertThat(data.inputConfirmed()).isTrue();
@@ -106,7 +106,7 @@ class WorkSessionServiceTest {
 		given(repository.findSessionContext(100L)).willReturn(Optional.of(new SessionContextRow(
 				100L, 10L, "purchase", "agent", "제목", 1, null, null, "input", null, false,
 				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"),
-				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"), "owner-demo")));
+				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"), "owner-demo", null)));
 
 		assertThat(service.getContext(100L).data().inputConfirmed()).isFalse();
 	}
@@ -117,7 +117,7 @@ class WorkSessionServiceTest {
 		given(repository.findSessionContext(100L)).willReturn(Optional.of(new SessionContextRow(
 				100L, 10L, "purchase", "agent", "제목", 1, null, null, "input", null, false,
 				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"),
-				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"), "someone-else")));
+				OffsetDateTime.parse("2026-11-13T10:00:00+09:00"), "someone-else", null)));
 
 		assertThatThrownBy(() -> service.getContext(100L))
 				.isInstanceOf(ApiException.class)
