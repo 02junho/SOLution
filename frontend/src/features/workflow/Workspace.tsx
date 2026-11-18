@@ -628,10 +628,12 @@ export default function Workspace({
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
                     // Enter로 보내고, 줄바꿈은 Shift+Enter. 한글 조합 중 Enter는 글자 확정이라 보내지 않는다.
+                    // Safari는 확정 Enter를 isComposing=false, keyCode=229로 보내므로 229도 함께 거른다.
                     if (
                       e.key === 'Enter' &&
                       !e.shiftKey &&
-                      !e.nativeEvent.isComposing
+                      !e.nativeEvent.isComposing &&
+                      e.nativeEvent.keyCode !== 229
                     ) {
                       e.preventDefault()
                       void send(e)
