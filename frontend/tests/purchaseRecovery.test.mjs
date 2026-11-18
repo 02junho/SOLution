@@ -102,3 +102,25 @@ test('조건 수정 폼은 저장된 숫자·품목을 채우고 재고 미입�
   assert.ok(html.includes('value="우유"'))
   assert.ok(!html.includes('value="null"'))
 })
+
+test('소수 제안 값은 화면에서 다시 입력해도 서버 값의 정밀도가 유지된다', () => {
+  for (const suggested of [21000.123456789, 1.0000000000000002, 0.00000001]) {
+    const html = render({
+      ...result,
+      summary: {
+        suggested_changes: [
+          {
+            path: 'items[0].storage_capacity',
+            label: '우유 보관 한도',
+            unit: 'ml',
+            current: 0,
+            suggested,
+          },
+        ],
+      },
+    })
+    const displayed = html.match(/우유 보관 한도 → ([\d,.]+)ml/)
+    assert.ok(displayed, html)
+    assert.equal(Number(displayed[1].replaceAll(',', '')), suggested)
+  }
+})

@@ -242,7 +242,9 @@ export default function Results({
                       {result.summary.suggested_changes.map((change) => (
                         <li key={change.path}>
                           {change.label} →{' '}
-                          {amount(change.suggested, change.unit ?? '')}
+                          {amount(change.suggested, change.unit ?? '', {
+                            maximumSignificantDigits: 21,
+                          })}
                         </li>
                       ))}
                     </ul>
