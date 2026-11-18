@@ -78,7 +78,6 @@ export default function App() {
           </span>
           <span>
             SOL<span className="brand-light">루션</span>
-            <small>사장님 업무 도우미</small>
           </span>
         </a>
         <nav aria-label="주 메뉴">
@@ -98,10 +97,7 @@ export default function App() {
         </nav>
         <div className="header-store">
           <span className="store-avatar">☕</span>
-          <span>
-            {import.meta.env.VITE_STORE_NAME || '우리 매장'}
-            <small>사장님 워크스페이스</small>
-          </span>
+          <span>{import.meta.env.VITE_STORE_NAME || '우리 매장'}</span>
         </div>
       </header>
       <main id="main-content" tabIndex={-1}>
@@ -127,10 +123,7 @@ export default function App() {
           />
         )}
       </main>
-      <footer className="app-footer">
-        <span>SOL루션 · 사장님이 판단할 수 있도록</span>
-        <span>계획 저장까지, 실제 실행은 사장님이.</span>
-      </footer>
+      {/* 아래쪽 슬로건 바닥글은 뺐다. "주문·결제는 하지 않아요"는 저장 버튼 옆에 있다. */}
       {newOpen && (
         <NewSession
           error={workspace.error}

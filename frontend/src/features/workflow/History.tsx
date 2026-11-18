@@ -141,7 +141,6 @@ export function SessionHistory({
   return (
     <Modal
       title="하던 업무 이어하기"
-      description="대화와 조건은 업무별로 저장돼 있어요."
       onClose={onClose}
       wide
     >
@@ -221,7 +220,6 @@ export function ConfirmationHistory({
       <div className="page-title">
         <div>
           <h1>저장한 계획</h1>
-          <p>사장님이 직접 확인하고 선택한 계획을 모았어요.</p>
         </div>
         <span className="history-emblem">
           <Icon name="book" size={28} />

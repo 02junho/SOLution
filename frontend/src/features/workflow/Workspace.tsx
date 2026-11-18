@@ -41,7 +41,6 @@ export function NewSession({
   return (
     <Modal
       title="어떤 업무를 시작할까요?"
-      description="업무마다 대화와 입력 조건을 나누어 저장해요."
       onClose={() => {
         if (!busy) onClose()
       }}
@@ -71,14 +70,14 @@ export function NewSession({
                 <strong>{featureName(value)}</strong>
                 <small>
                   {value === 'purchase'
-                    ? '필요한 만큼, 조건에 맞게'
-                    : '우리 매장의 운영 조건 정리'}
+                    ? '무엇을 어디서 살지'
+                    : '바쁜 시간에 몇 명이 일할지'}
                 </small>
               </button>
             ))}
           </div>
           <label>
-            업무 이름 <span className="muted">선택</span>
+            업무 이름 <span className="muted">(안 적어도 돼요)</span>
             <input
               maxLength={200}
               value={title}
@@ -105,10 +104,7 @@ export function NewSession({
             )}
           </p>
           {type === 'operation' && (
-            <p className="muted">
-              운영 업무·대화 저장은 가능하며, 설정 폼과 계산은 운영 기능에
-              연결할 예정이에요.
-            </p>
+            <p className="muted">운영 실험은 지금 대화까지만 할 수 있어요.</p>
           )}
           <div className="modal-footer">
             <button
@@ -255,15 +251,10 @@ function InputReview({
     <section className="review-card" aria-label="입력 검토">
       <div className="choice-top">
         <h3>계산 전, 이 조건이 맞나요?</h3>
-        <span
-          className={`status-pill ${context.input_confirmed ? 'green' : ''}`}
-        >
-          {context.input_confirmed ? '확인했어요' : '확인 전'}
-        </span>
       </div>
       {!purchase ? (
         <p className="muted">
-          운영 조건 검토 화면은 운영 설정 기능과 연결할 예정이에요.
+          운영 조건 확인은 아직 준비 중이에요.
         </p>
       ) : input ? (
         <>
@@ -417,12 +408,8 @@ export default function Workspace({
       <div className="workspace-heading">
         <div>
           <h1>
-            {context?.title ||
-              (feature === 'purchase'
-                ? '이번 주 매입, 차근차근 준비해요.'
-                : '우리 매장의 운영을 살펴봐요.')}
+            {context?.title || '무엇을 도와드릴까요?'}
           </h1>
-          <p>조건을 정리하고, 비교하고, 사장님이 결정하세요.</p>
         </div>
         {/* 업무를 열기 전에는 아래 큰 버튼(말로 시작하기·하던 업무 이어하기)과 겹쳐 숨긴다. */}
         {context && (
@@ -441,46 +428,43 @@ export default function Workspace({
           </div>
         )}
       </div>
-      <div className="workspace-toolbar">
-        <div className="feature-tabs" role="group" aria-label="업무 종류">
-          <button
-            aria-pressed={feature === 'purchase'}
-            className={feature === 'purchase' ? 'active' : ''}
-            disabled={!!busy}
-            onClick={() => onFeature('purchase')}
-          >
-            <Icon name="box" size={17} />
-            매입·재고
-          </button>
-          <button
-            aria-pressed={feature === 'operation'}
-            className={feature === 'operation' ? 'active' : ''}
-            disabled={!!busy}
-            onClick={() => onFeature('operation')}
-          >
-            <Icon name="clock" size={17} />
-            운영 실험
-          </button>
+      {/* 업무를 열기 전에는 업무 종류를 새 업무 창에서 고르니 탭과 저장 시각을 숨긴다. */}
+      {context && (
+        <div className="workspace-toolbar">
+          <div className="feature-tabs" role="group" aria-label="업무 종류">
+            <button
+              aria-pressed={feature === 'purchase'}
+              className={feature === 'purchase' ? 'active' : ''}
+              disabled={!!busy}
+              onClick={() => onFeature('purchase')}
+            >
+              <Icon name="box" size={17} />
+              매입·재고
+            </button>
+            <button
+              aria-pressed={feature === 'operation'}
+              className={feature === 'operation' ? 'active' : ''}
+              disabled={!!busy}
+              onClick={() => onFeature('operation')}
+            >
+              <Icon name="clock" size={17} />
+              운영 실험
+            </button>
+          </div>
+          <div className="session-meta">
+            <span className="tiny-dot green" />
+            마지막 저장 · {dateTime(context.updated_at)}
+            <button
+              className="icon-button"
+              disabled={!!busy}
+              aria-label="현재 업무 새로고침"
+              onClick={() => workspace.open(context.session_id)}
+            >
+              <Icon name="refresh" size={16} />
+            </button>
+          </div>
         </div>
-        <div className="session-meta">
-          {context ? (
-            <>
-              <span className="tiny-dot green" />
-              마지막 저장 · {dateTime(context.updated_at)}
-              <button
-                className="icon-button"
-                disabled={!!busy}
-                aria-label="현재 업무 새로고침"
-                onClick={() => workspace.open(context.session_id)}
-              >
-                <Icon name="refresh" size={16} />
-              </button>
-            </>
-          ) : (
-            <span>새 업무를 시작하거나 하던 업무를 이어 보세요</span>
-          )}
-        </div>
-      </div>
+      )}
       {workspace.error && (
         <Alert error>
           {workspace.error}
@@ -516,38 +500,29 @@ export default function Workspace({
         </Alert>
       )}
       <div className="workspace-grid">
-        <Progress workspace={workspace} />
+        {context && <Progress workspace={workspace} />}
         <section
           className="panel conversation-panel"
           aria-label="업무 대화와 입력"
         >
           <div className="panel-header">
             <div className="section-heading">
-              <span className="section-number">01</span>
-              <h2>함께 조건 정리하기</h2>
+              <h2>대화</h2>
             </div>
-            <span className="live-label">
-              <span className={`tiny-dot ${context ? 'green' : ''}`} />
-              {context ? '대화 저장됨' : '대화 준비'}
-            </span>
           </div>
           <div className="conversation-feed">
             <div className="assistant-welcome">
               <span className="assistant-avatar">
                 S<span>✦</span>
               </span>
-              <p className="eyebrow">사장님의 결정을 돕는 SOL루션</p>
-              <h3>
-                {context
-                  ? '어떤 조건으로 준비할까요?'
-                  : '복잡한 준비는 가볍게,\n결정은 사장님답게.'}
-              </h3>
+              {/* 업무를 열기 전에는 위 제목("무엇을 도와드릴까요?")과 겹쳐 쓰지 않는다. */}
+              {context && <h3>어떤 조건으로 준비할까요?</h3>}
               <p>
                 {context
                   ? feature === 'purchase'
-                    ? '필요한 재료와 재고, 예산을 알려주세요. 모르는 값은 확인하고 진행할게요.'
-                    : '살펴보고 싶은 시간대와 매장 운영 조건을 알려주세요. 업무별로 대화를 저장해요.'
-                  : '매장 상황을 말로 알려 주세요. SOL루션이 정리하고, 계산해서, 고를 수 있게 보여 드려요.'}
+                    ? '필요한 재료와 재고, 예산을 알려 주세요.'
+                    : '살펴보고 싶은 시간대와 직원 수를 알려 주세요.'
+                  : '이번 주 매입이나 매장 운영 고민을 말로 알려 주세요.'}
               </p>
               {!context && (
                 <div className="welcome-actions">
@@ -637,9 +612,7 @@ export default function Workspace({
           {context && (
             <div className="composer">
               <div className="composer-toolbar">
-                <span>
-                  {question ? '질문에 답해 주세요' : '사장님 말씀을 남겨 주세요'}
-                </span>
+                <span>{question ? '질문에 답해 주세요' : ''}</span>
                 {feature === 'purchase' && (
                   <button
                     className="text-button"

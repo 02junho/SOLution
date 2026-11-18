@@ -123,6 +123,10 @@ export default function Results({
     .map((item) => resolveChoice(item, choices)?.total_krw)
     .filter((value): value is number => typeof value === 'number')
   const cheapest = totals.length ? Math.min(...totals) : null
+  const baselineViolations = object(object(result?.detail).baseline)
+    .constraint_violations
+  const baselineValid =
+    Array.isArray(baselineViolations) && baselineViolations.length === 0
   const choice = choices.find((item) => item.choice_key === selected)
   const resolved = choice ? resolveChoice(choice, choices) : null
   const warnings = applicableWarnings(
@@ -164,18 +168,8 @@ export default function Results({
     >
       <div className="panel-header">
         <div className="section-heading">
-          <span className="section-number">02</span>
-          <h2>결과 비교</h2>
+          <h2>결과</h2>
         </div>
-        <span className="status-pill">
-          {saved
-            ? '저장 완료'
-            : result?.response_status === 'ok'
-              ? '골라 주세요'
-              : result
-                ? '조건 확인 필요'
-                : '계산 전'}
-        </span>
       </div>
       {/* AI 결과 설명은 설명 요청(onRequest)을 Spring에 연결할 때 다시 붙인다.
           그 전에는 누를 수 없는 칸이라 처음 쓰는 사장님께 보이지 않는다. */}
@@ -270,11 +264,10 @@ export default function Results({
           ) : (
             <>
               <div className="result-intro">
-                <p className="eyebrow">사장님이 직접 비교하고 선택해 주세요</p>
                 <p>
                   {saved
-                    ? '확정한 안과 계산 당시의 대안을 확인하세요.'
-                    : '조건을 만족하는 안을 살펴보세요. 최종 선택 전까지 저장되지 않아요.'}
+                    ? '저장한 안에 체크가 되어 있어요.'
+                    : '조건을 모두 지키는 안이에요. 하나를 골라 주세요.'}
                 </p>
               </div>
               <div
@@ -312,7 +305,8 @@ export default function Results({
                           )}
                         </span>
                       </div>
-                      <h3>{item.label ?? item.choice_key}</h3>
+                      {/* 안 이름(총비용 최소·배송 1회)은 아래 한 문장과 겹쳐, 만들 수 없는 안일 때만 보인다. */}
+                      {!value && <h3>{item.label ?? item.choice_key}</h3>}
                       <strong className="choice-price">
                         {value ? amount(value.total_krw) : '선택 불가'}
                       </strong>
@@ -338,7 +332,11 @@ export default function Results({
                     <h3>어디서 무엇을 사나요</h3>
                   </div>
                   <PurchaseLines lines={detail?.lines ?? []} input={input} />
-                  {typeof resolved.diff_from_baseline_krw === 'number' && (
+                  {/* 기준선이 조건을 지킬 때 아낀 금액만 보여 준다. 기준선이 주문 불가인데
+                      "더 들어요"라고 하면 오히려 헷갈린다. */}
+                  {typeof resolved.diff_from_baseline_krw === 'number' &&
+                    resolved.diff_from_baseline_krw < 0 &&
+                    baselineValid && (
                     <p className="muted">
                       {baselineSentence(resolved.diff_from_baseline_krw)}
                     </p>
@@ -424,7 +422,7 @@ export default function Results({
                       : '이 안으로 저장하기'}
                   <Icon name="check" size={16} />
                 </button>
-                <p>계획을 저장하며, 실제 발주·결제는 진행하지 않아요.</p>
+                <p>저장만 하고, 주문·결제는 하지 않아요.</p>
               </div>
             </>
           )}
