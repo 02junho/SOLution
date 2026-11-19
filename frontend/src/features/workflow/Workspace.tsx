@@ -11,6 +11,7 @@ import {
   dateTime,
   featureName,
   object,
+  sendsOnEnter,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import PurchaseForm from './PurchaseForm'
@@ -648,7 +649,14 @@ export default function Workspace({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  if (
+                    sendsOnEnter({
+                      key: e.key,
+                      shiftKey: e.shiftKey,
+                      isComposing: e.nativeEvent.isComposing,
+                      keyCode: e.nativeEvent.keyCode,
+                    })
+                  ) {
                     e.preventDefault()
                     void send(e)
                   }
@@ -664,8 +672,8 @@ export default function Workspace({
               </button>
             </form>
             <small>
-              입력 확인 전에는 계산하지 않아요. 모르는 값은 폼에서 비워 둘 수
-              있어요.
+              Enter로 보내고, 줄을 바꾸려면 Shift+Enter를 눌러요. 입력 확인
+              전에는 계산하지 않아요. 모르는 값은 폼에서 비워 둘 수 있어요.
             </small>
           </div>
         </section>

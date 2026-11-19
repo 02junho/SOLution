@@ -10,6 +10,7 @@ import {
   questionDraft,
   RequestKeys,
   resolveChoice,
+  sendsOnEnter,
 } from '../src/features/workflow/model.ts'
 
 const originalFetch = globalThis.fetch
@@ -257,4 +258,13 @@ test('폼 초안은 같은 버전의 후속 해석 실패에도 보존하고 다
     160000,
   )
   assert.equal(questionDraft(messages, { current_version_id: 11 }), null)
+})
+
+test('대화창은 Enter로 보내고 Shift+Enter·한글 조합 중 Enter는 보내지 않는다', () => {
+  const key = (over) => ({ key: 'Enter', shiftKey: false, isComposing: false, keyCode: 13, ...over })
+  assert.equal(sendsOnEnter(key({})), true)
+  assert.equal(sendsOnEnter(key({ shiftKey: true })), false)
+  assert.equal(sendsOnEnter(key({ isComposing: true })), false)
+  assert.equal(sendsOnEnter(key({ keyCode: 229 })), false)
+  assert.equal(sendsOnEnter(key({ key: 'a', keyCode: 65 })), false)
 })
