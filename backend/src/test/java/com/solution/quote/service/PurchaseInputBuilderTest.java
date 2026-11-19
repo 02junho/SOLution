@@ -106,6 +106,55 @@ class PurchaseInputBuilderTest {
 	}
 
 	@Test
+	void 뺀_줄의_거래처가_있으면_거래처_없는_배송_줄을_아무에게도_붙이지_않는다() throws Exception {
+		// B마트 줄은 빠지지만 같은 배치의 거래처는 둘이다. 배송비가 누구 것인지 모르므로 질문으로 넘긴다.
+		var batch = batch("b1", "{'supplier_name': null, 'fee_amount': 2500, 'free_shipping_minimum': null}",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null),
+				row("quote-line-003", "'B마트'", "null", "null", "null", "9000", "excluded", false,
+						"ITEM_CONFIRMATION_REQUIRED"));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(null, null, null), Map.of());
+
+		var supplier = ((List<Map<String, Object>>) built.input().get("suppliers")).get(0);
+		assertThat(supplier).containsEntry("supplier_name", "A식자재").containsEntry("delivery_fee_krw", null);
+	}
+
+	@Test
+	void 배치마다_배송_조건이_다르면_섞지_않고_뒤_배치_묶음을_쓰고_기록한다() throws Exception {
+		var first = batch("b1", "{'supplier_name': 'A식자재', 'fee_amount': 3000, 'free_shipping_minimum': null}",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null));
+		var second = batch("b2", "{'supplier_name': 'A식자재', 'fee_amount': 5000, 'free_shipping_minimum': 50000}",
+				row("quote-line-001", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(first, second),
+				conditions(null, null, null), Map.of());
+
+		var supplier = ((List<Map<String, Object>>) built.input().get("suppliers")).get(0);
+		assertThat(supplier).containsEntry("delivery_fee_krw", 5000L).containsEntry("free_delivery_min_krw", 50000L);
+		var conflicts = (List<Map<String, Object>>) ((Map<String, Object>) built.input().get("source"))
+				.get("delivery_conflicts");
+		assertThat(conflicts).singleElement().satisfies(conflict -> assertThat(conflict)
+				.containsEntry("replaced_batch_id", "b1").containsEntry("used_batch_id", "b2")
+				.containsEntry("replaced", java.util.Arrays.asList(3000L, null)));
+	}
+
+	@Test
+	void 같은_배치_안에서는_배송비와_무료배송_기준이_다른_줄에_있어도_합친다() throws Exception {
+		var batch = batch("b1", "{'supplier_name': 'A식자재', 'fee_amount': 3000, 'free_shipping_minimum': null},"
+				+ "{'supplier_name': 'A식자재', 'fee_amount': null, 'free_shipping_minimum': 50000}",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(null, null, null), Map.of());
+
+		var supplier = ((List<Map<String, Object>>) built.input().get("suppliers")).get(0);
+		assertThat(supplier).containsEntry("delivery_fee_krw", 3000L).containsEntry("free_delivery_min_krw", 50000L);
+	}
+
+	@Test
 	void 필요없는_품목이나_단위가_다른_견적은_빼고_이유를_남긴다() throws Exception {
 		var batch = batch("b1", "",
 				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),

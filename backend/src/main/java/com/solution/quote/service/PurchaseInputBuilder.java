@@ -66,8 +66,16 @@ public final class PurchaseInputBuilder {
 		List<Map<String, Object>> quotes = new ArrayList<>();
 		Set<List<Object>> seen = new LinkedHashSet<>();
 		List<Map<String, Object>> excluded = new ArrayList<>();
+		Map<String, String> deliveryBatch = new LinkedHashMap<>();
+		List<Map<String, Object>> deliveryConflicts = new ArrayList<>();
 		for (Batch batch : batches) {
+			// 거래처 없는 배송 줄의 주인을 정할 때는 뺀 줄까지 포함한 배치 전체의 거래처를 본다.
 			Set<String> batchSuppliers = new LinkedHashSet<>();
+			for (JsonNode row : batch.payload().path("normalization").path("items")) {
+				if (!row.path("supplier_name").asText("").isBlank()) {
+					batchSuppliers.add(supplierId(row.path("supplier_name").asText()));
+				}
+			}
 			for (JsonNode row : batch.payload().path("normalization").path("items")) {
 				String lineId = batch.batchId() + ":" + row.path("line_id").asText();
 				String itemId = row.path("item_id").isTextual() ? row.path("item_id").asText() : null;
@@ -95,7 +103,6 @@ public final class PurchaseInputBuilder {
 				}
 				String supplierName = row.path("supplier_name").asText().trim();
 				String supplierId = supplierId(supplierName);
-				batchSuppliers.add(supplierId);
 				suppliers.computeIfAbsent(supplierId, id -> supplier(id, supplierName));
 				Object vat = vat(row.path("vat_status").asText());
 				if (!seen.add(java.util.Arrays.asList(supplierId, itemId, decimal((Number) packSize), packPrice, vat))) {
@@ -110,7 +117,7 @@ public final class PurchaseInputBuilder {
 				quote.put("vat_included", vat);
 				quotes.add(quote);
 			}
-			applyDelivery(batch.payload().path("delivery"), batchSuppliers, suppliers);
+			applyDelivery(batch, batchSuppliers, suppliers, deliveryBatch, deliveryConflicts);
 		}
 
 		List<String> missing = new ArrayList<>();
@@ -134,6 +141,7 @@ public final class PurchaseInputBuilder {
 		Map<String, Object> trace = new LinkedHashMap<>(source);
 		trace.put("dictionary_version", number(dictionary.get("version")));
 		trace.put("excluded_lines", excluded);
+		trace.put("delivery_conflicts", deliveryConflicts);
 		input.put("source", trace);
 		return new Built(input, excluded);
 	}
@@ -167,24 +175,51 @@ public final class PurchaseInputBuilder {
 		return supplier;
 	}
 
-	private static void applyDelivery(JsonNode delivery, Set<String> batchSuppliers,
-			Map<String, Map<String, Object>> suppliers) {
-		for (JsonNode row : delivery) {
-			String id = row.path("supplier_name").isTextual() ? supplierId(row.path("supplier_name").asText())
+	/**
+	 * 배송 조건(배송비·무료배송 기준)은 배치 하나에서 한 묶음으로 가져온다. 같은 배치 안의 여러 줄은 합치지만,
+	 * 서로 다른 배치의 값을 섞지 않는다. 같은 거래처의 조건이 배치마다 다르면 요청 순서상 뒤 배치(최근 견적)의
+	 * 묶음 전체를 쓰고, 바뀐 내용을 delivery_conflicts에 남긴다.
+	 */
+	private static void applyDelivery(Batch batch, Set<String> batchSuppliers,
+			Map<String, Map<String, Object>> suppliers, Map<String, String> deliveryBatch,
+			List<Map<String, Object>> conflicts) {
+		Map<String, Long[]> pairs = new LinkedHashMap<>();
+		for (JsonNode row : batch.payload().path("delivery")) {
+			String name = row.path("supplier_name").asText("");
+			// 거래처가 안 적힌 배송 줄은 배치 전체의 거래처가 하나일 때만 그 거래처 것으로 본다.
+			String id = !name.isBlank() ? supplierId(name)
 					: batchSuppliers.size() == 1 ? batchSuppliers.iterator().next() : null;
-			Map<String, Object> supplier = id == null ? null : suppliers.get(id);
-			if (supplier == null) {
+			if (id == null || !suppliers.containsKey(id)) {
 				continue;
 			}
-			Long fee = integer(row.get("fee_amount"));
-			Long free = integer(row.get("free_shipping_minimum"));
-			if (fee != null && supplier.get("delivery_fee_krw") == null) {
-				supplier.put("delivery_fee_krw", fee);
+			Long[] pair = pairs.computeIfAbsent(id, key -> new Long[2]);
+			if (pair[0] == null) {
+				pair[0] = integer(row.get("fee_amount"));
 			}
-			if (free != null && supplier.get("free_delivery_min_krw") == null) {
-				supplier.put("free_delivery_min_krw", free);
+			if (pair[1] == null) {
+				pair[1] = integer(row.get("free_shipping_minimum"));
 			}
 		}
+		pairs.forEach((id, pair) -> {
+			if (pair[0] == null && pair[1] == null) {
+				return;
+			}
+			Map<String, Object> supplier = suppliers.get(id);
+			Object fee = supplier.get("delivery_fee_krw");
+			Object free = supplier.get("free_delivery_min_krw");
+			if (deliveryBatch.containsKey(id) && !(java.util.Objects.equals(fee, pair[0])
+					&& java.util.Objects.equals(free, pair[1]))) {
+				Map<String, Object> conflict = new LinkedHashMap<>();
+				conflict.put("supplier_id", id);
+				conflict.put("replaced_batch_id", deliveryBatch.get(id));
+				conflict.put("replaced", java.util.Arrays.asList(fee, free));
+				conflict.put("used_batch_id", batch.batchId());
+				conflicts.add(conflict);
+			}
+			supplier.put("delivery_fee_krw", pair[0]);
+			supplier.put("free_delivery_min_krw", pair[1]);
+			deliveryBatch.put(id, batch.batchId());
+		});
 	}
 
 	private static String firstBlockingIssue(JsonNode row) {

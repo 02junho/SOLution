@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.solution.common.exception.ApiException;
@@ -34,13 +35,15 @@ public class PurchaseInputService {
 	private final MaterialRequirementService materials;
 	private final WorkSessionService sessions;
 	private final WorkSessionEventService events;
+	private final TransactionTemplate transactions;
 
 	public PurchaseInputService(QuoteResourceService resources, MaterialRequirementService materials,
-			WorkSessionService sessions, WorkSessionEventService events) {
+			WorkSessionService sessions, WorkSessionEventService events, TransactionTemplate transactions) {
 		this.resources = resources;
 		this.materials = materials;
 		this.sessions = sessions;
 		this.events = events;
+		this.transactions = transactions;
 	}
 
 	public ApiResponse<Map<String, Object>> create(String quoteStoreId, UUID preparationId, PurchaseInputRequest request) {
@@ -68,13 +71,20 @@ public class PurchaseInputService {
 		source.put("quote_batch_ids", batchIds);
 		PurchaseInputBuilder.Built built = PurchaseInputBuilder.build(preview, dictionary, batches, conditions, source);
 
-		long sessionId = sessions.create(new WorkSessionCreateRequest(request.storeId(), "purchase", "form", TITLE))
-				.data().sessionId();
-		ApiResponse<Map<String, Object>> saved = events.handleEvent(sessionId, "purchase-input:" + UUID.randomUUID(),
-				new WorkSessionEventRequest("form", null, null, built.input(), null, null));
-		Map<String, Object> data = new LinkedHashMap<>(saved.data());
-		data.put("session_id", sessionId);
+		// 업무 생성과 첫 입력 저장을 한 트랜잭션으로 묶는다. 저장 검증에서 거절되면 업무도 남지 않는다.
+		// (handleEvent 안의 트랜잭션은 이 트랜잭션에 합류한다. 폼 입력은 AI를 부르지 않아 트랜잭션이 길어지지 않는다.)
+		Saved result = transactions.execute(status -> {
+			long sessionId = sessions.create(new WorkSessionCreateRequest(request.storeId(), "purchase", "form", TITLE))
+					.data().sessionId();
+			return new Saved(sessionId, events.handleEvent(sessionId, "purchase-input:" + UUID.randomUUID(),
+					new WorkSessionEventRequest("form", null, null, built.input(), null, null)));
+		});
+		Map<String, Object> data = new LinkedHashMap<>(result.response().data());
+		data.put("session_id", result.sessionId());
 		data.put("excluded_lines", built.excludedLines());
-		return new ApiResponse<>(saved.status(), data, saved.message());
+		return new ApiResponse<>(result.response().status(), data, result.response().message());
+	}
+
+	private record Saved(long sessionId, ApiResponse<Map<String, Object>> response) {
 	}
 }
