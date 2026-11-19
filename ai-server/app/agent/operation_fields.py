@@ -1,19 +1,15 @@
-"""운영 실험 대화 입력: 폼 값 읽기·검사·운영 입력(근무표 포함) 만들기.
+"""운영 실험 대화 입력: 폼 값 읽기·검사.
 
-운영 입력(work_version.input_json)은 폼 값으로 만든 완성본이다(simulation 설정 + labor 근무표 세 안).
-폼에서는 Spring OperationInputBuilder가, 대화에서는 이 모듈의 build()가 같은 규칙으로 만든다.
-
-⚠️ 두 빌더는 같은 기준 파일(data/demo/operation/input_builder_cases.json)과 비교하는 테스트로 묶여 있다.
-   Spring: OperationInputBuilderCasesTest / Python: tests/test_agent_operation.py
-   빌더 규칙을 바꿀 때는 ① Spring 빌더 → ② 기준 파일 다시 뽑기(Spring 테스트 주석 참고) → ③ 이 build()까지 같이 고친다.
+운영 입력(work_version.input_json)은 폼 값만 담는다({"operation_form": {...}}, 화면 폼과 같은 모양).
+근무표 세 안은 계산할 때 Spring OperationInputBuilder가 만든다(빌더는 그것 하나다).
+말하지 않은 선택 칸(라스트 오더 등)은 비워 두고, 계산할 때 기본값을 쓴다.
+바쁜 시간은 입력이 아니다: 상권 데이터에서 손님이 가장 몰리는 시간대(Spring OperationInputBuilder.PEAK_START~PEAK_END)를 쓴다.
 
 대화 흐름
-- 처음 입력(매입처럼 저장하면서 채우기): 말할 때마다 지금까지의 폼 값만 "작성 중 입력"({"operation_form": {...}})으로
-  저장하고, 하루 주문 수 → 사장님 근무 → 직원 시급 중 빠진 값을 말풍선으로 묻는다. 셋이 다 모이면 라스트 오더·바쁜 시간
-  등은 기본값으로 채워 완성본으로 저장하고 알려 준다. 작성 중 입력은 계산할 수 없다(Spring이 입력 필요로 막는다).
-- 수정: 저장된 완성본에서 폼 값을 읽어 바꾼 뒤 다시 만든다(사장님 근무·바쁜 시간도 대화로 바꿀 수 있다).
-검사 기준은 폼과 같다: 하루 주문 1~300건, 라스트 오더 18:30~19:00, 시급은 그해 최저시급 이상,
-바쁜 시간 07~19시 안·끝이 시작보다 늦게, 처리시간 1~300초.
+- 처음 입력: 말할 때마다 지금까지의 폼 값을 저장하고, 하루 주문 수 → 사장님 근무 → 직원 시급 중 빠진 값을 묻는다.
+  필수 값이 다 모이기 전에는 계산할 수 없다(Spring이 입력 필요로 막는다).
+- 수정: 저장된 폼 값을 바꾼다.
+검사 기준은 폼과 같다: 하루 주문 1~300건, 라스트 오더 18:30~19:00, 시급은 그해 최저시급 이상, 처리시간 1~300초.
 """
 
 from __future__ import annotations
@@ -28,10 +24,10 @@ from app.tools.labor.policies import MINIMUM_WAGES
 
 SEOUL = ZoneInfo("Asia/Seoul")
 MAX_DAILY_ORDERS = 300
-DAY_START, DAY_END = "07:00", "19:00"
+DAY_END = "19:00"
 DEFAULT_LAST_ORDER = "18:45"
-DEFAULT_RUSH = ("11:00", "14:00")
-ASSUMPTIONS_VERSION = "operation.v1"
+# 상권 데이터에서 손님이 가장 몰리는 시간대(Spring OperationInputBuilder.PEAK_START~PEAK_END). 안내 문장에만 쓴다.
+PEAK = ("11:00", "14:00")
 
 # 대화로 바꿀 수 있는 폼 값: target → 사람이 읽는 이름
 FIELDS: dict[str, str] = {
@@ -39,8 +35,6 @@ FIELDS: dict[str, str] = {
     "last_order_time": "라스트 오더",
     "is_owner_working": "사장님 근무 여부",
     "hourly_wage_krw": "직원 시급",
-    "rush_start_time": "바쁜 시간 시작",
-    "rush_end_time": "바쁜 시간 끝",
     "order_time_sec": "주문·결제 평균 시간",
     "handoff_time_sec": "음료 전달 평균 시간",
 }
@@ -50,8 +44,9 @@ INTEGER_FIELDS = {
     "order_time_sec",
     "handoff_time_sec",
 }
-TIME_FIELDS = {"last_order_time", "rush_start_time", "rush_end_time"}
-# 대화로 처음 입력할 때 순서대로 묻는 칸(질문, 선택지, 카드에 보일 칸 이름). 나머지는 기본값으로 채우고 알려 준다.
+TIME_FIELDS = {"last_order_time"}
+REQUIRED = ("daily_orders", "is_owner_working", "hourly_wage_krw")
+# 대화로 처음 입력할 때 순서대로 묻는 칸(질문, 선택지, 카드에 보일 칸 이름). 나머지는 비워 두고 계산할 때 기본값을 쓴다.
 GUIDED: list[tuple[str, str, list[str], str]] = [
     (
         "daily_orders",
@@ -83,7 +78,10 @@ FORM_ONLY: dict[str, str] = {
     "staff_end_time": "직원 근무시간은 07~19시로 고정해서 비교해요.",
     "selected_menu_ids": "메뉴는 기본 5종으로 비교해요. 판매 비중은 '폼으로 직접 입력'에서 바꿔 주세요.",
     "menu_weights": "판매 비중은 '폼으로 직접 입력'에서 바꿔 주세요.",
+    "rush_start_time": f"바쁜 시간은 상권 데이터에서 손님이 가장 몰리는 {PEAK[0]}~{PEAK[1]}로 정해져 있어요. "
+    "우리 매장만의 바쁜 시간 반영은 다음 단계 기능이에요.",
 }
+FORM_ONLY["rush_end_time"] = FORM_ONLY["rush_start_time"]
 
 _YES_WORDS = {
     "네",
@@ -115,10 +113,20 @@ def today() -> date:
 DRAFT_KEY = "operation_form"
 
 
-def draft_values(current: dict | None) -> dict | None:
-    """작성 중 입력이면 지금까지 채운 폼 값, 아니면 None."""
-    form = _obj(current).get(DRAFT_KEY)
-    return dict(form) if isinstance(form, dict) else None
+def form_values(current: dict | None) -> dict:
+    """저장 입력의 폼 값. 비어 있으면 {}. 이 구조 전에 저장된 완성본(simulation·labor)이면 폼 값으로 되읽는다."""
+    current = _obj(current)
+    form = current.get(DRAFT_KEY)
+    if isinstance(form, dict):
+        return dict(form)
+    if isinstance(_obj(current.get("labor")).get("workers"), list):
+        return _legacy_values(current)
+    return {}
+
+
+def is_complete(values: dict) -> bool:
+    """필수 값(하루 주문·사장님 근무·시급)이 다 있는지. 다 있어야 계산할 수 있다."""
+    return all(values.get(key) is not None for key in REQUIRED)
 
 
 def next_missing(values: dict) -> tuple[int, str, str, list[str], str] | None:
@@ -129,67 +137,39 @@ def next_missing(values: dict) -> tuple[int, str, str, list[str], str] | None:
     return None
 
 
-def is_operation_input(current: dict | None) -> bool:
-    """운영 입력 완성본 모양(simulation.scenario + labor.workers)인지."""
-    current = _obj(current)
-    return isinstance(
-        _obj(current.get("simulation")).get("scenario"), dict
-    ) and isinstance(_obj(current.get("labor")).get("workers"), list)
-
-
-# ---------------------------------------------------------------- 완성본 → 폼 값
-def read_values(current: dict) -> dict:
-    """저장된 완성본에서 폼 값을 되읽는다. 없는 선택 칸은 넣지 않아 다시 만들어도 모양이 같다."""
+def _legacy_values(current: dict) -> dict:
+    """예전 완성본(근무표까지 든 입력)에서 폼 값만 되읽는다. 시연 DB를 새로 만들면 필요 없어진다."""
     simulation = _obj(current.get("simulation"))
     scenario = _obj(simulation.get("scenario"))
-    labor = _obj(current.get("labor"))
-    workers = [w for w in labor.get("workers", []) if isinstance(w, dict)]
+    workers = [w for w in _obj(current.get("labor")).get("workers", []) if isinstance(w, dict)]
     staff = [w for w in workers if not w.get("is_owner")]
-    window = next(
-        (w for w in labor.get("avoid_break_windows") or [] if isinstance(w, dict)), {}
-    )
     values = {
         "business_date": current.get("business_date"),
         "daily_orders": scenario.get("daily_orders"),
-        "last_order_time": scenario.get("last_order_time", DEFAULT_LAST_ORDER),
+        "last_order_time": scenario.get("last_order_time"),
         "is_owner_working": any(w.get("is_owner") for w in workers),
         "hourly_wage_krw": next(
-            (
-                w.get("hourly_wage_krw")
-                for w in staff
-                if w.get("hourly_wage_krw") is not None
-            ),
-            None,
+            (w.get("hourly_wage_krw") for w in staff if w.get("hourly_wage_krw") is not None), None
         ),
-        "is_staff_minor": next(
-            (w.get("is_minor") for w in staff if w.get("is_minor") is not None), None
-        ),
-        "rush_start_time": window.get("start_time", DEFAULT_RUSH[0]),
-        "rush_end_time": window.get("end_time", DEFAULT_RUSH[1]),
+        "is_staff_minor": next((w.get("is_minor") for w in staff if w.get("is_minor") is not None), None),
     }
-    for key in (
-        "selected_menu_ids",
-        "menu_weights",
-        "order_time_sec",
-        "handoff_time_sec",
-    ):
+    for key in ("selected_menu_ids", "menu_weights", "order_time_sec", "handoff_time_sec"):
         if key in simulation:
             values[key] = simulation[key]
-    return values
+    return {key: value for key, value in values.items() if value is not None}
 
 
 def summary(current: dict | None) -> dict:
-    """LLM에 줄 작은 요약. 근무표 전체 대신 대화로 바꿀 수 있는 지금 값만 담는다."""
-    values = read_values(_obj(current))
+    """LLM에 줄 작은 요약. 지금 폼 값과, 비어 있으면 계산에 쓰는 기본값."""
+    values = form_values(current)
     return {
-        "daily_orders": values["daily_orders"],
-        "last_order_time": values["last_order_time"],
-        "is_owner_working": values["is_owner_working"],
-        "hourly_wage_krw": values["hourly_wage_krw"],
-        "rush": f"{values['rush_start_time']}~{values['rush_end_time']}",
+        "daily_orders": values.get("daily_orders"),
+        "last_order_time": values.get("last_order_time", f"{DEFAULT_LAST_ORDER}(기본)"),
+        "is_owner_working": values.get("is_owner_working"),
+        "hourly_wage_krw": values.get("hourly_wage_krw"),
         "order_time_sec": values.get("order_time_sec", 60),
         "handoff_time_sec": values.get("handoff_time_sec", 30),
-        "fixed": "영업 07~19시, 직원 2명 07~19시, 30회 반복",
+        "fixed": f"영업 07~19시, 직원 2명 07~19시, 바쁜 시간 {PEAK[0]}~{PEAK[1]}(상권 데이터), 30회 반복",
     }
 
 
@@ -234,11 +214,6 @@ def check(values: dict, target: str) -> str | None:
         return f"하루 주문은 1~{MAX_DAILY_ORDERS}건으로 알려 주세요."
     if target == "last_order_time" and not "18:30" <= value <= DAY_END:
         return "라스트 오더는 18:30~19:00 사이로 알려 주세요."
-    if (
-        target in {"rush_start_time", "rush_end_time"}
-        and not DAY_START <= value <= DAY_END
-    ):
-        return "바쁜 시간은 07:00~19:00 안에서 알려 주세요."
     if target == "hourly_wage_krw":
         year = _year(values)
         minimum = MINIMUM_WAGES.get(year)
@@ -262,8 +237,6 @@ def check_all(values: dict) -> tuple[str, str] | None:
             problem = check(values, target)
             if problem:
                 return target, problem
-    if values["rush_start_time"] >= values["rush_end_time"]:
-        return "rush_end_time", "바쁜 시간 끝은 시작보다 늦게 알려 주세요."
     return None
 
 
@@ -306,141 +279,9 @@ def parse_answer(key: str, answer) -> object | None:
     return int(digits[0].replace(",", ""))
 
 
-def fill_defaults(values: dict) -> list[str]:
-    """처음 입력에서 말하지 않은 칸을 기본값으로 채우고, 채운 내용을 사장님께 알릴 문장으로 돌려준다."""
+def default_notes(values: dict) -> list[str]:
+    """비워 둔 선택 칸 중 계산할 때 기본값을 쓰는 것. 사장님께 알릴 문장."""
     notes = []
-    if not values.get("business_date"):
-        values["business_date"] = today().isoformat()
-    if values.get("is_owner_working") is None:
-        values["is_owner_working"] = True
-        notes.append("사장님도 일하는 것으로")
-    if values.get("hourly_wage_krw") is None:
-        minimum = MINIMUM_WAGES.get(_year(values))
-        if minimum is not None:
-            values["hourly_wage_krw"] = int(minimum)
-            notes.append(f"직원 시급은 최저시급 {int(minimum):,}원으로")
     if values.get("last_order_time") is None:
-        values["last_order_time"] = DEFAULT_LAST_ORDER
-        notes.append(f"라스트 오더는 {DEFAULT_LAST_ORDER}로")
-    if values.get("rush_start_time") is None and values.get("rush_end_time") is None:
-        values["rush_start_time"], values["rush_end_time"] = DEFAULT_RUSH
-        notes.append("바쁜 시간은 11:00~14:00으로")
-    if values.get("rush_start_time") is None:
-        values["rush_start_time"] = DEFAULT_RUSH[0]
-        notes.append(f"바쁜 시간 시작은 {DEFAULT_RUSH[0]}으로")
-    if values.get("rush_end_time") is None:
-        values["rush_end_time"] = DEFAULT_RUSH[1]
-        notes.append(f"바쁜 시간 끝은 {DEFAULT_RUSH[1]}으로")
+        notes.append(f"라스트 오더는 기본 {DEFAULT_LAST_ORDER}")
     return notes
-
-
-# ---------------------------------------------------------------- 폼 값 → 완성본 (Spring OperationInputBuilder와 같은 규칙)
-def _shift(worker: str, start: str, end: str, task: str) -> dict:
-    return {
-        "worker_key": worker,
-        "start_time": start,
-        "end_time": end,
-        "task_code": task,
-        "breaks": [],
-    }
-
-
-def _help_in_rush(
-    worker: str, task: str, help_task: str, start: str, end: str
-) -> list[dict]:
-    shifts = [_shift(worker, DAY_START, start, task)] if DAY_START < start else []
-    shifts.append(_shift(worker, start, end, help_task))
-    if end < DAY_END:
-        shifts.append(_shift(worker, end, DAY_END, task))
-    return shifts
-
-
-def build(values: dict) -> dict:
-    """검사를 마친 폼 값으로 운영 입력 완성본을 만든다."""
-    business_date = date.fromisoformat(values["business_date"])
-    owner = bool(values["is_owner_working"])
-    minor = bool(values.get("is_staff_minor"))
-    wage = int(values["hourly_wage_krw"])
-    start, end = values["rush_start_time"], values["rush_end_time"]
-    lead, maker, extra = (
-        ("OWNER", "STAFF_1", "STAFF_2") if owner else ("STAFF_1", "STAFF_2", "STAFF_3")
-    )
-
-    def worker(key, is_owner, is_minor, hourly):
-        return {
-            "worker_key": key,
-            "is_owner": is_owner,
-            "is_minor": is_minor,
-            "hourly_wage_krw": hourly,
-        }
-
-    workers = [
-        worker(lead, owner, None if owner else minor, None if owner else wage),
-        worker(maker, False, minor, wage),
-        worker(extra, False, minor, wage),
-    ]
-    plans = [
-        {
-            "choice_key": "CURRENT",
-            "shifts": [
-                _shift(lead, DAY_START, DAY_END, "ORDER_HANDOFF"),
-                _shift(maker, DAY_START, DAY_END, "PREPARATION"),
-            ],
-        },
-        {
-            "choice_key": "ALT_A",
-            "shifts": _help_in_rush(
-                lead, "ORDER_HANDOFF", "ORDER_HANDOFF_HELP_PREPARATION", start, end
-            )
-            + _help_in_rush(
-                maker, "PREPARATION", "PREPARATION_HELP_ORDER_HANDOFF", start, end
-            ),
-        },
-        {
-            "choice_key": "ALT_C",
-            "shifts": [
-                _shift(lead, DAY_START, DAY_END, "ORDER_HANDOFF"),
-                _shift(maker, DAY_START, DAY_END, "PREPARATION"),
-                _shift(extra, start, end, "PREPARATION_HELP_ORDER_HANDOFF"),
-            ],
-        },
-    ]
-    simulation = {
-        "scenario": {
-            "daily_orders": int(values["daily_orders"]),
-            "last_order_time": values["last_order_time"],
-            "share_method": "p50",
-            "takeout_ratio": 0.4,
-        },
-        "repetitions": 30,
-        "random_seed": 42,
-        "execution_mode": "continuous_day",
-        "include_events": True,
-    }
-    if values.get("selected_menu_ids"):
-        simulation["selected_menu_ids"] = sorted(set(values["selected_menu_ids"]))
-    if values.get("menu_weights"):
-        simulation["menu_weights"] = {
-            key: values["menu_weights"][key] for key in sorted(values["menu_weights"])
-        }
-    for key in ("order_time_sec", "handoff_time_sec"):
-        if values.get(key) is not None:
-            simulation[key] = int(values[key])
-    return {
-        "business_date": business_date.isoformat(),
-        "wage_year": business_date.year,
-        "assumptions_version": ASSUMPTIONS_VERSION,
-        "simulation": simulation,
-        "labor": {
-            "timezone": "Asia/Seoul",
-            "rule_policy_version": f"labor.kr.{business_date.year}.v1",
-            "auto_break": True,
-            "avoid_break_windows": [{"start_time": start, "end_time": end}],
-            "workers": workers,
-            "plans": plans,
-            "cost_options": {
-                "include_weekly_holiday": False,
-                "include_employer_insurance": False,
-            },
-        },
-    }

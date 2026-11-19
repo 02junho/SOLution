@@ -36,6 +36,7 @@ import com.solution.operation.dto.simulation.SimulationResult;
 import com.solution.operation.dto.StaffingPlan;
 import com.solution.operation.dto.labor.LaborRequest;
 import com.solution.operation.dto.OperationResultResponse;
+import com.solution.operation.service.input.OperationInputBuilder;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -102,7 +103,8 @@ public class OperationResultService {
 			}
 			return runResponse(existing.get());
 		}
-		Map<String, Object> input = read(source.inputJson());
+		// 저장 입력은 폼 값이다. 근무표 세 안까지 만든 계산 입력은 여기서 만든다.
+		Map<String, Object> input = OperationInputBuilder.expand(read(source.inputJson()));
 		long resultId = ids.next();
 		List<Map<String, Object>> missing = new ArrayList<>();
 		for (String field : List.of("business_date", "wage_year", "assumptions_version", "simulation", "labor")) {

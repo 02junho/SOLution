@@ -7,12 +7,14 @@ import {
   FORM_MENUS,
   LAST_ORDER_TIMES,
   ORDER_PRESETS,
-  HALF_HOURS,
+  PEAK,
   SLOT_KEYS,
   SLOT_SHARES,
   SLOW_RUN_ORDERS,
+  DEFAULT_LAST_ORDER,
   digitsOnly,
   draftOperationInput,
+  formInput,
   minimumWage,
   rushLength,
   rushText,
@@ -27,13 +29,10 @@ import './operationWorkspace.css'
 
 /*
  * 운영 실험 조건 입력 (업무 화면 01 · 폼으로 직접 입력).
- * 사장님은 주문 수·라스트 오더·사장님 근무·시급만 고르고, 세 안의 근무표는 Spring(운영 입력 만들기)이 만든다.
- * 근무는 고정 가정(2명 07~19시, 11~14시에만 안이 바뀜). 잘못된 칸이 있으면 저장 버튼을 막고 버튼 옆에 이유를 보인다.
+ * 사장님은 주문 수·라스트 오더·사장님 근무·시급만 고르고, 폼 값만 저장한다. 세 안의 근무표는 계산할 때 Spring이 만든다.
+ * 근무는 고정 가정(2명 07~19시, 바쁜 시간에만 안이 바뀜). 바쁜 시간은 입력이 아니라 상권 데이터의 가장 바쁜 시간대다.
+ * 잘못된 칸이 있으면 저장 버튼을 막고 버튼 옆에 이유를 보인다.
  */
-const toMinutes = (hhmm: string) => {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
-}
 
 export default function OperationForm({
   initial,
@@ -60,14 +59,6 @@ export default function OperationForm({
   const orders = Number(form.dailyOrders) || 0
   const counts = slotCounts(form)
   const weightSum = form.menuIds.reduce((s, id) => s + (Number(form.weights[id]) || 0), 0)
-  const rush = { start: form.rushStart, end: form.rushEnd }
-  const rushOk = form.rushStart < form.rushEnd
-  // 고른 바쁜 시간이 손님이 몰리는 11~14시와 절반 넘게 겹치는지(안 겹치면 안내만 하고 막지는 않는다).
-  const overlapMinutes = Math.max(
-    0,
-    Math.min(toMinutes(form.rushEnd), 14 * 60) - Math.max(toMinutes(form.rushStart), 11 * 60),
-  )
-  const coversPeak = overlapMinutes >= 90
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -75,8 +66,9 @@ export default function OperationForm({
     setError('')
     setBuilding(true)
     try {
-      const draft = await draftOperationInput(form)
-      if (await onSave(draft.input)) onClose()
+      // 폼과 같은 규칙으로 한 번 더 검사하고(틀리면 이유를 보임), 저장은 폼 값만 한다.
+      await draftOperationInput(form)
+      if (await onSave(formInput(form))) onClose()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '운영 조건을 만들지 못했어요.')
     } finally {
@@ -122,10 +114,10 @@ export default function OperationForm({
               <label>
                 라스트 오더
                 <select value={form.lastOrderTime} onChange={(e) => set({ lastOrderTime: e.target.value })}>
+                  <option value="">기본 ({DEFAULT_LAST_ORDER})</option>
                   {LAST_ORDER_TIMES.map((t) => (
                     <option key={t} value={t}>
                       {t}
-                      {t === '18:45' ? ' (기본)' : ''}
                     </option>
                   ))}
                 </select>
@@ -247,53 +239,19 @@ export default function OperationForm({
               </div>
               <div>
                 <b>서로 돕기</b>
-                <span>사람과 시간은 그대로, 바쁜 시간{rushOk ? `(${rushText(rush)})` : ''}에만 서로의 일을 도와요.</span>
+                <span>사람과 시간은 그대로, 바쁜 시간({rushText(PEAK)})에만 서로의 일을 도와요.</span>
               </div>
               <div>
                 <b>한 명 추가</b>
                 <span>
-                  바쁜 시간{rushOk ? `(${rushText(rush)})` : ''}에 제조를 맡고 주문도 돕는 직원 1명
-                  {rushOk ? `(${rushLength(rush)})` : ''}을 더해요.
+                  바쁜 시간({rushText(PEAK)})에 제조를 맡고 주문도 돕는 직원 1명({rushLength(PEAK)})을 더해요.
                 </span>
               </div>
             </div>
-            <div className="opw-pair">
-              <label className={`opw-field ${rushOk ? '' : 'opw-invalid'}`}>
-                <span className="opw-field-label">
-                  바쁜 시간 시작{' '}
-                  <span className="opw-info" tabIndex={0} role="note" aria-label="바쁜 시간 설명">
-                    ⓘ
-                    <span className="opw-tip">
-                      손님이 가장 몰리는 시간은 공공데이터 기준 11:00~14:00(하루 손님의 절반)이에요. 바쁜 시간을 바꿔도
-                      손님이 오는 시간은 그대로라, 이 시간과 겹치게 고르는 걸 권해요.
-                    </span>
-                  </span>
-                </span>
-                <select value={form.rushStart} onChange={(e) => set({ rushStart: e.target.value })}>
-                  {HALF_HOURS.slice(0, -1).map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-                <small className="opw-field-note">사람을 더 넣거나 서로 도울 시간이에요.</small>
-              </label>
-              <label className={`opw-field ${rushOk ? '' : 'opw-invalid'}`}>
-                <span className="opw-field-label">바쁜 시간 끝</span>
-                <select value={form.rushEnd} onChange={(e) => set({ rushEnd: e.target.value })}>
-                  {HALF_HOURS.slice(1).map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-                <small className="opw-field-note">
-                  {rushOk ? '휴게도 이 시간을 피해서 넣어요.' : '끝은 시작보다 늦게 골라 주세요.'}
-                </small>
-              </label>
-            </div>
-            {rushOk && !coversPeak && (
-              <p className="opw-note opw-caution" role="status">
-                고른 시간이 손님이 가장 몰리는 11:00~14:00과 많이 어긋나요. 바쁜 시간을 바꿔도 손님이 오는 시간은 그대로라
-                효과가 작게 나올 수 있어요.
-              </p>
-            )}
+            <p className="opw-note">
+              바쁜 시간 {rushText(PEAK)}은 공공데이터(을지로입구 커피 상권)에서 1시간당 손님이 가장 많은 시간대예요. 휴게도
+              이 시간을 피해서 넣어요. 우리 매장만의 바쁜 시간을 반영하는 건 다음 단계 기능이에요.
+            </p>
           </section>
 
           <details className="form-section opw-details">

@@ -64,7 +64,7 @@ export default function OperationInputReview({ input, confirmed }: { input: Json
         </div>
         <div>
           <small>라스트 오더</small>
-          <b>{saved.lastOrderTime}</b>
+          <b>{saved.chosenLastOrder ?? `기본 ${saved.lastOrderTime}`}</b>
         </div>
         <div>
           <small>일하는 사람</small>
@@ -94,8 +94,9 @@ export default function OperationInputReview({ input, confirmed }: { input: Json
         </li>
       </ul>
       <p className="muted opw-review-note">
-        시간대별 손님은 을지로입구 상권 비중으로 나누고, 처리시간은 가정값이에요. 같은 손님 조건으로 30번 돌려 비교해요.
-        바쁜 시간·라스트 오더는 "바쁜 시간 12시~3시"처럼 말로도 바꿀 수 있어요.
+        시간대별 손님은 을지로입구 상권 비중으로 나누고, 바쁜 시간은 그중 손님이 가장 많은 {rushText(saved.rush)}이에요.
+        처리시간은 가정값이에요. 같은 손님 조건으로 30번 돌려 비교해요. 라스트 오더는 "라스트오더 7시"처럼 말로도 바꿀 수
+        있어요.
       </p>
     </>
   )

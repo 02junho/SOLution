@@ -1,4 +1,4 @@
-"""운영 실험 대화 해석. 처음 입력은 말한 값 + 기본값으로 근무표까지 만들고, 수정은 폼 값으로 읽어 다시 만든다.
+"""운영 실험 대화 해석. 저장 입력은 폼 값만({"operation_form": {...}}), 근무표 세 안은 계산할 때 Spring이 만든다.
 
 실제 LLM 대신 정해 둔 해석을 돌려주는 가짜 해석기로 service.run만 확인한다(서버·DB 없이).
 """
@@ -16,19 +16,17 @@ from app.agent.schemas import Change, InterpretDraft, InterpretRequest
 from app.agent.service import run
 from app.core.status import ResponseStatus
 
-# Spring OperationInputBuilder 결과 기준 파일. Spring 테스트(OperationInputBuilderCasesTest)도 같은 파일을 본다.
-# 빌더 규칙을 바꾸면 두 빌더와 이 파일을 같이 고친다(뽑는 방법은 Spring 테스트 주석 참고).
-CASES_FILE = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "demo"
-    / "operation"
-    / "input_builder_cases.json"
-)
-CASES = json.loads(CASES_FILE.read_text(encoding="utf-8"))
-SNAPSHOT = CASES["owner_default"][
-    "input"
-]  # Spring 빌더가 만든 완성본(사장님 근무, 150건)
+# 저장된 운영 입력(폼 값만). 시연 업무 2001과 같은 값(사장님 근무, 150건).
+SNAPSHOT = {
+    "operation_form": {
+        "business_date": "2026-11-18",
+        "daily_orders": 150,
+        "is_owner_working": True,
+        "hourly_wage_krw": 10320,
+    }
+}
+# 이 구조 전에 저장된 완성본(근무표까지 든 입력). Spring 운영 계산 테스트도 쓰는 파일이다.
+LEGACY_FILE = Path(__file__).resolve().parents[2] / "data" / "demo" / "operation" / "input.json"
 
 
 class Fake:
@@ -62,19 +60,17 @@ def _input(response):
     return response.data["parsed_input"]["input"]
 
 
-@pytest.mark.parametrize("name", list(CASES))
-def test_파이썬_빌더는_Spring_빌더와_같은_완성본을_만든다(name):
-    form = {k: v for k, v in CASES[name]["form"].items() if v is not None}
-    form.setdefault("last_order_time", operation_fields.DEFAULT_LAST_ORDER)
-    form.setdefault("rush_start_time", operation_fields.DEFAULT_RUSH[0])
-    form.setdefault("rush_end_time", operation_fields.DEFAULT_RUSH[1])
-    assert operation_fields.build(form) == CASES[name]["input"]
+def _form(response):
+    return _input(response)["operation_form"]
 
 
-@pytest.mark.parametrize("name", list(CASES))
-def test_완성본에서_읽은_폼_값으로_다시_만들면_그대로다(name):
-    snapshot = CASES[name]["input"]
-    assert operation_fields.build(operation_fields.read_values(snapshot)) == snapshot
+def test_예전_완성본도_폼_값으로_읽고_수정하면_폼_값으로_저장한다():
+    legacy = json.loads(LEGACY_FILE.read_text(encoding="utf-8"))
+    values = operation_fields.form_values(legacy)
+    assert values["daily_orders"] == 200 and values["is_owner_working"] is True
+    assert values["hourly_wage_krw"] == 10320 and "last_order_time" not in values
+    response = run(_req(current_input=legacy), Fake(_change("daily_orders", 210)))
+    assert _form(response)["daily_orders"] == 210 and "labor" not in _input(response)
 
 
 class Unused:
@@ -88,7 +84,7 @@ def _say(current, content):
     return _req(current_input=current, content=content)
 
 
-def test_대화로_처음_입력하면_말한_값과_기본값으로_근무표까지_만든다():
+def test_대화로_처음_입력하면_말한_값만_저장하고_기본값은_알려_준다():
     response = run(
         _req(current_input=None, content="하루 200건, 사장님도 일하고 시급 11000원"),
         Fake(
@@ -101,20 +97,11 @@ def test_대화로_처음_입력하면_말한_값과_기본값으로_근무표�
         response.status == ResponseStatus.OK
         and response.data["detail_status"] == "INTERPRETED"
     )
-    made = _input(response)
-    assert made["simulation"]["scenario"]["daily_orders"] == 200
-    assert [p["choice_key"] for p in made["labor"]["plans"]] == [
-        "CURRENT",
-        "ALT_A",
-        "ALT_C",
-    ]
-    assert [w["hourly_wage_krw"] for w in made["labor"]["workers"]] == [
-        None,
-        11000,
-        11000,
-    ]
-    # 묻지 않은 값(라스트 오더, 바쁜 시간)은 기본값으로 넣고 알려 준다.
-    assert "18:45" in response.message and "11:00~14:00" in response.message
+    # 근무표는 계산할 때 Spring이 만든다. 말하지 않은 라스트 오더는 비워 두고 기본값으로 계산한다고 알린다.
+    assert _input(response) == {
+        "operation_form": {"daily_orders": 200, "is_owner_working": True, "hourly_wage_krw": 11000}
+    }
+    assert "18:45" in response.message
     assert response.data["assumptions"]
 
 
@@ -144,14 +131,9 @@ def test_처음_입력은_매입처럼_말할_때마다_작성_중으로_저장�
     assert "(3/3)" in two.message and "시급" in two.message
 
     done = run(_say(_input(two), "최저시급으로 할게요"), Unused())
-    made = _input(done)
-    assert made["simulation"]["scenario"]["daily_orders"] == 200
-    assert all(not w["is_owner"] for w in made["labor"]["workers"])
-    assert [w["hourly_wage_krw"] for w in made["labor"]["workers"]] == [
-        10320,
-        10320,
-        10320,
-    ]
+    assert _input(done) == {
+        "operation_form": {"daily_orders": 200, "is_owner_working": False, "hourly_wage_krw": 10320}
+    }
     assert "세 운영안 비교하기" in done.message
 
 
@@ -188,43 +170,26 @@ def test_입력이_있는데_바꿀_값이_없으면_질문_대신_계산_버튼
     assert "세 운영안 비교하기" in response.message
 
 
-def test_하루_주문과_라스트오더를_바꾸고_근무표는_그대로다():
+def test_하루_주문과_라스트오더를_바꾸면_그_칸만_바뀐다():
     response = run(
         _req(), Fake(_change("daily_orders", 200), _change("last_order_time", "19:00"))
     )
-    scenario = _input(response)["simulation"]["scenario"]
-    assert scenario["daily_orders"] == 200 and scenario["last_order_time"] == "19:00"
-    assert _input(response)["labor"]["plans"] == SNAPSHOT["labor"]["plans"]
-
-
-def test_사장님_근무를_빼면_직원_두_명_근무표로_다시_만든다():
-    response = run(_req(), Fake(_change("is_owner_working", 0)))
-    labor = _input(response)["labor"]
-    assert all(not w["is_owner"] for w in labor["workers"])
-    assert {s["worker_key"] for s in labor["plans"][0]["shifts"]} == {
-        "STAFF_1",
-        "STAFF_2",
+    assert _form(response) == {
+        **SNAPSHOT["operation_form"],
+        "daily_orders": 200,
+        "last_order_time": "19:00",
     }
 
 
-def test_바쁜_시간을_바꾸면_서로_돕기와_한_명_추가_구간이_같이_바뀐다():
-    response = run(
-        _req(),
-        Fake(_change("rush_start_time", "12:00"), _change("rush_end_time", "15:00")),
-    )
-    labor = _input(response)["labor"]
-    assert labor["avoid_break_windows"] == [
-        {"start_time": "12:00", "end_time": "15:00"}
-    ]
-    extra = [s for s in labor["plans"][2]["shifts"] if s["worker_key"] == "STAFF_2"]
-    assert (extra[0]["start_time"], extra[0]["end_time"]) == ("12:00", "15:00")
+def test_사장님_근무와_시급도_폼_값으로_바꾼다():
+    assert _form(run(_req(), Fake(_change("is_owner_working", 0))))["is_owner_working"] is False
+    assert _form(run(_req(), Fake(_change("hourly_wage_krw", 11000))))["hourly_wage_krw"] == 11000
 
 
-def test_시급은_직원_모두에게_넣고_사장님은_비워_둔다():
-    workers = _input(run(_req(), Fake(_change("hourly_wage_krw", 11000))))["labor"][
-        "workers"
-    ]
-    assert [w["hourly_wage_krw"] for w in workers] == [None, 11000, 11000]
+def test_바쁜_시간은_입력이_아니라_상권_데이터로_정해져_있다고_안내한다():
+    response = run(_req(), Fake(_change("rush_start_time", "12:00")))
+    assert response.status == ResponseStatus.INFEASIBLE
+    assert "11:00~14:00" in response.message
 
 
 def test_최저시급보다_낮으면_바꾸지_않고_되묻는다():
@@ -243,8 +208,6 @@ def test_폼과_같은_범위를_검사한다():
         [("last_order_time", "7시")],
         [("order_time_sec", 0)],
         [("handoff_time_sec", 301)],
-        [("rush_start_time", "15:00")],
-        [("rush_start_time", "06:00")],
         [("is_owner_working", "몰라")],
     ]:
         response = run(_req(), Fake(*[_change(t, v) for t, v in changes]))
@@ -271,11 +234,10 @@ def test_같은_값이면_바뀐_것이_없다고_답한다():
     )
 
 
-def test_LLM에는_근무표_대신_바꿀_수_있는_값만_요약해_준다():
+def test_LLM에는_지금_폼_값과_기본값을_요약해_준다():
     prompt = _build_user_prompt(_req())
     assert '"daily_orders": 150' in prompt and '"hourly_wage_krw": 10320' in prompt
-    assert "plans" not in prompt and "STAFF_1" not in prompt
-    assert operation_fields.summary(SNAPSHOT)["rush"] == "11:00~14:00"
+    assert "18:45(기본)" in prompt and "11:00~14:00" in prompt
 
 
 def test_입력이_있을_때_설명_질문에는_AI_답을_그대로_쓴다():
@@ -348,11 +310,9 @@ def test_운영_규칙은_운영_요청의_지시문에만_붙는다():
     assert operation_flow.prompt_rule(_req(feature_type="purchase")) == ""
 
 
-def test_영업일이_비어_있으면_오늘로_채운다(monkeypatch):
-    monkeypatch.setattr(operation_fields, "today", lambda: date(2026, 11, 18))
-    values = {"business_date": None, "daily_orders": 100}
-    operation_fields.fill_defaults(values)
-    assert values["business_date"] == "2026-11-18"
+def test_정하지_않은_라스트_오더만_기본값으로_알린다():
+    assert operation_fields.default_notes({"daily_orders": 100}) == ["라스트 오더는 기본 18:45"]
+    assert operation_fields.default_notes({"last_order_time": "19:00"}) == []
 
 
 def test_애매한_짧은_답은_확정하지_않는다():
@@ -374,10 +334,3 @@ def test_하지_말라는_말은_계산을_시작하지_않는다():
     assert operation_flow._is_run_request("비교 시작해줘")
     assert not operation_flow._is_run_request("비교 시작하지 마")
     assert not operation_flow._is_run_request("아직 돌리지 말아줘")
-
-
-def test_바쁜_시간을_한쪽만_말하면_빠진_쪽_기본값을_알린다():
-    values = {"business_date": "2026-11-18", "rush_start_time": "12:00"}
-    notes = operation_fields.fill_defaults(values)
-    assert values["rush_end_time"] == "14:00"
-    assert any("끝은 14:00" in n for n in notes)

@@ -3,9 +3,9 @@ import type { JsonObject } from '../../../types/workflow'
 import catalog from './menu_catalog.json'
 
 /*
- * 운영 실험 폼 값과 Spring 운영 입력 만들기(POST /api/v1/operation/input-drafts) 연결.
- * 폼은 간단한 값만 받고, 근무표 세 안을 포함한 전체 입력은 Spring이 만든다. 화면은 받은 입력을
- * 공통 업무 API(event_type=form)로 저장한다.
+ * 운영 실험 폼 값 저장. 저장 입력은 폼 값만 담고({operation_form: {...}}, 대화 입력과 같은 모양),
+ * 근무표 세 안은 계산할 때 Spring(OperationInputBuilder)이 만든다. 저장 전에 Spring 운영 입력 만들기
+ * (POST /api/v1/operation/input-drafts)로 폼과 같은 규칙을 한 번 검사한다. 저장은 공통 업무 API(event_type=form).
  */
 
 export type MenuOption = (typeof catalog.menus)[number]
@@ -20,14 +20,16 @@ export const FORM_MENUS: MenuOption[] = DEFAULT_MENU_IDS.map((id) => MENUS.find(
 /** 해마다 고시되는 최저시급(labor 정책과 같은 값). 이보다 낮으면 저장하지 않는다. */
 export const MINIMUM_WAGES: Record<number, number> = { 2026: 10_320, 2027: 10_700 }
 export const minimumWage = (year = new Date().getFullYear()) => MINIMUM_WAGES[year] ?? null
-/** 근무는 고정 가정: 2명이 07~19시. 서로 돕기·한 명 추가는 바쁜 시간(기본 11~14시, 사장님이 고름)에만 바뀐다. */
+/** 근무는 고정 가정: 2명이 07~19시. 서로 돕기·한 명 추가는 바쁜 시간에만 바뀐다. */
 export const DAY_HOURS = '07:00~19:00'
-export const DEFAULT_RUSH = { start: '11:00', end: '14:00' }
-/** 바쁜 시간으로 고를 수 있는 30분 단위 시각(07:00~19:00). */
-export const HALF_HOURS = Array.from({ length: 25 }, (_, i) => {
-  const minutes = 7 * 60 + i * 30
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
-})
+/**
+ * 바쁜 시간: 입력으로 받지 않는다. 손님 몰림을 정하는 상권 데이터에서 1시간당 주문이 가장 많은 시간대
+ * (Spring OperationInputBuilder.PEAK_START~PEAK_END와 같다). 서로 돕기·한 명 추가·휴게 피하기에 쓴다.
+ */
+export const PEAK = { start: '11:00', end: '14:00' }
+/** 저장 입력에서 폼 값을 담는 칸(Spring·대화와 같은 이름). */
+export const FORM_KEY = 'operation_form'
+export const DEFAULT_LAST_ORDER = '18:45'
 export const rushText = (rush: { start: string; end: string }) => `${rush.start}~${rush.end}`
 const rushHours = (rush: { start: string; end: string }) => {
   const [sh, sm] = rush.start.split(':').map(Number)
@@ -69,12 +71,11 @@ export function splitOrders(total: number) {
 /** 화면 칸 값. 숫자 칸은 글자로 둔다(비우면 0이 남아 "0200"처럼 보이는 문제를 막는다). */
 export type OperationFormValues = {
   dailyOrders: string
+  /** '': 정하지 않음(계산할 때 기본 18:45) */
   lastOrderTime: string
   /** null: 대화로 채우는 중이라 아직 모름(폼에서 고르게 한다) */
   isOwnerWorking: boolean | null
   hourlyWage: string
-  rushStart: string
-  rushEnd: string
   menuIds: string[]
   weights: Record<string, string>
   orderSec: string
@@ -86,11 +87,9 @@ const percentWeights = (ids: string[]) =>
 
 export const DEFAULT_FORM: OperationFormValues = {
   dailyOrders: '150',
-  lastOrderTime: '18:45',
+  lastOrderTime: '',
   isOwnerWorking: true,
   hourlyWage: String(minimumWage() ?? 10_320),
-  rushStart: DEFAULT_RUSH.start,
-  rushEnd: DEFAULT_RUSH.end,
   menuIds: [...DEFAULT_MENU_IDS],
   weights: percentWeights(DEFAULT_MENU_IDS),
   orderSec: '60',
@@ -143,7 +142,6 @@ export function problemsOf(form: OperationFormValues): string[] {
   if (form.isOwnerWorking === null) problems.push('사장님도 일하시는지 골라 주세요.')
   const wage = wageProblem(form)
   if (wage) problems.push(wage)
-  if (form.rushStart >= form.rushEnd) problems.push('바쁜 시간 끝은 시작보다 늦게 골라 주세요.')
   const seconds = [Number(form.orderSec), Number(form.handoffSec)]
   if (seconds.some((n) => !(n >= 1 && n <= 300))) problems.push('처리시간은 1~300초 사이로 적어 주세요.')
   const sum = form.menuIds.reduce((total, id) => total + (Number(form.weights[id]) || 0), 0)
@@ -151,16 +149,14 @@ export function problemsOf(form: OperationFormValues): string[] {
   return problems
 }
 
-/** Spring 폼 요청 본문(snake_case). */
+/** 폼 값(snake_case). Spring 검사 요청 본문이자 저장 입력의 operation_form. 정하지 않은 라스트 오더는 넣지 않는다. */
 export function draftBody(form: OperationFormValues): JsonObject {
   const ids = [...form.menuIds].sort()
   return {
     daily_orders: Number(form.dailyOrders),
-    last_order_time: form.lastOrderTime,
+    ...(form.lastOrderTime ? { last_order_time: form.lastOrderTime } : {}),
     is_owner_working: form.isOwnerWorking === true,
     hourly_wage_krw: Number(form.hourlyWage),
-    rush_start_time: form.rushStart,
-    rush_end_time: form.rushEnd,
     selected_menu_ids: ids,
     menu_weights: Object.fromEntries(ids.map((id) => [id, (Number(form.weights[id]) || 0) / 100])),
     order_time_sec: Number(form.orderSec),
@@ -173,6 +169,10 @@ export type DraftResponse = {
   plan_descriptions: { choice_key: string; title: string; description: string }[]
 }
 
+/** 저장할 입력: 폼 값만. */
+export const formInput = (form: OperationFormValues): JsonObject => ({ [FORM_KEY]: draftBody(form) })
+
+/** 저장 전 검사(폼과 같은 규칙을 Spring 빌더로 한 번 더 본다). 만든 근무표는 저장하지 않는다. */
 export async function draftOperationInput(form: OperationFormValues): Promise<DraftResponse> {
   const response = await request<DraftResponse>('/v1/operation/input-drafts', {
     method: 'POST',
@@ -191,9 +191,38 @@ const obj = (value: unknown): JsonObject =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {}
 const list = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
 
-/** 저장된 운영 입력에서 읽은 값. 폼 다시 열기와 입력 검토 요약에 같이 쓴다. */
+const num = (v: unknown) => (typeof v === 'number' ? v : null)
+
+/**
+ * 저장된 운영 입력에서 읽은 값. 폼 다시 열기와 입력 검토 요약에 같이 쓴다. 필수 값이 아직 없으면 null.
+ * 폼 값({operation_form})을 읽고, 이 구조 전에 저장된 완성본(simulation·labor)도 읽는다.
+ */
 export function readOperationInput(input: JsonObject | null) {
   if (!input) return null
+  if (FORM_KEY in input) {
+    const form = obj(input[FORM_KEY])
+    const dailyOrders = num(form.daily_orders)
+    const isOwnerWorking = typeof form.is_owner_working === 'boolean' ? form.is_owner_working : null
+    const hourlyWage = num(form.hourly_wage_krw)
+    if (dailyOrders === null || isOwnerWorking === null || hourlyWage === null) return null
+    const menuIds = list<string>(form.selected_menu_ids)
+    const weights = obj(form.menu_weights)
+    return {
+      businessDate: typeof form.business_date === 'string' ? form.business_date : null,
+      dailyOrders,
+      slotOrders: splitOrders(dailyOrders),
+      /** null: 정하지 않음(계산할 때 기본값) */
+      chosenLastOrder: typeof form.last_order_time === 'string' ? form.last_order_time : null,
+      lastOrderTime: typeof form.last_order_time === 'string' ? form.last_order_time : DEFAULT_LAST_ORDER,
+      isOwnerWorking,
+      hourlyWage,
+      rush: PEAK,
+      menuIds,
+      weights: Object.fromEntries(menuIds.map((id) => [id, typeof weights[id] === 'number' ? (weights[id] as number) : null])),
+      orderSec: num(form.order_time_sec) ?? 60,
+      handoffSec: num(form.handoff_time_sec) ?? 30,
+    }
+  }
   const simulation = obj(input.simulation)
   const scenario = obj(simulation.scenario)
   const labor = obj(input.labor)
@@ -211,32 +240,31 @@ export function readOperationInput(input: JsonObject | null) {
     businessDate: typeof input.business_date === 'string' ? input.business_date : null,
     dailyOrders,
     slotOrders: splitOrders(dailyOrders),
-    lastOrderTime: typeof scenario.last_order_time === 'string' ? scenario.last_order_time : '18:45',
+    chosenLastOrder: typeof scenario.last_order_time === 'string' ? scenario.last_order_time : null,
+    lastOrderTime: typeof scenario.last_order_time === 'string' ? scenario.last_order_time : DEFAULT_LAST_ORDER,
     isOwnerWorking: workers.some((w) => w.is_owner && w.worker_key === lead),
     hourlyWage: wage,
-    rush: rushWindow ? { start: rushWindow.start_time, end: rushWindow.end_time } : DEFAULT_RUSH,
+    rush: rushWindow ? { start: rushWindow.start_time, end: rushWindow.end_time } : PEAK,
     menuIds,
     weights: Object.fromEntries(menuIds.map((id) => [id, typeof weights[id] === 'number' ? (weights[id] as number) : null])),
     orderSec: typeof simulation.order_time_sec === 'number' ? simulation.order_time_sec : 60,
     handoffSec: typeof simulation.handoff_time_sec === 'number' ? simulation.handoff_time_sec : 30,
-    plans,
   }
 }
 
-/** 대화로 채우는 중인 작성 중 입력({operation_form: {...}})의 값. 완성본이면 null. 계산은 완성본이 된 뒤에만 한다. */
+/** 필수 값(하루 주문·사장님 근무·시급)이 아직 다 없는 폼 입력의 값. 다 있으면 null. 계산은 다 채운 뒤에만 한다. */
 export type OperationDraft = {
   dailyOrders: number | null
   isOwnerWorking: boolean | null
   hourlyWage: number | null
 }
 export function readOperationDraft(input: JsonObject | null): OperationDraft | null {
-  const form = input && obj(input.operation_form)
-  if (!input || !('operation_form' in input)) return null
-  const num = (v: unknown) => (typeof v === 'number' ? v : null)
+  if (!input || !(FORM_KEY in input) || readOperationInput(input)) return null
+  const form = obj(input[FORM_KEY])
   return {
-    dailyOrders: num(form?.daily_orders),
-    isOwnerWorking: typeof form?.is_owner_working === 'boolean' ? form.is_owner_working : null,
-    hourlyWage: num(form?.hourly_wage_krw),
+    dailyOrders: num(form.daily_orders),
+    isOwnerWorking: typeof form.is_owner_working === 'boolean' ? form.is_owner_working : null,
+    hourlyWage: num(form.hourly_wage_krw),
   }
 }
 /** 아직 채우는 중인 입력인지. 시연 업무처럼 화면에 입력이 없는(서버에만 있는) 경우는 작성 중으로 보지 않는다. */
@@ -262,11 +290,9 @@ export function formFromInput(input: JsonObject | null): OperationFormValues {
   const hasWeights = sameMenus && Object.values(saved.weights).every((w) => typeof w === 'number')
   return {
     dailyOrders: String(saved.dailyOrders),
-    lastOrderTime: saved.lastOrderTime,
+    lastOrderTime: saved.chosenLastOrder ?? '',
     isOwnerWorking: saved.isOwnerWorking,
     hourlyWage: saved.hourlyWage != null ? String(saved.hourlyWage) : DEFAULT_FORM.hourlyWage,
-    rushStart: saved.rush.start,
-    rushEnd: saved.rush.end,
     menuIds,
     weights: hasWeights
       ? Object.fromEntries(menuIds.map((id) => [id, String(Math.round((saved.weights[id] ?? 0) * 100))]))

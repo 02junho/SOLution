@@ -14,7 +14,8 @@ import com.solution.common.exception.ApiException;
 import com.solution.operation.dto.input.OperationInputDraftRequest;
 
 /**
- * 폼 값 → 운영 계산 입력(work_version.input_json). OperationResultService가 읽는 모양 그대로 만든다.
+ * 폼 값 → 운영 계산 입력. 저장 입력(work_version.input_json)은 폼 값만 담고({"operation_form": {...}}),
+ * 계산할 때 OperationResultService가 {@link #expand}로 아래 모양을 만들어 쓴다.
  *
  * <pre>
  * { business_date, wage_year, assumptions_version,
@@ -29,13 +30,12 @@ import com.solution.operation.dto.input.OperationInputDraftRequest;
  *   <li>ALT_A(서로 돕기): 바쁜 시간에만 서로의 일을 돕는다. 사람 수와 근무시간은 CURRENT와 같다.</li>
  *   <li>ALT_C(1명 추가): CURRENT에 바쁜 시간 동안 제조를 맡고 주문도 돕는 직원 1명을 더한다.</li>
  * </ul>
- * <p>바쁜 시간(기본 11~14시, 사장님이 바꿀 수 있음)은 서로 돕기·한 명 추가가 바뀌는 구간(팀 결정 11.11)이고,
- * 휴게를 피하는 구간으로도 쓴다.
+ * <p>바쁜 시간은 서로 돕기·한 명 추가가 바뀌는 구간(팀 결정 11.11)이고 휴게를 피하는 구간으로도 쓴다.
+ * 사장님 입력으로 받지 않는다: 손님 몰림은 엔진이 상권 데이터로 정하므로, 바쁜 시간도 같은 데이터에서
+ * 1시간당 주문이 가장 많은 시간대(PEAK_START~PEAK_END)를 쓴다. 시간대별로 인원을 정하는 일은 근무표 확장에서 한다.
  * 출퇴근 나누기는 하지 않는다(시간대별 인원 배치는 노동 쪽 배치표 생성 기능의 일).
  *
- * <p>⚠️ 대화 입력(#97)에도 같은 규칙의 Python 빌더(ai-server app/agent/operation_fields.build())가 들어온다.
- * 이 빌더 결과는 기준 파일(data/demo/operation/input_builder_cases.json)로 고정해 두고(OperationInputBuilderCasesTest),
- * Python 쪽도 같은 기준 파일로 테스트한다. 규칙을 바꾸면 이 빌더 → 기준 파일 다시 뽑기 → Python 빌더 순서로 같이 고친다.
+ * <p>대화 입력도 폼 값만 저장하므로 빌더는 이것 하나다.
  *
  * <p>숫자(대기·비용)는 계산하지 않는다. 계산은 simulation·labor 도구가 한다.
  */
@@ -48,9 +48,14 @@ public final class OperationInputBuilder {
 	static final String CODE = "INVALID_REQUEST";
 	/** 30회 반복 계산이 Spring 응답 대기(120초) 안에 끝나는 하루 주문 상한. 엔진 /compare 한도와 같다. */
 	static final int MAX_DAILY_ORDERS = 300;
-	/** 바쁜 시간 기본값(손님 비중이 가장 큰 11~14시). 서로 돕기·한 명 추가가 바뀌고 휴게를 피하는 구간이다. */
-	public static final String RUSH_START = "11:00";
-	public static final String RUSH_END = "14:00";
+	/** 저장 입력에서 폼 값을 담는 칸. 대화(ai-server operation_fields.DRAFT_KEY)·화면과 같은 이름이다. */
+	public static final String FORM_KEY = "operation_form";
+	/**
+	 * 바쁜 시간: 상권 데이터(ai-server app/tools/simulation/data/demand_shares.json)에서 1시간당 주문이 가장 많은 시간대.
+	 * 서로 돕기·한 명 추가가 바뀌고 휴게를 피하는 구간이다. 데이터와 같은지 테스트로 맞춘다.
+	 */
+	public static final String PEAK_START = "11:00";
+	public static final String PEAK_END = "14:00";
 	/** 해마다 고시되는 최저시급(labor 정책 policies.MINIMUM_WAGES와 같은 값). 없는 해는 계산하지 않는다. */
 	static final Map<Integer, Integer> MINIMUM_WAGES = Map.of(2026, 10_320, 2027, 10_700);
 	/** 고를 수 있는 메뉴(시뮬레이션 엔진 ai-server app/tools/simulation/menu_catalog.json의 menu_id와 같다. 테스트로 맞춘다). */
@@ -78,6 +83,64 @@ public final class OperationInputBuilder {
 		return build(form, LocalDate.now(SEOUL));
 	}
 
+	/**
+	 * 저장 입력 → 운영 계산 입력. 폼 값({"operation_form": {...}})이면 근무표 세 안까지 만든다.
+	 * 필수 값(하루 주문·사장님 근무·시급)이 아직 없거나 예전 완성본(simulation·labor가 이미 있음)이면 그대로 돌려준다
+	 * (빠진 값은 OperationResultService가 입력 필요로 알린다).
+	 */
+	public static Map<String, Object> expand(Map<String, Object> stored) {
+		return expand(stored, LocalDate.now(SEOUL));
+	}
+
+	public static Map<String, Object> expand(Map<String, Object> stored, LocalDate today) {
+		if (stored == null || !(stored.get(FORM_KEY) instanceof Map<?, ?> raw)) {
+			return stored;
+		}
+		OperationInputDraftRequest form = fromForm(raw);
+		if (form.dailyOrders() == null || form.isOwnerWorking() == null || form.hourlyWageKrw() == null) {
+			return stored;
+		}
+		return build(form, today);
+	}
+
+	/** 저장된 폼 값(snake_case) → 폼 요청. 모양이 틀리면 400. */
+	static OperationInputDraftRequest fromForm(Map<?, ?> form) {
+		try {
+			Object date = form.get("business_date");
+			Map<String, Double> weights = null;
+			if (form.get("menu_weights") instanceof Map<?, ?> raw) {
+				weights = new LinkedHashMap<>();
+				for (var e : raw.entrySet()) {
+					weights.put((String) e.getKey(), e.getValue() == null ? null : ((Number) e.getValue()).doubleValue());
+				}
+			}
+			List<String> menus = null;
+			if (form.get("selected_menu_ids") instanceof List<?> raw) {
+				menus = raw.stream().map(id -> (String) id).toList();
+			}
+			return new OperationInputDraftRequest(date == null ? null : LocalDate.parse((String) date),
+					integer(form.get("daily_orders")), (String) form.get("last_order_time"), menus,
+					(Boolean) form.get("is_owner_working"), integer(form.get("hourly_wage_krw")),
+					(Boolean) form.get("is_staff_minor"), weights,
+					integer(form.get("order_time_sec")), integer(form.get("handoff_time_sec")));
+		}
+		catch (ClassCastException | java.time.format.DateTimeParseException e) {
+			throw ApiException.badRequest(CODE, "저장된 운영 조건을 읽지 못했어요. 조건을 다시 저장해 주세요.");
+		}
+	}
+
+	/** 정수만 받는다(150.0은 되고 150.5는 안 됨). */
+	private static Integer integer(Object value) {
+		if (value == null) {
+			return null;
+		}
+		double number = ((Number) value).doubleValue();
+		if (number != Math.rint(number) || Math.abs(number) > Integer.MAX_VALUE) {
+			throw ApiException.badRequest(CODE, "저장된 운영 조건의 숫자를 확인해 주세요.");
+		}
+		return (int) number;
+	}
+
 	public static Map<String, Object> build(OperationInputDraftRequest form, LocalDate today) {
 		if (form == null || form.dailyOrders() == null || form.isOwnerWorking() == null || form.hourlyWageKrw() == null) {
 			throw ApiException.badRequest(CODE, "하루 주문 수, 사장님 근무 여부, 직원 시급을 입력해 주세요.");
@@ -98,11 +161,8 @@ public final class OperationInputBuilder {
 		if (lastOrder.compareTo("18:30") < 0 || lastOrder.compareTo(DAY_END) > 0) {
 			throw ApiException.badRequest(CODE, "라스트 오더는 18:30~19:00 사이로 골라 주세요.");
 		}
-		String rushStart = time(form.rushStartTime(), RUSH_START, "바쁜 시간 시작");
-		String rushEnd = time(form.rushEndTime(), RUSH_END, "바쁜 시간 끝");
-		if (rushStart.compareTo(rushEnd) >= 0) {
-			throw ApiException.badRequest(CODE, "바쁜 시간 끝은 시작보다 늦게 골라 주세요.");
-		}
+		String rushStart = PEAK_START;
+		String rushEnd = PEAK_END;
 		boolean owner = form.isOwnerWorking();
 		boolean minor = Boolean.TRUE.equals(form.isStaffMinor());
 		if (minor) {

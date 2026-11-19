@@ -410,7 +410,11 @@ function ReportSheet({
             </tr>
             <tr>
               <th>라스트 오더 / 바쁜 시간</th>
-              <td>{saved ? `${saved.lastOrderTime} / ${rushText(saved.rush)} (서로 돕기·한 명 추가 적용, 휴게 피함)` : '—'}</td>
+              <td>
+                {saved
+                  ? `${saved.chosenLastOrder ?? `기본 ${saved.lastOrderTime}`} / ${rushText(saved.rush)} (상권 데이터의 가장 바쁜 시간대. 서로 돕기·한 명 추가 적용, 휴게 피함)`
+                  : '—'}
+              </td>
             </tr>
             <tr>
               <th>처리시간</th>

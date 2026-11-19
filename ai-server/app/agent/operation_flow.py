@@ -1,10 +1,10 @@
 """운영 실험 대화 해석 흐름. 공통 해석(service.run)은 운영이면 handle()로 넘기고, 이 파일만 운영 규칙을 안다.
 
-- 처음 입력(매입처럼 저장하면서 채우기): 말할 때마다 지금까지의 폼 값을 작성 중 입력으로 저장하고, 빠진 필수 값
-  (하루 주문 → 사장님 근무 → 직원 시급)을 말풍선으로 묻는다. 다 모이면 근무표까지 만든 완성본으로 저장한다.
-- 수정: 완성본에서 폼 값을 읽어 바꾼 뒤 근무표까지 다시 만든다.
+- 저장 입력은 폼 값만({"operation_form": {...}}). 근무표 세 안은 계산할 때 Spring이 만든다.
+- 처음 입력: 말할 때마다 지금까지의 폼 값을 저장하고, 빠진 필수 값(하루 주문 → 사장님 근무 → 직원 시급)을 말풍선으로 묻는다.
+- 수정: 저장된 폼 값을 바꾼다. 말하지 않은 선택 칸은 비워 두고 계산할 때 기본값을 쓴다.
 - 바꿀 값이 없는 말(예: "비교 시작해줘", 설명 질문): 질문 카드 없이 AI 답 또는 계산 버튼 안내로 답한다.
-칸 목록·검사·완성본 만들기는 operation_fields.py에 있다.
+칸 목록·검사는 operation_fields.py에 있다.
 """
 
 import json
@@ -20,13 +20,15 @@ from app.core.status import ResponseStatus
 PROMPT_RULE = (
     "운영 업무 규칙: target은 daily_orders(하루 주문 건수), last_order_time(라스트 오더, HH:MM 24시간), "
     "is_owner_working(사장님이 매장에서 일하면 1, 안 하면 0), hourly_wage_krw(직원 시급, 원), "
-    "rush_start_time/rush_end_time(바쁜 시간, HH:MM 24시간), order_time_sec(주문·결제 평균 초), "
-    "handoff_time_sec(음료 전달 평균 초). unit은 null이다. 오후 시각은 24시간으로 바꾼다(라스트오더 7시 → 19:00). "
+    "order_time_sec(주문·결제 평균 초), handoff_time_sec(음료 전달 평균 초). unit은 null이다. "
+    "오후 시각은 24시간으로 바꾼다(라스트오더 7시 → 19:00). "
     "'50건 늘려'처럼 상대적인 말은 요약의 지금 값에 더한 결과를 value로 쓴다. 인원은 staff_count, 영업 시간은 "
-    "open_time/close_time으로 target을 적되 값은 바꾸지 않는다(서버가 안내한다). "
+    "open_time/close_time, 바쁜 시간은 rush_start_time/rush_end_time으로 target을 적되 값은 바꾸지 않는다"
+    "(서버가 안내한다). "
     "질문에 답하는 경우 질문 context의 사장님 말에 있던 값도 changes에 모두 다시 넣는다. "
     "비교하는 세 안: 현재 방식(주문·전달 1명과 제조 1명이 각자 맡은 일만), 서로 돕기(같은 사람·시간, 바쁜 시간에만 "
-    "주문·제조를 서로 도움), 한 명 추가(바쁜 시간에 제조를 맡고 주문도 돕는 직원 1명을 더함). 세 안이나 결과 용어를 "
+    "주문·제조를 서로 도움), 한 명 추가(바쁜 시간에 제조를 맡고 주문도 돕는 직원 1명을 더함). 바쁜 시간은 상권 "
+    "데이터에서 손님이 가장 몰리는 11~14시다. 세 안이나 결과 용어를 "
     "물으면 intent=ask로 두고 reply에 쉬운 말로 짧게 설명한다.\n"
 )
 
@@ -64,25 +66,21 @@ _NO_CHANGE_GUIDE = (
 
 
 def prompt_summary(req: InterpretRequest) -> str | None:
-    """LLM에 줄 운영 입력 요약. 완성본은 근무표 대신 바꿀 수 있는 값만, 작성 중이면 채운 값만. 운영이 아니면 None."""
+    """LLM에 줄 운영 입력 요약. 필수 값이 다 있으면 바꿀 수 있는 지금 값, 채우는 중이면 채운 값만. 운영이 아니면 None."""
     if req.feature_type != "operation":
         return None
-    if operation_fields.is_operation_input(req.current_input):
+    values = operation_fields.form_values(req.current_input)
+    if operation_fields.is_complete(values):
         return json.dumps(
             operation_fields.summary(req.current_input), ensure_ascii=False
         )
-    values = operation_fields.draft_values(req.current_input)
-    return (
-        json.dumps({"작성 중": values}, ensure_ascii=False)
-        if values is not None
-        else None
-    )
+    return json.dumps({"작성 중": values}, ensure_ascii=False) if values else None
 
 
 def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | None:
     """운영 해석. 잡담·처리 불가는 공통 흐름에 맡긴다(None)."""
     current = deepcopy(req.current_input or {})
-    complete = operation_fields.is_operation_input(current)
+    complete = operation_fields.is_complete(operation_fields.form_values(current))
     if not complete:
         # 채우는 중에는 "응"·"200" 같은 짧은 답을 AI가 잡담으로 봐도 방금 물은 칸의 답으로 먼저 읽는다.
         draft = _short_answer(req, current, draft)
@@ -93,7 +91,7 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
     if draft.changes or not complete:
         if wants_run and not complete:
             missing = operation_fields.next_missing(
-                operation_fields.draft_values(current) or {}
+                operation_fields.form_values(current)
             )
             if missing is not None:
                 return ApiResponse(
@@ -148,12 +146,12 @@ def _short_answer(
     req: InterpretRequest, current: dict, draft: InterpretDraft
 ) -> InterpretDraft:
     """처음 입력 중 짧은 답("200건", "아니요", "최저시급")을 LLM이 못 읽었으면 다음에 물은 칸의 답으로 바로 읽는다."""
-    if draft.changes or operation_fields.is_operation_input(current):
+    if draft.changes or operation_fields.is_complete(operation_fields.form_values(current)):
         return draft
     question = (
         (req.question or {}).get("question") if isinstance(req.question, dict) else None
     )
-    values = operation_fields.draft_values(current) or _carried_form(req) or {}
+    values = operation_fields.form_values(current) or _carried_form(req) or {}
     if (
         isinstance(question, dict)
         and question.get("question_key") in operation_fields.FIELDS
@@ -249,16 +247,15 @@ def _saved(
 def _fill(
     req: InterpretRequest, draft: InterpretDraft, original: dict
 ) -> ApiResponse[dict]:
-    """운영: 폼 값으로 읽어 바꾼다.
+    """운영: 폼 값을 바꿔 저장한다.
 
-    처음 입력은 매입처럼 말할 때마다 작성 중 입력(폼 값)으로 저장하고 빠진 필수 값을 묻는다. 필수 값이 다 모이면
-    기본값을 채워 근무표까지 만든 완성본으로 저장한다. 완성본이 있으면 폼 값으로 읽어 바꾼 뒤 다시 만든다.
+    처음 입력은 말할 때마다 지금까지의 폼 값을 저장하고 빠진 필수 값을 묻는다. 말하지 않은 선택 칸은 비워 두고
+    계산할 때 기본값을 쓴다(Spring OperationInputBuilder).
     """
-    first = not operation_fields.is_operation_input(original)
-    if first:
-        values = operation_fields.draft_values(original) or _carried_form(req) or {}
-    else:
-        values = operation_fields.read_values(original)
+    values = operation_fields.form_values(original)
+    first = not operation_fields.is_complete(values)
+    if first and not values:
+        values = _carried_form(req) or {}
     said: dict[str, object] = {}
     for change in draft.changes:
         target = change.target
@@ -312,7 +309,6 @@ def _fill(
             return _question(
                 req, target, problem, values=values, evidence=draft.evidence
             )
-    notes: list[str] = []
     if first:
         missing = operation_fields.next_missing(values)
         if missing is not None:
@@ -339,13 +335,12 @@ def _fill(
                     message=ask,
                 )
             return _saved(req, draft, candidate, f"적어 뒀어요. {ask}")
-        notes = operation_fields.fill_defaults(values)
     problem = operation_fields.check_all(values)
     if problem:
         return _question(
             req, problem[0], problem[1], values=values, evidence=draft.evidence
         )
-    candidate = operation_fields.build(values)
+    candidate = {operation_fields.DRAFT_KEY: values}
     if candidate == original:
         return ApiResponse(
             status=ResponseStatus.OK,
@@ -356,12 +351,13 @@ def _fill(
             message=draft.reply or "입력은 바꾸지 않았어요.",
         )
     if first:
+        notes = operation_fields.default_notes(values)
         message = "조건을 다 채웠어요."
         if notes:
-            message += " " + ", ".join(notes) + " 넣었어요."
+            message += " " + ", ".join(notes) + "로 계산해요."
         message += (
             " 아래에서 확인하고 '세 운영안 비교하기'를 누르거나 '비교 시작해줘'라고 말씀해 주세요."
-            " 바쁜 시간·라스트 오더도 '바쁜 시간 12시~3시'처럼 바꿀 수 있어요."
+            " 라스트 오더도 '라스트오더 7시'처럼 바꿀 수 있어요."
         )
         return _saved(req, draft, candidate, message, notes)
     return _saved(
