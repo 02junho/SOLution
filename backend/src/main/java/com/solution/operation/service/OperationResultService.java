@@ -128,6 +128,7 @@ public class OperationResultService {
 			if (latest.inputConfirmedAt() == null) {
 				throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, "입력을 먼저 확인해 주세요.");
 			}
+			repository.startRun(sessionId);
 			repository.markStep(sessionId, latest.versionNo(), "running");
 		});
 		try {
@@ -175,6 +176,13 @@ public class OperationResultService {
 				repository.markStep(sessionId, source.versionNo(), step);
 			});
 			throw e;
+		}
+		finally {
+			// 같은 키로 겹친 요청도 각 호출이 등록한 1건만 정리한다.
+			transaction.executeWithoutResult(status -> {
+				repository.lockSession(sessionId);
+				repository.finishRun(sessionId);
+			});
 		}
 	}
 

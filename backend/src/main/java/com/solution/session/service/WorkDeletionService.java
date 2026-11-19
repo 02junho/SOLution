@@ -24,7 +24,7 @@ public class WorkDeletionService {
 		var row = repository.findSessionContext(sessionId)
 				.filter(session -> session.ownerKey().equals(currentOwner.key()))
 				.orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "업무를 찾을 수 없습니다."));
-		if ("running".equals(row.step())) {
+		if ("running".equals(row.step()) || repository.hasActiveOperationRuns(sessionId)) {
 			throw ApiException.badRequest("SESSION_RUNNING", "계산이 끝난 뒤 삭제해 주세요.");
 		}
 	}

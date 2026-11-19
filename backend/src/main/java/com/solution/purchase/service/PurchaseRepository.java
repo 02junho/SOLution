@@ -58,6 +58,11 @@ public class PurchaseRepository {
 		return rows.stream().findFirst();
 	}
 
+	/** 결과 저장 전에 삭제와 같은 세션 행 잠금을 획득한다. */
+	public void lockSession(long sessionId) {
+		jdbcTemplate.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE", rs -> { }, sessionId);
+	}
+
 	/** 같은 입력 버전·같은 요청 키로 이미 저장한 결과 (재전송이면 다시 계산하지 않는다). */
 	public Optional<StoredResult> findByRequestKey(long inputVersionId, String requestKey) {
 		return queryResult("r.input_version_id = ? AND r.request_key = ?", inputVersionId, requestKey);

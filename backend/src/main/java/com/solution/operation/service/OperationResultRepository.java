@@ -82,9 +82,17 @@ public class OperationResultRepository {
 				rs.getInt("current_version"), rs.getString("owner_key"), rs.getString("selected_choice_key"));
 	}
 
-	/** 저장 시에만 잠근다. 같은 키를 다른 입력 버전에 재사용하는 동시 요청도 직렬화한다. */
+	/** 계산 시작·종료·저장을 삭제와 같은 세션 행 잠금으로 직렬화한다. */
 	public void lockSession(long sessionId) {
 		jdbc.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE", rs -> { }, sessionId);
+	}
+
+	public void startRun(long sessionId) {
+		jdbc.update("UPDATE work_session SET active_operation_runs = active_operation_runs + 1 WHERE session_id = ?", sessionId);
+	}
+
+	public void finishRun(long sessionId) {
+		jdbc.update("UPDATE work_session SET active_operation_runs = active_operation_runs - 1 WHERE session_id = ?", sessionId);
 	}
 
 	public void insertResult(StoredResult result, SessionVersion source, String requestKey) {

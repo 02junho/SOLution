@@ -246,6 +246,19 @@ class WorkMessageApiIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT deleted_at FROM work_session WHERE session_id=500", Object.class)).isNull();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"result", "review", "saved"})
+	void running_단계가_아니어도_활성_계산이_남아_있으면_삭제_API를_차단한다(String step) throws Exception {
+		jdbc.update("UPDATE work_session SET step=?, active_operation_runs=1 WHERE session_id=500", step);
+		mvc.perform(delete("/api/v1/work-sessions/500"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("SESSION_RUNNING"));
+		mvc.perform(delete("/api/v1/work-sessions/500/messages/10"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("SESSION_RUNNING"));
+		assertThat(jdbc.queryForObject("SELECT content FROM session_message WHERE message_id=10", String.class)).isEqualTo("안녕하세요");
+		jdbc.update("UPDATE work_session SET active_operation_runs=0 WHERE session_id=500");
+		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
+	}
+
 	@Test
 	void 잘못된_삭제_경로는_500_대신_400이다() throws Exception {
 		mvc.perform(delete("/api/v1/work-sessions/abc")).andExpect(status().isBadRequest());

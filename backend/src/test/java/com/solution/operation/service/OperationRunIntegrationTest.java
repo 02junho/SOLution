@@ -27,6 +27,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import com.solution.session.service.WorkDeletionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -70,6 +73,8 @@ class OperationRunIntegrationTest {
 	private ObjectMapper mapper;
 	@Autowired
 	private OperationResultService service;
+	@Autowired
+	private WorkDeletionService deletion;
 	@MockitoBean
 	private SimulationService simulation;
 	@MockitoBean
@@ -114,13 +119,63 @@ class OperationRunIntegrationTest {
 			if (overlap != null) {
 				overlap.await(10, TimeUnit.SECONDS);
 			}
-			Map<String, Object> data = OperationResultContract.map(read("compare_response.json").get("data"));
-			data.put("result_id", request.resultId());
-			data.put("trace_refs", List.of());
-			List<StaffingPlan> staffing = OperationResultContract.staffing(data.get("staffing"))
-					.stream().map(StaffingPlan::fromConfirmedPlan).toList();
-			return new SimulationResult(ApiResponse.ok(data), staffing, call.getArgument(1));
+			return simulationResponse(request, call.getArgument(1));
 		}).when(simulation).compare(any(), anyString());
+	}
+
+	private SimulationResult simulationResponse(SimulationRequest request, String key) throws Exception {
+		Map<String, Object> data = OperationResultContract.map(read("compare_response.json").get("data"));
+		data.put("result_id", request.resultId());
+		data.put("trace_refs", List.of());
+		List<StaffingPlan> staffing = OperationResultContract.staffing(data.get("staffing"))
+				.stream().map(StaffingPlan::fromConfirmedPlan).toList();
+		return new SimulationResult(ApiResponse.ok(data), staffing, key);
+	}
+
+	@ParameterizedTest
+	@CsvSource({"false,result", "true,review", "false,saved"})
+	void 다른_실행이_완료되거나_실패해도_남은_실행이_있으면_삭제할_수_없다(boolean firstFails, String step) throws Exception {
+		var firstEntered = new CountDownLatch(1);
+		var secondEntered = new CountDownLatch(1);
+		var releaseFirst = new CountDownLatch(1);
+		var releaseSecond = new CountDownLatch(1);
+		doAnswer(call -> {
+			String key = call.getArgument(1);
+			boolean first = key.startsWith("first:");
+			(first ? firstEntered : secondEntered).countDown();
+			if (!(first ? releaseFirst : releaseSecond).await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("테스트 실행 대기 시간 초과");
+			}
+			if (first && firstFails) throw new IllegalStateException("첫 실행 실패");
+			return simulationResponse(call.getArgument(0), key);
+		}).when(simulation).compare(any(), anyString());
+		if ("saved".equals(step)) jdbc.update("UPDATE work_session SET step='saved' WHERE session_id=520001");
+		try (var pool = Executors.newFixedThreadPool(2)) {
+			var first = pool.submit(() -> service.run(520001, 530001, "first"));
+			var second = pool.submit(() -> service.run(520001, 530001, "second"));
+			try {
+				assertThat(firstEntered.await(10, TimeUnit.SECONDS)).isTrue();
+				assertThat(secondEntered.await(10, TimeUnit.SECONDS)).isTrue();
+				assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isEqualTo(2);
+				releaseFirst.countDown();
+				if (firstFails) {
+					assertThatThrownBy(() -> first.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(IllegalStateException.class);
+				} else {
+					first.get(10, TimeUnit.SECONDS);
+				}
+				assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isEqualTo(1);
+				assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=520001", String.class)).isEqualTo(step);
+				assertThatThrownBy(() -> deletion.deleteSession(520001)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
+				assertThatThrownBy(() -> deletion.deleteMessage(520001, 1)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
+				releaseSecond.countDown();
+				second.get(10, TimeUnit.SECONDS);
+				assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isZero();
+				deletion.deleteSession(520001);
+			} finally {
+				releaseFirst.countDown();
+				releaseSecond.countDown();
+			}
+		}
 	}
 
 	@Test

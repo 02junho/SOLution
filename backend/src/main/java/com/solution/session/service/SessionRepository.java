@@ -133,6 +133,12 @@ public class SessionRepository {
 				args.toArray());
 	}
 
+	/** 호출자는 세션 행 잠금을 보유해야 한다. 화면 단계가 바뀌어도 남은 운영 계산을 확인한다. */
+	public boolean hasActiveOperationRuns(long sessionId) {
+		return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+				"SELECT active_operation_runs > 0 FROM work_session WHERE session_id = ?", Boolean.class, sessionId));
+	}
+
 	/** 확정 기록과 참조 관계는 남기고 업무를 이어하기에서 삭제한다. */
 	public void deleteSession(long sessionId) {
 		jdbcTemplate.update("UPDATE work_session SET deleted_at = now() WHERE session_id = ?", sessionId);

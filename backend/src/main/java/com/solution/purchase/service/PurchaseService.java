@@ -125,6 +125,10 @@ public class PurchaseService {
 		// work_result.request_key에는 UQ가 없으므로(ERD) 저장 직전에 잠그고 다시 확인해 결과를 하나만 남긴다 (RequestKeyLock).
 		StoredResult saved = transactionTemplate.execute(status -> {
 			requestKeyLock.lock("purchase", source.inputVersionId(), requestKey);
+			repository.lockSession(sessionId);
+			repository.findSessionVersion(sessionId, inputVersionId)
+					.filter(row -> currentOwner.key().equals(row.ownerKey()))
+					.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, SESSION_NOT_FOUND));
 			var stored = repository.findByRequestKey(source.inputVersionId(), requestKey);
 			if (stored.isPresent()) {
 				return stored.get();
