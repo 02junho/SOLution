@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -117,6 +118,36 @@ class OperationInputBuilderTest {
 		Map<String, Object> fraction = Map.of(OperationInputBuilder.FORM_KEY,
 				Map.of("daily_orders", 150.5, "is_owner_working", true, "hourly_wage_krw", 10320));
 		assertThatThrownBy(() -> OperationInputBuilder.expand(fraction, DAY)).isInstanceOf(ApiException.class);
+		// 메뉴 칸도 값이 있는데 배열·맵이 아니면 조용히 넘기지 않고 400.
+		Map<String, Object> menusNotList = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150,
+				"is_owner_working", true, "hourly_wage_krw", 10320, "selected_menu_ids", "iced_americano"));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(menusNotList, DAY)).isInstanceOf(ApiException.class);
+		Map<String, Object> weightsNotMap = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150,
+				"is_owner_working", true, "hourly_wage_krw", 10320, "menu_weights", List.of(0.5, 0.5)));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(weightsNotMap, DAY)).isInstanceOf(ApiException.class);
+	}
+
+	@Test
+	void 메뉴_칸이_없거나_null이면_생략으로_본다() {
+		Map<String, Object> form = new HashMap<>(Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
+		form.put("selected_menu_ids", null);
+		form.put("menu_weights", null);
+		assertThat(OperationInputBuilder.expand(Map.of(OperationInputBuilder.FORM_KEY, form), DAY))
+				.isEqualTo(OperationInputBuilder.build(form(true), DAY));
+	}
+
+	@Test
+	void 빠진_필수_값은_operation_form_경로로_알려_준다() {
+		Map<String, Object> partial = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150));
+		assertThat(OperationInputBuilder.missingFormFields(partial).stream().map(row -> row.get("path")).toList())
+				.containsExactly("operation_form.is_owner_working", "operation_form.hourly_wage_krw");
+		assertThat(OperationInputBuilder.missingFormFields(Map.of(OperationInputBuilder.FORM_KEY, Map.of()))
+				.stream().map(row -> row.get("label")).toList())
+				.containsExactly("하루 주문 수", "사장님 근무 여부", "직원 시급");
+		Map<String, Object> full = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThat(OperationInputBuilder.missingFormFields(full)).isEmpty();
+		assertThat(OperationInputBuilder.missingFormFields(OperationInputBuilder.build(form(true), DAY))).isEmpty();
 	}
 
 	@Test

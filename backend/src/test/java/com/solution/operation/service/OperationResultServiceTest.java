@@ -379,6 +379,18 @@ class OperationResultServiceTest {
 	}
 
 	@Test
+	void 폼_필수_값이_빠진_채_확인됐으면_그_칸을_알려_주고_계산하지_않는다() {
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(new SessionVersion(SESSION, 510001,
+				"operation", 1, "demo-owner", VERSION, 1, "{\"operation_form\": {\"daily_orders\": 150}}",
+				OffsetDateTime.parse("2026-11-13T09:00:00+09:00"))));
+		var response = service.run(SESSION, VERSION, "run-1");
+		assertThat(response.status().getValue()).isEqualTo("needs_input");
+		assertThat(saved.get(RESULT).summaryJson()).contains("operation_form.is_owner_working", "operation_form.hourly_wage_krw")
+				.doesNotContain("\"labor\"", "\"simulation\"");
+		verifyNoInteractions(client, simulationService);
+	}
+
+	@Test
 	void mapsMissingLaborPathAndSavesQuestion() {
 		Map<String, Object> field = new HashMap<>(); field.put("path", "weekly_context"); field.put("label", "주간 근무 조건"); field.put("unit", null);
 		tool("/tools/labor/cost", ApiResponse.needsInput(Map.of("missing_fields", List.of(field), "detail_status", "MISSING_COST_CONTEXT"), "주간 조건을 확인해 주세요."));

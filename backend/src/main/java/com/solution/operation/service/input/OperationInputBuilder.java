@@ -103,19 +103,49 @@ public final class OperationInputBuilder {
 		return build(form, today);
 	}
 
-	/** 저장된 폼 값(snake_case) → 폼 요청. 모양이 틀리면 400. */
+	/**
+	 * 저장된 폼에서 계산에 꼭 필요한 값 중 빠진 것(path는 operation_form.필드명).
+	 * 폼 모양이 아니면(예전 완성본) 빈 목록이다. {@link #expand}가 그대로 돌려주는 조건과 같다.
+	 */
+	public static List<Map<String, Object>> missingFormFields(Map<String, Object> stored) {
+		if (stored == null || !(stored.get(FORM_KEY) instanceof Map<?, ?> form)) {
+			return List.of();
+		}
+		List<Map<String, Object>> missing = new ArrayList<>();
+		for (String[] field : new String[][] {{"daily_orders", "하루 주문 수", "건"},
+				{"is_owner_working", "사장님 근무 여부", null}, {"hourly_wage_krw", "직원 시급", "원"}}) {
+			if (form.get(field[0]) == null) {
+				Map<String, Object> row = new LinkedHashMap<>();
+				row.put("path", FORM_KEY + "." + field[0]);
+				row.put("label", field[1]);
+				row.put("unit", field[2]);
+				missing.add(row);
+			}
+		}
+		return missing;
+	}
+
+	/** 저장된 폼 값(snake_case) → 폼 요청. 없거나 null인 칸은 생략으로 보고, 값이 있는데 모양이 틀리면 400. */
 	static OperationInputDraftRequest fromForm(Map<?, ?> form) {
 		try {
 			Object date = form.get("business_date");
 			Map<String, Double> weights = null;
-			if (form.get("menu_weights") instanceof Map<?, ?> raw) {
+			Object rawWeights = form.get("menu_weights");
+			if (rawWeights != null) {
+				if (!(rawWeights instanceof Map<?, ?> raw)) {
+					throw new ClassCastException("menu_weights");
+				}
 				weights = new LinkedHashMap<>();
 				for (var e : raw.entrySet()) {
 					weights.put((String) e.getKey(), e.getValue() == null ? null : ((Number) e.getValue()).doubleValue());
 				}
 			}
 			List<String> menus = null;
-			if (form.get("selected_menu_ids") instanceof List<?> raw) {
+			Object rawMenus = form.get("selected_menu_ids");
+			if (rawMenus != null) {
+				if (!(rawMenus instanceof List<?> raw)) {
+					throw new ClassCastException("selected_menu_ids");
+				}
 				menus = raw.stream().map(id -> (String) id).toList();
 			}
 			return new OperationInputDraftRequest(date == null ? null : LocalDate.parse((String) date),
