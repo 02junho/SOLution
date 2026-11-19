@@ -228,7 +228,7 @@ public class SessionRepository {
 				FROM work_version v
 				JOIN work_session s ON s.session_id = v.session_id
 				JOIN store st ON st.store_id = s.store_id
-				WHERE v.input_version_id = ?
+				WHERE v.input_version_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new ConfirmationVersionRow(rs.getLong("session_id"), rs.getInt("version_no"),
 					rs.getInt("current_version"), rs.getString("owner_key"), rs.getString("input_confirmed_by"),
 					rs.getObject("input_confirmed_at", OffsetDateTime.class), rs.getString("step")), versionId)

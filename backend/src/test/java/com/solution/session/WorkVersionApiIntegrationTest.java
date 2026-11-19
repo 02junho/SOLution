@@ -61,7 +61,7 @@ class WorkVersionApiIntegrationTest {
 	@Autowired private MockMvc mvc;
 	@Autowired private JdbcTemplate jdbc;
 	@Autowired private TransactionTemplate transactions;
-	@Autowired private SessionRepository repository;
+	@org.springframework.test.context.bean.override.mockito.MockitoSpyBean private SessionRepository repository;
 	@MockitoBean private AiServerClient ai;
 	@LocalServerPort private int port;
 
@@ -150,6 +150,31 @@ class WorkVersionApiIntegrationTest {
 				.andExpect(jsonPath("$.message").value("입력 버전을 찾을 수 없습니다."));
 		assertThat(confirmedAt()).isNull();
 	}
+
+    @Test
+    void 삭제된_업무의_입력_확인은_404이며_확인값과_단계는_유지한다() throws Exception {
+        jdbc.update("UPDATE work_session SET deleted_at=now() WHERE session_id=500");
+        var before = jdbc.queryForMap("SELECT * FROM work_session WHERE session_id=500");
+        confirm(1002, "{}").andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.data.detail_code").value("VERSION_NOT_FOUND"));
+        assertThat(confirmedAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT input_confirmed_by FROM work_version WHERE input_version_id=1002", String.class)).isNull();
+        assertThat(jdbc.queryForMap("SELECT * FROM work_session WHERE session_id=500")).isEqualTo(before);
+    }
+
+    @Test
+    void 조회_직후_삭제되어도_세션_잠금_뒤_재검사에서_입력_확인을_차단한다() throws Exception {
+        org.mockito.Mockito.doAnswer(call -> {
+            var deletion = new TransactionTemplate(transactions.getTransactionManager());
+            deletion.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            deletion.executeWithoutResult(status -> jdbc.update("UPDATE work_session SET deleted_at=now() WHERE session_id=500"));
+            return call.callRealMethod();
+        }).when(repository).lockSession(500);
+        confirm(1002, "{}").andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.data.detail_code").value("VERSION_NOT_FOUND"));
+        assertThat(confirmedAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=500", String.class)).isEqualTo("input");
+    }
 
 	@Test
 	void 없는_버전은_404() throws Exception {
