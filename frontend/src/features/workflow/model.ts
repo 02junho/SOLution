@@ -26,6 +26,19 @@ export const dateTime = (value: string) =>
     hour: '2-digit',
     minute: '2-digit',
   })
+// 대화창 키 입력: Enter는 보내고 Shift+Enter는 줄바꿈한다.
+// 한글 조합 중 Enter는 글자 확정이라 보내지 않는다. Safari는 확정 Enter를
+// isComposing=false, keyCode=229로 보내므로 229도 함께 거른다.
+export const sendsOnEnter = (key: {
+  key: string
+  shiftKey: boolean
+  isComposing: boolean
+  keyCode: number
+}) =>
+  key.key === 'Enter' &&
+  !key.shiftKey &&
+  !key.isComposing &&
+  key.keyCode !== 229
 export const featureName = (feature: string) =>
   feature === 'purchase' ? '매입·재고' : '운영 실험'
 // 이전 버전에서 삭제 표시한 기록은 원문 복구 없이 계속 숨긴다.

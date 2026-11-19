@@ -12,6 +12,7 @@ import {
   questionDraft,
   RequestKeys,
   resolveChoice,
+  sendsOnEnter,
 } from '../src/features/workflow/model.ts'
 
 const originalFetch = globalThis.fetch
@@ -291,4 +292,13 @@ test('업무 삭제 API는 올바른 경로로 요청하고 실패를 전달한�
   ])
   globalThis.fetch = async () => json({ status: 'error', data: { detail_code: 'SESSION_NOT_FOUND' }, message: '업무를 찾을 수 없습니다.' }, 404)
   await assert.rejects(() => workflowApi.deleteSession(600), { code: 'SESSION_NOT_FOUND' })
+})
+
+test('대화창은 Enter로 보내고 Shift+Enter·한글 조합 중 Enter는 보내지 않는다', () => {
+  const key = (over) => ({ key: 'Enter', shiftKey: false, isComposing: false, keyCode: 13, ...over })
+  assert.equal(sendsOnEnter(key({})), true)
+  assert.equal(sendsOnEnter(key({ shiftKey: true })), false)
+  assert.equal(sendsOnEnter(key({ isComposing: true })), false)
+  assert.equal(sendsOnEnter(key({ keyCode: 229 })), false)
+  assert.equal(sendsOnEnter(key({ key: 'a', keyCode: 65 })), false)
 })

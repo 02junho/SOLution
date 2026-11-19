@@ -303,6 +303,7 @@ public class OperationResultService {
 		transaction.executeWithoutResult(status -> {
 			requestKeyLock.lock("operation", source.inputVersionId(), key);
 			repository.lockSession(source.sessionId());
+			ownedSource(source.sessionId(), source.inputVersionId());
 			var stored = repository.findByRequestKey(source.sessionId(), key);
 			if (stored.isPresent()) {
 				if (stored.get().inputVersionId() != source.inputVersionId()) {

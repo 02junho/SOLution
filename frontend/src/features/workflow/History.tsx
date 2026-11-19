@@ -105,6 +105,10 @@ function useHistory<T>(
       generation.current = token + 1
     }
   }, [fetcher, filter])
+  const remove = useCallback((matches: (item: T) => boolean) => {
+    removed.current.push(matches)
+    setItems((previous) => previous.filter((item) => !matches(item)))
+  }, [])
   return {
     items,
     next,
@@ -126,10 +130,7 @@ function useHistory<T>(
         void read(next, generation.current)
       }
     },
-    remove: (matches: (item: T) => boolean) => {
-      removed.current.push(matches)
-      setItems((previous) => previous.filter((item) => !matches(item)))
-    },
+    remove,
     retry: () => {
       if (!busy.current) {
         setLoading(true)
@@ -262,11 +263,17 @@ export function SessionHistory({
 export function ConfirmationHistory({
   onOpen,
   onDeleted,
+  deletedIds,
 }: {
   onOpen: (id: number) => void
   onDeleted?: (id: number) => void
+  deletedIds?: readonly number[]
 }) {
   const history = useHistory<Confirmation>(workflowApi.confirmations)
+  const remove = history.remove
+  useEffect(() => {
+    if (deletedIds?.length) remove((item) => deletedIds.includes(item.confirmation_id))
+  }, [deletedIds, remove])
   return (
     <section className="history-page">
       <div className="page-title">
