@@ -1,3 +1,4 @@
+import { invalidateConfirmationKeys } from './model'
 import { useRef, useState } from 'react'
 import { workflowApi, WorkflowError } from '../../api/workflowApi'
 import { Alert } from '../../components/common/Ui'
@@ -13,7 +14,12 @@ export default function DeleteConfirmation({ id, onDeleted }: { id: number; onDe
     setBusy(true)
     setError('')
     try {
-      await workflowApi.deleteConfirmation(id)
+      const deleted = await workflowApi.deleteConfirmation(id)
+      if (typeof deleted.result_id === 'number') {
+        let storage: Storage | undefined
+        try { storage = window.sessionStorage } catch { /* Memory fallback. */ }
+        invalidateConfirmationKeys(deleted.result_id, storage)
+      }
       onDeleted(id)
     } catch (cause) {
       if (cause instanceof WorkflowError && cause.code === 'CONFIRMATION_NOT_FOUND') {

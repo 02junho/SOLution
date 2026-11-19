@@ -229,3 +229,34 @@ test('삭제한 업무의 대기 open만 취소하고 다른 업무의 대기 op
     assert.equal(current.busy, '')
   }
 })
+
+
+for (const switchSession of [false, true]) test(`대화 후속 계산: ${switchSession ? '다른 업무 열기는 취소' : '같은 업무 refresh는 계산 후 조회'}`, async () => {
+  const baseFetch = globalThis.fetch
+  let finishEvent
+  let calculations = 0
+  globalThis.fetch = async (url, init) => {
+    if (url.includes('/events') && init?.method === 'POST') return new Promise(resolve => { finishEvent = () => resolve(ok({ action: 'run_operation' })) })
+    if (url.includes('/operation/sessions/') && init?.method === 'POST') { calculations++; return ok({ response_status: 'ok' }) }
+    const response = await baseFetch(url, init)
+    if (/\/work-sessions\/\d+$/.test(url)) {
+      const data = await response.json()
+      data.data.feature_type = 'operation'
+      data.data.input_confirmed = true
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+    }
+    return response
+  }
+  await act(async () => { await current.open(1) })
+  let pending
+  await act(async () => { pending = current.event({ event_type: 'message', content: '비교 시작' }); await Promise.resolve() })
+  assert.equal(typeof finishEvent, 'function')
+  await act(async () => {
+    if (switchSession) await current.open(2)
+    else await current.refresh()
+    finishEvent()
+    await pending
+  })
+  assert.equal(calculations, switchSession ? 0 : 1)
+  assert.equal(current.context.session_id, switchSession ? 2 : 1)
+})

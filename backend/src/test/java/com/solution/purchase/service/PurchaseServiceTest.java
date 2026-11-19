@@ -60,8 +60,12 @@ class PurchaseServiceTest {
 		repository = mock(PurchaseRepository.class);
 		aiServerClient = mock(AiServerClient.class);
 		requestKeyLock = mock(RequestKeyLock.class);
+        var runs = mock(com.solution.session.service.CalculationRuns.class);
+        var run = mock(com.solution.session.service.CalculationRuns.Run.class);
+        org.mockito.Mockito.lenient().when(runs.start(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(call -> { ((Runnable) call.getArgument(2)).run(); return run; });
 		service = new PurchaseService(repository, aiServerClient, new CurrentOwner(OWNER), new IdGenerator(),
-				requestKeyLock, objectMapper, new TransactionTemplate(mock(PlatformTransactionManager.class)));
+				requestKeyLock, objectMapper, new TransactionTemplate(mock(PlatformTransactionManager.class)), runs);
 	}
 
 	private static SessionVersion source(String featureType, String owner, int currentVersion, Integer versionNo,

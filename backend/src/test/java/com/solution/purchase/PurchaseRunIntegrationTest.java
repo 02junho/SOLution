@@ -91,17 +91,27 @@ class PurchaseRunIntegrationTest {
 
 	@Test
 	@SuppressWarnings("unchecked")
-	void 계산_중_삭제된_업무에는_결과를_저장하거나_단계를_갱신하지_않는다() {
+	void 계산_중_삭제는_차단하고_완료_후에는_삭제할_수_있다() {
 		given(aiServerClient.post(eq("/tools/purchase"), any(), anyString(), any(ParameterizedTypeReference.class)))
 				.willAnswer(call -> {
-					deletion.deleteSession(100);
+					assertThatThrownBy(() -> deletion.deleteSession(100)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
 					return ApiResponse.ok(Map.of("detail_status", "OPTIMAL", "summary", Map.of(), "detail", Map.of()));
 				});
-		assertThatThrownBy(() -> purchaseService.run(100, 1001, "deleted-during-tool"))
-				.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND");
-		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isZero();
-		assertThat(jdbcTemplate.queryForObject("SELECT step FROM work_session WHERE session_id=100", String.class)).isEqualTo("input");
+        purchaseService.run(100, 1001, "deleted-during-tool");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isEqualTo(1);
+        deletion.deleteSession(100);
+
 	}
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 계산_실패에도_활성_실행을_해제한다() {
+        given(aiServerClient.post(eq("/tools/purchase"), any(), anyString(), any(ParameterizedTypeReference.class)))
+            .willThrow(new RuntimeException("tool unavailable"));
+        assertThatThrownBy(() -> purchaseService.run(100, 1001, "failure")).hasMessage("tool unavailable");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM calculation_run", Integer.class)).isZero();
+        deletion.deleteSession(100);
+    }
 
 	@Test
 	@SuppressWarnings("unchecked")

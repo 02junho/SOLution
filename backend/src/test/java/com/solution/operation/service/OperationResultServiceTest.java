@@ -67,8 +67,12 @@ class OperationResultServiceTest {
 		IdGenerator ids = mock(IdGenerator.class);
 		when(ids.next()).thenReturn(RESULT);
 		requestKeyLock = mock(RequestKeyLock.class);
+        var runs = mock(com.solution.session.service.CalculationRuns.class);
+        var run = mock(com.solution.session.service.CalculationRuns.Run.class);
+        org.mockito.Mockito.lenient().when(runs.start(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(call -> { ((Runnable) call.getArgument(2)).run(); return run; });
 		service = new OperationResultService(repository, simulationService, new LaborService(client), new CurrentOwner("demo-owner"), ids, mapper,
-				new TransactionTemplate(mock(PlatformTransactionManager.class)), requestKeyLock);
+				new TransactionTemplate(mock(PlatformTransactionManager.class)), requestKeyLock, runs);
 		saved = new HashMap<>();
 		currentVersion = new AtomicInteger(1);
 		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(source("demo-owner", "operation", 1, true)));

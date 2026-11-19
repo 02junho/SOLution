@@ -7,6 +7,7 @@ import {
   fieldName,
   visibleMessages,
   confirmationKey,
+  invalidateConfirmationKeys,
   currentInput,
   currentQuestion,
   questionDraft,
@@ -301,4 +302,20 @@ test('대화창은 Enter로 보내고 Shift+Enter·한글 조합 중 Enter는 �
   assert.equal(sendsOnEnter(key({ isComposing: true })), false)
   assert.equal(sendsOnEnter(key({ keyCode: 229 })), false)
   assert.equal(sendsOnEnter(key({ key: 'a', keyCode: 65 })), false)
+})
+
+
+test('삭제 뒤 같은 계획 서명의 저장 키는 교체되고 새 키의 재시도는 유지된다', () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) }
+  const signature = JSON.stringify([2002, 1002, 'purchase_1', []])
+  const before = confirmationKey(signature, storage)
+  invalidateConfirmationKeys(2002, storage)
+  const after = confirmationKey(signature, storage)
+  assert.notEqual(after, before)
+  assert.equal(confirmationKey(signature, storage), after)
+  const unrelated = JSON.stringify([2003, 1002, 'purchase_1', []])
+  const other = confirmationKey(unrelated, storage)
+  invalidateConfirmationKeys(2002, storage)
+  assert.equal(confirmationKey(unrelated, storage), other)
 })

@@ -69,6 +69,10 @@ class OperationRunIntegrationTest {
 	private PlatformTransactionManager transactions;
 	@MockitoSpyBean
 	private OperationResultRepository repository;
+	@MockitoSpyBean
+	private com.solution.session.service.SessionRepository sessions;
+	@Autowired
+	private com.solution.session.service.CalculationRuns runs;
 	@Autowired
 	private ObjectMapper mapper;
 	@Autowired
@@ -177,13 +181,83 @@ class OperationRunIntegrationTest {
 		}
 	}
 
+    @Test
+    void 이전_프로세스의_카운터를_만료된_개별_기록으로_이관한다() throws Exception {
+        String migration = Files.readString(Path.of("src/main/resources/db/migration/V6__calculation_run_leases.sql"));
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            jdbc.execute("CREATE SCHEMA lease_upgrade_test");
+            jdbc.execute("SET LOCAL search_path TO lease_upgrade_test");
+            jdbc.execute("CREATE TABLE work_session(session_id BIGINT PRIMARY KEY, active_operation_runs INTEGER NOT NULL)");
+            jdbc.execute("CREATE TABLE work_result(result_id BIGINT PRIMARY KEY)");
+            jdbc.execute("INSERT INTO work_session VALUES (1, 2), (2, 0)");
+            jdbc.execute(migration);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM calculation_run WHERE session_id=1 AND lease_until<=clock_timestamp()", Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=1", Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM calculation_run WHERE session_id=2", Integer.class)).isZero();
+            status.setRollbackOnly();
+        });
+    }
+
+    @Test
+    void 만료된_실행만_회수하고_현재_실행은_보존한다() {
+        try (var live = runs.start(520001, "operation", () -> {})) {
+            jdbc.update("INSERT INTO calculation_run VALUES (?, 520001, 'operation', now()-interval '1 minute')", java.util.UUID.randomUUID());
+            jdbc.update("UPDATE work_session SET active_operation_runs=2, step='saved' WHERE session_id=520001");
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                sessions.lockSession(520001);
+                runs.recover(520001);
+            });
+            live.requireActive();
+            assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isEqualTo(1);
+            assertThatThrownBy(() -> deletion.deleteSession(520001)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
+        }
+        deletion.deleteSession(520001);
+    }
+
+    @Test
+    void 중단된_실행의_만료된_기록과_running_단계를_복구한_뒤_삭제할_수_있다() {
+        jdbc.update("INSERT INTO calculation_run VALUES (?, 520001, 'operation', now()-interval '1 minute')", java.util.UUID.randomUUID());
+        jdbc.update("UPDATE work_session SET active_operation_runs=1, step='running' WHERE session_id=520001");
+        deletion.deleteSession(520001);
+        assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isZero();
+    }
+
+    @Test
+    void 종료_정리가_실패해도_그_실행만_만료_후_회수한다() {
+        var abandoned = runs.start(520001, "operation", () -> {});
+        try (var live = runs.start(520001, "operation", () -> {})) {
+            org.mockito.Mockito.doThrow(new RuntimeException("cleanup unavailable")).when(sessions).lockSession(520001);
+            abandoned.close();
+            org.mockito.Mockito.doCallRealMethod().when(sessions).lockSession(520001);
+            // The closed request stopped renewing. Simulate expiry without sleeping for two minutes.
+            jdbc.update("UPDATE calculation_run SET lease_until=now()-interval '1 minute' WHERE run_id=(SELECT run_id FROM calculation_run ORDER BY lease_until LIMIT 1)");
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                sessions.lockSession(520001);
+                runs.recover(520001);
+            });
+            live.requireActive();
+            assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isEqualTo(1);
+            assertThatThrownBy(() -> deletion.deleteSession(520001)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
+        }
+        deletion.deleteSession(520001);
+    }
+
+    @Test
+    void 만료된_실행은_결과를_저장할_수_없다() {
+        try (var run = runs.start(520001, "operation", () -> {})) {
+            jdbc.update("UPDATE calculation_run SET lease_until=now()-interval '1 minute'");
+            assertThatThrownBy(run::requireActive).hasFieldOrPropertyWithValue("detailCode", "CALCULATION_EXPIRED");
+        }
+        assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isZero();
+    }
+
 	@Test
 	void 삭제_트랜잭션이_먼저_잠그면_대기한_계산은_running_기록_전에_거부한다() throws Exception {
 		var attemptingLock = new CountDownLatch(1);
 		doAnswer(call -> {
 			attemptingLock.countDown();
 			return call.callRealMethod();
-		}).when(repository).lockSession(520001);
+		}).when(sessions).lockSession(520001);
 		try (var pool = Executors.newSingleThreadExecutor()) {
 			var pending = new AtomicReference<Future<?>>();
 			new TransactionTemplate(transactions).executeWithoutResult(status -> {

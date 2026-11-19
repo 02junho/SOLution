@@ -164,10 +164,22 @@ export class RequestKeys {
   }
 }
 const confirmationKeys = new RequestKeys()
+const confirmationGenerations = new Map<number, string>()
+export function invalidateConfirmationKeys(resultId: number, storage?: Pick<Storage, 'getItem' | 'setItem'>) {
+  const generation = crypto.randomUUID()
+  confirmationGenerations.set(resultId, generation)
+  try { storage?.setItem(`solution:confirm-generation:${resultId}`, generation) } catch { /* Memory fallback. */ }
+}
 export function confirmationKey(
   signature: string,
   storage: Pick<Storage, 'getItem' | 'setItem'> | undefined,
 ): string {
+  try {
+    const [resultId] = JSON.parse(signature)
+    let generation = confirmationGenerations.get(resultId)
+    try { generation ??= storage?.getItem(`solution:confirm-generation:${resultId}`) ?? undefined } catch { /* Memory fallback. */ }
+    if (generation) signature = `${signature}:${generation}`
+  } catch { /* Non-JSON signatures and unavailable storage retain memory retries. */ }
   const name = `solution:confirm:${signature}`
   const fallback = confirmationKeys.for(signature)
   try {

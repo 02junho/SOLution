@@ -22,6 +22,10 @@ public class ConfirmationListRepository {
 
 	/** 소유권은 실제 입력 버전→업무→매장으로 확인한다. 호출자는 해당 세션 행을 잠근다. */
 	public int delete(long confirmationId, String ownerKey) {
+		jdbc.update("""
+                INSERT INTO retired_confirmation_key SELECT confirm_request_key, result_id FROM work_confirmation WHERE confirmation_id=?
+                ON CONFLICT DO NOTHING
+                """, confirmationId);
 		return jdbc.update("""
 				DELETE FROM work_confirmation c USING work_version v, work_session s, store st
 				WHERE c.confirmation_id = ? AND v.input_version_id = c.input_version_id

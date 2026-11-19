@@ -11,6 +11,7 @@ const { createRoot } = await import('react-dom/client')
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom' })
 const { ConfirmationHistory } = await server.ssrLoadModule('/src/features/workflow/History.tsx')
 const { ConfirmationModal } = await server.ssrLoadModule('/src/features/workflow/Results.tsx')
+const { confirmationKey } = await server.ssrLoadModule('/src/features/workflow/model.ts')
 const { default: App } = await server.ssrLoadModule('/src/App.tsx')
 test.after(async () => { await server.close() })
 const originalFetch = globalThis.fetch
@@ -23,7 +24,7 @@ beforeEach(() => {
   globalThis.fetch = async (url, init) => {
     if (init?.method === 'DELETE') {
       calls.push(url)
-      return fail ? new Response(JSON.stringify({ status: 'error', data: null, message: '잠시 후 다시 시도해 주세요.' }), { status: 503 }) : ok({ confirmation_id: 3002 })
+      return fail ? new Response(JSON.stringify({ status: 'error', data: null, message: '잠시 후 다시 시도해 주세요.' }), { status: 503 }) : ok({ confirmation_id: 3002, result_id: 2002 })
     }
     return url.endsWith('/3002')
       ? ok({ ...plan, acknowledged_warnings_json: [], selected_snapshot_json: { choice: { total_krw: 120400 } } })
@@ -68,7 +69,7 @@ for (const via of ['list', 'detail']) {
     const readUrls = []
     const plans = [3001, 3002, 3003, 3004].map((id) => ({ ...plan, confirmation_id: id }))
     globalThis.fetch = async (url, init) => {
-      if (init?.method === 'DELETE') return ok({ confirmation_id: 3002 })
+      if (init?.method === 'DELETE') return ok({ confirmation_id: 3002, result_id: 2002 })
       if (url.endsWith('/3002')) return ok({ ...plans[1], acknowledged_warnings_json: [], selected_snapshot_json: { choice: { total_krw: 120400 } } })
       readUrls.push(url)
       const search = new URL(url, 'http://localhost').searchParams
@@ -99,3 +100,15 @@ for (const via of ['list', 'detail']) {
     assert.ok(container.querySelector('[aria-label="저장 번호 3004 계획 삭제"]'))
   })
 }
+
+
+for (const View of [ConfirmationHistory, ConfirmationModal]) test(`${View.name}에서 삭제하면 같은 서명의 다음 저장에 새 요청 키를 사용한다`, async () => {
+  const signature = JSON.stringify([2002, 1002, 'purchase_1', []])
+  const oldKey = confirmationKey(signature, window.sessionStorage)
+  await mount(View)
+  await click('.plan-delete > button')
+  await click('[aria-label="저장한 계획 삭제 확인"] .primary')
+  const newKey = confirmationKey(signature, window.sessionStorage)
+  assert.notEqual(newKey, oldKey)
+  assert.equal(confirmationKey(signature, window.sessionStorage), newKey)
+})

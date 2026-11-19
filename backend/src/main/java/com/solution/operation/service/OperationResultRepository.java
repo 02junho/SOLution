@@ -87,14 +87,6 @@ public class OperationResultRepository {
 		jdbc.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE", rs -> { }, sessionId);
 	}
 
-	public void startRun(long sessionId) {
-		jdbc.update("UPDATE work_session SET active_operation_runs = active_operation_runs + 1 WHERE session_id = ?", sessionId);
-	}
-
-	public void finishRun(long sessionId) {
-		jdbc.update("UPDATE work_session SET active_operation_runs = active_operation_runs - 1 WHERE session_id = ?", sessionId);
-	}
-
 	public void insertResult(StoredResult result, SessionVersion source, String requestKey) {
 		jdbc.update("""
 				INSERT INTO work_result(result_id, input_version_id, session_id, store_id, version_no,

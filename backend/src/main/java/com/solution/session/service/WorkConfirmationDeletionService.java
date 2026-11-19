@@ -31,6 +31,6 @@ public class WorkConfirmationDeletionService {
 				.orElseThrow(() -> ApiException.notFound("CONFIRMATION_NOT_FOUND", "저장한 계획을 찾을 수 없습니다."));
 		if (repository.delete(confirmationId, owner.key()) != 1) throw ApiException.notFound("CONFIRMATION_NOT_FOUND", "저장한 계획을 찾을 수 없습니다.");
 		repository.restoreResultStep(current.sessionId(), current.inputVersionId());
-		return ApiResponse.ok(Map.of("confirmation_id", confirmationId));
+		return ApiResponse.ok(Map.of("confirmation_id", confirmationId, "result_id", current.resultId()));
 	}
 }

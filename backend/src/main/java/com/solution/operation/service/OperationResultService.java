@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.solution.common.auth.CurrentOwner;
+import com.solution.session.service.CalculationRuns;
 import com.solution.common.client.AiServerException;
 import com.solution.common.exception.ApiException;
 import com.solution.common.id.IdGenerator;
@@ -57,6 +58,7 @@ public class OperationResultService {
 	private static final String KEY_REUSED = "같은 요청키로 다른 내용을 보낼 수 없습니다.";
 	private static final Set<String> EVENT_TYPES = Set.of("ARRIVED", "ORDER_STARTED", "ORDER_COMPLETED",
 			"PREPARATION_STARTED", "PREPARATION_COMPLETED", "HANDOFF_STARTED", "HANDED_OVER", "STAFF_ON", "STAFF_OFF");
+	private final CalculationRuns runs;
 	private final OperationResultRepository repository;
 	private final SimulationService simulationService;
 	private final LaborService laborService;
@@ -68,7 +70,8 @@ public class OperationResultService {
 
 	public OperationResultService(OperationResultRepository repository, SimulationService simulationService,
 			LaborService laborService, CurrentOwner owner,
-			IdGenerator ids, ObjectMapper mapper, TransactionTemplate transaction, RequestKeyLock requestKeyLock) {
+			IdGenerator ids, ObjectMapper mapper, TransactionTemplate transaction, RequestKeyLock requestKeyLock, CalculationRuns runs) {
+		this.runs = runs;
 		this.repository = repository;
 		this.simulationService = simulationService;
 		this.laborService = laborService;
@@ -118,7 +121,7 @@ public class OperationResultService {
 			return save(source, resultId, key, ApiResponse.needsInput(
 					Map.of("detail_status", "MISSING_OPERATION_INPUT", "missing_fields", missing), "계산에 필요한 운영 입력을 확인해 주세요."));
 		}
-		transaction.executeWithoutResult(status -> {
+		var run = runs.start(sessionId, "operation", () -> {
 			// 삭제와 계산 시작을 같은 세션 행 잠금으로 직렬화한다.
 			repository.lockSession(sessionId);
 			SessionVersion latest = ownedSource(sessionId, versionId);
@@ -128,10 +131,9 @@ public class OperationResultService {
 			if (latest.inputConfirmedAt() == null) {
 				throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, "입력을 먼저 확인해 주세요.");
 			}
-			repository.startRun(sessionId);
 			repository.markStep(sessionId, latest.versionNo(), "running");
 		});
-		try {
+		try (run) {
 			Map<String, Object> laborInput = map(input.get("labor"));
 			List<Map<String, Object>> staffing = OperationResultContract.staffing(laborInput.get("plans"));
 			List<StaffingPlan> expected = staffing.stream().map(StaffingPlan::fromConfirmedPlan).toList();
@@ -143,7 +145,7 @@ public class OperationResultService {
 			require(simulation != null && simulation.status() != null && simulation.data() != null
 					&& simulation.status() != ResponseStatus.ERROR);
 			if (simulation.status() != ResponseStatus.OK) {
-				return save(source, resultId, key, remapMissing(simulation, "simulation"));
+				return save(source, resultId, key, run, remapMissing(simulation, "simulation"));
 			}
 			// complete는 엄격한 boolean이다 (v0.4). 문자열 "true"·숫자 1·누락은 계약 오류(502),
 			// false(30회 완주·집계 미완료)는 확정 가능한 성공으로 저장하지 않고 400 RESULT_NOT_READY.
@@ -158,9 +160,9 @@ public class OperationResultService {
 					returned.staffing().stream().map(StaffingPlan::asMap).toList())));
 			ApiResponse<Map<String, Object>> labor = laborService.calculate(new LaborRequest(input, sessionId, versionId), key);
 			if (labor.status() != ResponseStatus.OK) {
-				return save(source, resultId, key, remapMissing(labor, "labor"));
+				return save(source, resultId, key, run, remapMissing(labor, "labor"));
 			}
-			return save(source, resultId, key, combine(simulation.data(), map(labor.data().get("schedule")),
+			return save(source, resultId, key, run, combine(simulation.data(), map(labor.data().get("schedule")),
 					map(labor.data().get("cost")), resultId));
 		}
 		catch (RuntimeException e) {
@@ -176,13 +178,6 @@ public class OperationResultService {
 				repository.markStep(sessionId, source.versionNo(), step);
 			});
 			throw e;
-		}
-		finally {
-			// 같은 키로 겹친 요청도 각 호출이 등록한 1건만 정리한다.
-			transaction.executeWithoutResult(status -> {
-				repository.lockSession(sessionId);
-				repository.finishRun(sessionId);
-			});
 		}
 	}
 
@@ -286,6 +281,11 @@ public class OperationResultService {
 
 	private ApiResponse<Map<String, Object>> save(SessionVersion source, long id, String key,
 			ApiResponse<Map<String, Object>> outcome) {
+		return save(source, id, key, null, outcome);
+	}
+
+	private ApiResponse<Map<String, Object>> save(SessionVersion source, long id, String key,
+			CalculationRuns.Run run, ApiResponse<Map<String, Object>> outcome) {
 		boolean ok = outcome.status() == ResponseStatus.OK;
 		Map<String, Object> summary = ok ? map(outcome.data().get("summary")) : new LinkedHashMap<>(outcome.data());
 		if (!ok) {
@@ -304,6 +304,7 @@ public class OperationResultService {
 			requestKeyLock.lock("operation", source.inputVersionId(), key);
 			repository.lockSession(source.sessionId());
 			ownedSource(source.sessionId(), source.inputVersionId());
+			if (run != null) run.requireActive();
 			var stored = repository.findByRequestKey(source.sessionId(), key);
 			if (stored.isPresent()) {
 				if (stored.get().inputVersionId() != source.inputVersionId()) {

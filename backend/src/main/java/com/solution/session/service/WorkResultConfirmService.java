@@ -84,6 +84,7 @@ public class WorkResultConfirmService {
 			Source source = owned(resultId, actor);
 			// 요청 키 UQ는 세션 전체가 아니라 전역이다. 서로 다른 세션의 같은 키도 직렬화한다.
 			keyLock.lock("confirmation", 0, key);
+			if (repository.retiredKey(key)) throw error("CONFIRMATION_DELETED", "삭제된 계획의 저장 요청이에요. 다시 저장해 주세요.");
 			var replay = repository.findByKey(key);
 			if (replay.isPresent()) {
 				if (!fingerprint.equals(replay.get().fingerprint())) {

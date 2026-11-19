@@ -204,6 +204,10 @@ class WorkConfirmationDetailApiIntegrationTest {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.confirmed_choice_key").value(nullValue()));
 		assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=500", String.class)).isEqualTo("result");
 		jdbc.update("UPDATE work_result SET summary_json='{\"choices\":[{\"choice_key\":\"purchase_1\",\"total_krw\":120400}],\"warnings\":[]}' WHERE result_id=2002");
+        String oldKey = jdbc.queryForObject("SELECT request_key FROM retired_confirmation_key WHERE result_id=2002", String.class);
+        mvc.perform(post("/api/v1/work-results/2002/confirm").header("Idempotency-Key", oldKey)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"expected_input_version_id\":1002,\"selected_choice_key\":\"purchase_1\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("CONFIRMATION_DELETED"));
 		mvc.perform(post("/api/v1/work-results/2002/confirm").header("Idempotency-Key", "save-again-after-delete")
 				.contentType(MediaType.APPLICATION_JSON).content("{\"expected_input_version_id\":1002,\"selected_choice_key\":\"purchase_1\"}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.is_new").value(true));
