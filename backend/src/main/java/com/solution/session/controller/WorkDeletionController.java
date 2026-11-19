@@ -25,12 +25,6 @@ public class WorkDeletionController {
 		return service.deleteSession(id(sessionId));
 	}
 
-	@DeleteMapping("/{sessionId}/messages/{messageId}")
-	public ApiResponse<Map<String, Object>> deleteMessage(@PathVariable String sessionId,
-			@PathVariable String messageId) {
-		return service.deleteMessage(id(sessionId), id(messageId));
-	}
-
 	private long id(String value) {
 		try {
 			long id = Long.parseLong(value);
@@ -38,6 +32,6 @@ public class WorkDeletionController {
 		} catch (NumberFormatException ignored) {
 			// 공통 500 오류 대신 잘못된 요청으로 처리한다.
 		}
-		throw ApiException.badRequest("업무·대화 번호는 양의 정수여야 합니다.");
+		throw ApiException.badRequest("업무 번호는 양의 정수여야 합니다.");
 	}
 }

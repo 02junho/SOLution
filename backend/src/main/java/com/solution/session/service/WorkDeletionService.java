@@ -37,13 +37,4 @@ public class WorkDeletionService {
 		return ApiResponse.ok(Map.of("session_id", sessionId));
 	}
 
-	@Transactional
-	public ApiResponse<Map<String, Object>> deleteMessage(long sessionId, long messageId) {
-		repository.lockSession(sessionId);
-		requireSession(sessionId);
-		if (repository.deleteMessage(sessionId, messageId) == 0) {
-			throw ApiException.notFound("MESSAGE_NOT_FOUND", "대화를 찾을 수 없습니다.");
-		}
-		return ApiResponse.ok(Map.of("message_id", messageId));
-	}
 }

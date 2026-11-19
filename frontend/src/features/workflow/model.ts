@@ -28,6 +28,7 @@ export const dateTime = (value: string) =>
   })
 export const featureName = (feature: string) =>
   feature === 'purchase' ? '매입·재고' : '운영 실험'
+// 이전 버전에서 삭제 표시한 기록은 원문 복구 없이 계속 숨긴다.
 export function visibleMessages(messages: Message[]) {
   return messages.filter((message) =>
     (message.role === 'user' || message.role === 'assistant') && !message.metadata_json?.deleted,

@@ -199,27 +199,8 @@ class WorkMessageApiIntegrationTest {
 	}
 
 	@Test
-	void 대화_삭제는_원문_표시를_지우고_질문_및_재전송_정보는_보존한다() throws Exception {
-		var before = jdbc.queryForMap("SELECT * FROM work_session WHERE session_id=500");
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/30"))
-				.andExpect(status().isOk());
-		mvc.perform(get("/api/v1/work-sessions/500/messages"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.items[1].content").value("삭제된 대화입니다."))
-				.andExpect(jsonPath("$.data.items[1].metadata_json.deleted").value(true))
-				.andExpect(jsonPath("$.data.items[1].metadata_json.question.choices[0]").value("재고"))
-				.andExpect(jsonPath("$.data.items[1].metadata_json.answered").value(false));
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/30"))
-				.andExpect(status().isOk());
-		assertThat(jdbc.queryForMap("SELECT * FROM work_session WHERE session_id=500")).isEqualTo(before);
-	}
-
-	@Test
-	void 남의_업무나_다른_업무의_대화_및_내부_메시지는_삭제할_수_없다() throws Exception {
+	void 남의_업무는_삭제할_수_없다() throws Exception {
 		mvc.perform(delete("/api/v1/work-sessions/600")).andExpect(status().isNotFound());
-		mvc.perform(delete("/api/v1/work-sessions/600/messages/20")).andExpect(status().isNotFound());
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/20")).andExpect(status().isNotFound());
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/50")).andExpect(status().isNotFound());
 		assertThat(jdbc.queryForObject("SELECT content FROM session_message WHERE message_id=20", String.class))
 				.isEqualTo("남의 대화");
 	}
@@ -232,17 +213,15 @@ class WorkMessageApiIntegrationTest {
 				.andExpect(jsonPath("$.data.items[0].session_id").value(700));
 		mvc.perform(get("/api/v1/work-sessions/500")).andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/work-sessions/500/messages")).andExpect(status().isNotFound());
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/10")).andExpect(status().isNotFound());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM session_message WHERE session_id=500", Integer.class))
 				.isEqualTo(3);
 	}
 
 	@Test
-	void 계산_중에는_업무와_대화를_삭제하지_않는다() throws Exception {
+	void 계산_중에는_업무를_삭제하지_않는다() throws Exception {
 		jdbc.update("UPDATE work_session SET step='running' WHERE session_id=500");
 		mvc.perform(delete("/api/v1/work-sessions/500"))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("SESSION_RUNNING"));
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/10")).andExpect(status().isBadRequest());
 		assertThat(jdbc.queryForObject("SELECT deleted_at FROM work_session WHERE session_id=500", Object.class)).isNull();
 	}
 
@@ -252,8 +231,6 @@ class WorkMessageApiIntegrationTest {
 		jdbc.update("UPDATE work_session SET step=?, active_operation_runs=1 WHERE session_id=500", step);
 		mvc.perform(delete("/api/v1/work-sessions/500"))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("SESSION_RUNNING"));
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/10"))
-				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("SESSION_RUNNING"));
 		assertThat(jdbc.queryForObject("SELECT content FROM session_message WHERE message_id=10", String.class)).isEqualTo("안녕하세요");
 		jdbc.update("UPDATE work_session SET active_operation_runs=0 WHERE session_id=500");
 		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
@@ -262,6 +239,5 @@ class WorkMessageApiIntegrationTest {
 	@Test
 	void 잘못된_삭제_경로는_500_대신_400이다() throws Exception {
 		mvc.perform(delete("/api/v1/work-sessions/abc")).andExpect(status().isBadRequest());
-		mvc.perform(delete("/api/v1/work-sessions/500/messages/0")).andExpect(status().isBadRequest());
 	}
 }

@@ -166,7 +166,6 @@ class OperationRunIntegrationTest {
 				assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isEqualTo(1);
 				assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=520001", String.class)).isEqualTo(step);
 				assertThatThrownBy(() -> deletion.deleteSession(520001)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
-				assertThatThrownBy(() -> deletion.deleteMessage(520001, 1)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
 				releaseSecond.countDown();
 				second.get(10, TimeUnit.SECONDS);
 				assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=520001", Integer.class)).isZero();

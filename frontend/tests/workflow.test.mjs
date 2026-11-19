@@ -279,17 +279,15 @@ test('삭제된 메시지 표시를 숨겨도 진행 중 질문은 유지한다'
   assert.equal(currentQuestion(messages, { current_version_id: 10 }).question_id, 'q1')
 })
 
-test('삭제 API는 업무와 메시지 경로를 구분하고 실패를 전달한다', async () => {
+test('업무 삭제 API는 올바른 경로로 요청하고 실패를 전달한다', async () => {
   const calls = []
   globalThis.fetch = async (url, init) => {
     calls.push([url, init.method])
     return json({ status: 'ok', data: {} })
   }
   await workflowApi.deleteSession(500)
-  await workflowApi.deleteMessage(500, 30)
   assert.deepEqual(calls, [
     ['/api/v1/work-sessions/500', 'DELETE'],
-    ['/api/v1/work-sessions/500/messages/30', 'DELETE'],
   ])
   globalThis.fetch = async () => json({ status: 'error', data: { detail_code: 'SESSION_NOT_FOUND' }, message: '업무를 찾을 수 없습니다.' }, 404)
   await assert.rejects(() => workflowApi.deleteSession(600), { code: 'SESSION_NOT_FOUND' })

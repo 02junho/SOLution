@@ -144,15 +144,6 @@ public class SessionRepository {
 		jdbcTemplate.update("UPDATE work_session SET deleted_at = now() WHERE session_id = ?", sessionId);
 	}
 
-	/** 요청 재전송·질문 처리에 필요한 메타데이터는 보존하고 대화 표시를 삭제한다. */
-	public int deleteMessage(long sessionId, long messageId) {
-		return jdbcTemplate.update("""
-				UPDATE session_message SET content = '삭제된 대화입니다.',
-				metadata_json = COALESCE(metadata_json, '{}'::jsonb) || '{"deleted":true}'::jsonb
-				WHERE session_id = ? AND message_id = ? AND role IN ('user', 'assistant')
-				""", sessionId, messageId);
-	}
-
 	// ===== events(대화·폼·질문답변) 처리용 =====
 
 	/** 업무의 한 입력 버전(순번으로)을 읽는다. 없으면 빈 값(아직 입력 버전이 없는 세션). */
