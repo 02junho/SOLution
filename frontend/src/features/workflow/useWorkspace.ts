@@ -424,6 +424,7 @@ export function useWorkspace() {
     open,
     reset,
     invalidate,
+    refresh: () => { if (activeSession.current !== null) void open(activeSession.current) },
     create,
     event,
     pendingEvent:

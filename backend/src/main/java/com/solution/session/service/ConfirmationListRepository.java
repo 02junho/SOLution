@@ -20,6 +20,28 @@ public class ConfirmationListRepository {
 		this.jdbc = jdbc;
 	}
 
+	/** 소유권은 실제 입력 버전→업무→매장으로 확인한다. 호출자는 해당 세션 행을 잠근다. */
+	public int delete(long confirmationId, String ownerKey) {
+		return jdbc.update("""
+				DELETE FROM work_confirmation c USING work_version v, work_session s, store st
+				WHERE c.confirmation_id = ? AND v.input_version_id = c.input_version_id
+				  AND s.session_id = v.session_id AND st.store_id = s.store_id AND st.owner_key = ?
+				""", confirmationId, ownerKey);
+	}
+
+	/** 현재 조건의 마지막 저장 기록을 삭제했을 때만 비교 단계로 돌아간다. */
+	public void restoreResultStep(long sessionId, long inputVersionId) {
+		jdbc.update("""
+				UPDATE work_session s SET step = CASE WHEN active_operation_runs > 0 THEN 'running' ELSE 'result' END,
+				updated_at = now()
+				WHERE s.session_id = ? AND s.step = 'saved'
+				  AND EXISTS (SELECT 1 FROM work_version v WHERE v.input_version_id = ?
+				    AND v.session_id = s.session_id AND v.version_no = s.current_version)
+				  AND NOT EXISTS (SELECT 1 FROM work_confirmation c JOIN work_version v ON v.input_version_id = c.input_version_id
+				    WHERE v.session_id = s.session_id AND v.version_no = s.current_version)
+				""", sessionId, inputVersionId);
+	}
+
 	/** 확정의 조회용 복제 필드 대신 입력 버전의 실제 업무·매장을 기준으로 권한과 최신성을 판정한다. */
 	public List<Item> find(String ownerKey, String featureType, Long sessionId,
 			OffsetDateTime cursorAt, Long cursorId, int limit) {

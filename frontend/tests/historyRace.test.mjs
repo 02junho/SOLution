@@ -39,20 +39,20 @@ const confirmDelete = async () => {
 
 test('삭제 중 진행하던 더 보기의 오래된 응답이 삭제 업무를 복원하지 않는다', async () => {
   await clickText('업무 더 보기')
-  await clickText('업무 삭제')
+  await clickText('대화 기록 삭제')
   await confirmDelete()
   await act(async () => finish())
-  assert.equal(container.querySelector('[aria-label="업무 1 업무 삭제"]'), null)
-  assert.ok(container.querySelector('[aria-label="업무 2 업무 삭제"]'))
+  assert.equal(container.querySelector('[aria-label="업무 1 대화 기록 삭제"]'), null)
+  assert.ok(container.querySelector('[aria-label="업무 2 대화 기록 삭제"]'))
   await act(async () => container.querySelector('.history-row').click())
   assert.deepEqual(opened, [2])
 })
 
 test('삭제 확인 중 필터 조회가 시작돼도 늦은 첫 페이지에서 삭제 업무를 제외한다', async () => {
-  await clickText('업무 삭제')
+  await clickText('대화 기록 삭제')
   await clickText('매입·재고')
   await confirmDelete()
   await act(async () => finish())
-  assert.equal(container.querySelector('[aria-label="업무 1 업무 삭제"]'), null)
-  assert.ok(container.querySelector('[aria-label="업무 2 업무 삭제"]'))
+  assert.equal(container.querySelector('[aria-label="업무 1 대화 기록 삭제"]'), null)
+  assert.ok(container.querySelector('[aria-label="업무 2 대화 기록 삭제"]'))
 })

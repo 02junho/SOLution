@@ -6,6 +6,7 @@ import type { Confirmation, Page, SessionSummary } from '../../types/workflow'
 import { dateTime, featureName } from './model'
 // 운영: 저장한 계획 카드에 고른 운영안 이름 표시
 import { CHOICE_TITLE } from '../operation/workspace/format'
+import DeleteConfirmation from './DeleteConfirmation'
 
 type Filter = FeatureType | 'all'
 function Filters({
@@ -192,12 +193,12 @@ export function SessionHistory({
       )}
       {target && (
         <section className="delete-confirm" aria-label="업무 삭제 확인">
-          <strong>‘{target.title}’ 업무를 삭제할까요?</strong>
-          <p>이어하기 목록과 업무 대화를 더 이상 열 수 없어요. 확정한 계획과 계산 근거는 유지돼요.</p>
+          <strong>‘{target.title}’의 대화 기록을 삭제할까요?</strong>
+          <p>이 업무가 이어하기 목록에서 사라지고, 대화를 다시 열 수 없어요. 저장한 계획은 별도로 남아요. 계획도 지우려면 ‘저장한 계획’에서 삭제해 주세요.</p>
           {deleteError && <Alert error>{deleteError}</Alert>}
           <button className="button secondary" disabled={deleting !== null} onClick={() => setTarget(null)}>취소</button>
           <button className="button primary" disabled={deleting !== null} onClick={() => void remove()}>
-            {deleting !== null ? '삭제 중…' : '업무 삭제'}
+            {deleting !== null ? '삭제 중…' : '대화 기록 삭제'}
           </button>
         </section>
       )}
@@ -235,8 +236,8 @@ export function SessionHistory({
               <Icon name="chevron" size={16} />
             </button>
             <button type="button" className="text-button delete-action" disabled={deleting !== null}
-              aria-label={`${session.title} 업무 삭제`} onClick={() => { setTarget(session); setDeleteError('') }}>
-              업무 삭제
+              aria-label={`${session.title} 대화 기록 삭제`} onClick={() => { setTarget(session); setDeleteError('') }}>
+              대화 기록 삭제
             </button>
           </div>
         ))}
@@ -260,8 +261,10 @@ export function SessionHistory({
 }
 export function ConfirmationHistory({
   onOpen,
+  onDeleted,
 }: {
   onOpen: (id: number) => void
+  onDeleted?: (id: number) => void
 }) {
   const history = useHistory<Confirmation>(workflowApi.confirmations)
   return (
@@ -295,35 +298,40 @@ export function ConfirmationHistory({
       )}
       <div className="confirmation-grid">
         {history.items.map((confirmation) => (
-          <button
-            className="confirmation-card"
-            key={confirmation.confirmation_id}
-            onClick={() => onOpen(confirmation.confirmation_id)}
-          >
-            <div className="choice-top">
-              <span className="eyebrow">
-                {featureName(confirmation.feature_type)}
-              </span>
-              <span
-                className={`status-pill ${confirmation.is_current_version ? 'green' : ''}`}
-              >
-                {confirmation.is_current_version ? '현재 조건' : '과거 기록'}
-              </span>
-            </div>
-            <h2>
-              {confirmation.feature_type === 'purchase'
-                ? '저장한 구매 계획'
-                : `운영 계획 · ${CHOICE_TITLE[confirmation.selected_choice_key] ?? '저장한 안'}`}
-            </h2>
-            <p>
-              입력 {confirmation.version_no} ·{' '}
-              {dateTime(confirmation.confirmed_at)}
-            </p>
-            <div className="confirmation-card-footer">
-              <span>보존된 내용 확인</span>
-              <Icon name="arrow" size={18} />
-            </div>
-          </button>
+          <div className="confirmation-entry" key={confirmation.confirmation_id}>
+            <button
+              className="confirmation-card"
+              onClick={() => onOpen(confirmation.confirmation_id)}
+            >
+              <div className="choice-top">
+                <span className="eyebrow">
+                  {featureName(confirmation.feature_type)}
+                </span>
+                <span
+                  className={`status-pill ${confirmation.is_current_version ? 'green' : ''}`}
+                >
+                  {confirmation.is_current_version ? '현재 조건' : '과거 기록'}
+                </span>
+              </div>
+              <h2>
+                {confirmation.feature_type === 'purchase'
+                  ? '저장한 구매 계획'
+                  : `운영 계획 · ${CHOICE_TITLE[confirmation.selected_choice_key] ?? '저장한 안'}`}
+              </h2>
+              <p>
+                입력 {confirmation.version_no} ·{' '}
+                {dateTime(confirmation.confirmed_at)}
+              </p>
+              <div className="confirmation-card-footer">
+                <span>보존된 내용 확인</span>
+                <Icon name="arrow" size={18} />
+              </div>
+            </button>
+            <DeleteConfirmation id={confirmation.confirmation_id} onDeleted={(id) => {
+              history.remove((item) => item.confirmation_id === id)
+              onDeleted?.(id)
+            }} />
+          </div>
         ))}
       </div>
       {history.loading && (

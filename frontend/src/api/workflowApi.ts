@@ -55,6 +55,8 @@ const write = async <T>(
     }),
   )
 export const workflowApi = {
+  deleteConfirmation: (id: number) =>
+    request<JsonObject>(`/v1/work-confirmations/${id}`, { method: 'DELETE' }).then(unwrap),
   deleteSession: (id: number) =>
     request<JsonObject>(`/v1/work-sessions/${id}`, { method: 'DELETE' }).then(unwrap),
   deleteMessage: (session: number, message: number) =>

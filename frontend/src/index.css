@@ -2114,3 +2114,8 @@ input[type='checkbox'] {
 .delete-confirm { padding: 16px; margin: 12px 0; border: 1px solid #dcbaba; border-radius: 12px; background: #fffafa; }
 .delete-confirm p { margin: 8px 0 12px; }
 .delete-confirm .button + .button { margin-left: 8px; }
+
+.confirmation-entry { min-width: 0; }
+.confirmation-entry .confirmation-card { width: 100%; }
+.confirmation-entry .plan-delete { margin-top: 8px; }
+.confirmation-detail > .plan-delete { margin-bottom: 18px; }
