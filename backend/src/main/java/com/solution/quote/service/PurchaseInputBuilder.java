@@ -68,6 +68,7 @@ public final class PurchaseInputBuilder {
 		List<Map<String, Object>> excluded = new ArrayList<>();
 		Map<String, String> deliveryBatch = new LinkedHashMap<>();
 		List<Map<String, Object>> deliveryConflicts = new ArrayList<>();
+		List<Set<String>> supplierSets = new ArrayList<>();
 		for (Batch batch : batches) {
 			// 거래처 없는 배송 줄의 주인을 정할 때는 뺀 줄까지 포함한 배치 전체의 거래처를 본다.
 			Set<String> batchSuppliers = new LinkedHashSet<>();
@@ -117,7 +118,12 @@ public final class PurchaseInputBuilder {
 				quote.put("vat_included", vat);
 				quotes.add(quote);
 			}
-			applyDelivery(batch, batchSuppliers, suppliers, deliveryBatch, deliveryConflicts);
+			supplierSets.add(batchSuppliers);
+		}
+		// 배송 조건은 모든 배치의 견적으로 거래처를 다 만든 뒤에 붙인다.
+		// 앞 배치에 배송비만 있고 그 거래처의 쓸 견적이 뒤 배치에 있어도 배송비를 잃지 않는다.
+		for (int i = 0; i < batches.size(); i++) {
+			applyDelivery(batches.get(i), supplierSets.get(i), suppliers, deliveryBatch, deliveryConflicts);
 		}
 
 		List<String> missing = new ArrayList<>();

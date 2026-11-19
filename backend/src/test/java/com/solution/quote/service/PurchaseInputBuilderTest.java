@@ -141,6 +141,22 @@ class PurchaseInputBuilderTest {
 	}
 
 	@Test
+	void 앞_배치의_배송비는_그_거래처_견적이_뒤_배치에만_있어도_살린다() throws Exception {
+		// b1의 A식자재 줄은 필요 없는 품목이라 빠지고, A식자재의 쓸 견적은 b2에만 있다.
+		var first = batch("b1", "{'supplier_name': 'A식자재', 'fee_amount': 3000, 'free_shipping_minimum': null}",
+				row("quote-line-001", "'A식자재'", "'milk'", "1000", "'ml'", "2500", "included", true, null));
+		var second = batch("b2", "",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(first, second),
+				conditions(null, null, null), Map.of());
+
+		var supplier = ((List<Map<String, Object>>) built.input().get("suppliers")).get(0);
+		assertThat(supplier).containsEntry("delivery_fee_krw", 3000L);
+	}
+
+	@Test
 	void 같은_배치_안에서는_배송비와_무료배송_기준이_다른_줄에_있어도_합친다() throws Exception {
 		var batch = batch("b1", "{'supplier_name': 'A식자재', 'fee_amount': 3000, 'free_shipping_minimum': null},"
 				+ "{'supplier_name': 'A식자재', 'fee_amount': null, 'free_shipping_minimum': 50000}",
