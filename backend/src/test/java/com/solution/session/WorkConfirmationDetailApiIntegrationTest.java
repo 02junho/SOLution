@@ -3,6 +3,7 @@ package com.solution.session;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -168,6 +169,17 @@ class WorkConfirmationDetailApiIntegrationTest {
 				.andExpect(jsonPath("$.data.selected_snapshot_json.choice.total_krw").value(120400))
 				.andReturn().getResponse().getContentAsString();
 		assertThat(detail).doesNotContain("owner@example.test").contains("[이메일]");
+	}
+
+	@Test
+	void 업무를_삭제해도_확정_계획의_목록과_상세_스냅샷은_보존한다() throws Exception {
+		var before = jdbc.queryForMap("SELECT * FROM work_confirmation WHERE confirmation_id=3002");
+		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
+		mvc.perform(get("/api/v1/work-confirmations").param("session_id", "500"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(2));
+		mvc.perform(get("/api/v1/work-confirmations/3002"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.selected_snapshot_json.choice.total_krw").value(120400));
+		assertThat(jdbc.queryForMap("SELECT * FROM work_confirmation WHERE confirmation_id=3002")).isEqualTo(before);
 	}
 
 	private void insert(long confirmation, long result, long version, long session, long store, int no, String feature) {

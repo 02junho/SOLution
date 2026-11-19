@@ -128,6 +128,12 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+### 업무·대화 삭제
+
+- **이어하기 → 업무 삭제**: 확인 후 이어하기 목록에서 제외되며 업무와 대화는 다시 열 수 없습니다. 확정한 계획은 **저장한 계획**에서 계속 조회할 수 있습니다. 입력·계산 근거는 보존합니다.
+- **대화 아래 → 대화 삭제**: 대화 원문 표시를 삭제합니다. 입력 조건·계산 결과·확정 계획을 되돌리지 않습니다. 진행 중인 확인 질문과 요청 재전송에 필요한 정보는 유지합니다.
+- API: `DELETE /api/v1/work-sessions/{sessionId}`, `DELETE /api/v1/work-sessions/{sessionId}/messages/{messageId}`. 소유한 업무만 삭제 가능하며 계산 중에는 삭제할 수 없습니다.
+
 ### 3. 테스트
 
 ```bash

@@ -28,6 +28,11 @@ export const dateTime = (value: string) =>
   })
 export const featureName = (feature: string) =>
   feature === 'purchase' ? '매입·재고' : '운영 실험'
+export function visibleMessages(messages: Message[]) {
+  return messages.filter((message) =>
+    (message.role === 'user' || message.role === 'assistant') && !message.metadata_json?.deleted,
+  )
+}
 export function currentInput(
   messages: Message[],
   version: number | null,
@@ -86,9 +91,9 @@ export function fieldName(path: string, label: string) {
     budget_krw: '예산',
     planning_days: '계획 기간',
     max_delivery_count: '배송 횟수 상한',
-    usable_inventory: '사용 가능한 재고',
+    usable_inventory: '현재 사용 가능한 재고',
     gross_need: '필요 총량',
-    safety_stock: '안전재고',
+    safety_stock: '남겨 둘 안전재고',
     storage_capacity: '보관 한도',
     max_end_inventory: '기간 끝 재고 한도',
     form_input: '폼 입력',

@@ -286,6 +286,12 @@ export function useWorkspace() {
       true,
     )
   }
+  function deleteMessage(id: number) {
+    return act('대화를 삭제하고 있어요', async (context) => {
+      await workflowApi.deleteMessage(context.session_id, id)
+      return '대화를 삭제했어요. 입력 조건과 저장한 계획은 유지돼요.'
+    })
+  }
   function retryEvent() {
     const id = workspace.context?.session_id
     const pending = id === undefined ? undefined : pendingEvents.current.get(id)
@@ -407,6 +413,7 @@ export function useWorkspace() {
       workspace.context !== null &&
       pendingSessions.includes(workspace.context.session_id),
     retryEvent,
+    deleteMessage,
     confirmInput,
     calculate,
     confirm,

@@ -123,6 +123,7 @@ function useHistory<T>(
         void read(next, generation.current)
       }
     },
+    remove: (matches: (item: T) => boolean) => setItems((previous) => previous.filter((item) => !matches(item))),
     retry: () => {
       if (!busy.current) {
         setLoading(true)
@@ -135,16 +136,39 @@ function useHistory<T>(
 export function SessionHistory({
   onClose,
   onSelect,
+  onDeleted,
 }: {
   onClose: () => void
   onSelect: (id: number) => void
+  onDeleted?: (id: number) => void
 }) {
   const history = useHistory<SessionSummary>(workflowApi.sessions)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [target, setTarget] = useState<SessionSummary | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const deletionLock = useRef(false)
+  async function remove() {
+    if (!target || deletionLock.current) return
+    deletionLock.current = true
+    setDeleting(target.session_id)
+    setDeleteError('')
+    try {
+      await workflowApi.deleteSession(target.session_id)
+      history.remove((item) => item.session_id === target.session_id)
+      onDeleted?.(target.session_id)
+      setTarget(null)
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : '업무를 삭제하지 못했어요.')
+    } finally {
+      deletionLock.current = false
+      setDeleting(null)
+    }
+  }
   return (
     <Modal
       title="하던 업무 이어하기"
       description="대화와 조건은 업무별로 저장돼 있어요."
-      onClose={onClose}
+      onClose={() => { if (deleting === null) onClose() }}
       wide
     >
       <Filters value={history.filter} onChange={history.setFilter} />
@@ -161,38 +185,55 @@ export function SessionHistory({
           <p>새 업무를 시작하면 이곳에서 이어 할 수 있어요.</p>
         </Empty>
       )}
+      {target && (
+        <section className="delete-confirm" aria-label="업무 삭제 확인">
+          <strong>‘{target.title}’ 업무를 삭제할까요?</strong>
+          <p>이어하기 목록과 업무 대화를 더 이상 열 수 없어요. 확정한 계획과 계산 근거는 유지돼요.</p>
+          {deleteError && <Alert error>{deleteError}</Alert>}
+          <button className="button secondary" disabled={deleting !== null} onClick={() => setTarget(null)}>취소</button>
+          <button className="button primary" disabled={deleting !== null} onClick={() => void remove()}>
+            {deleting !== null ? '삭제 중…' : '업무 삭제'}
+          </button>
+        </section>
+      )}
       <div className="history-list">
         {history.items.map((session) => (
-          <button
-            className="history-row"
-            key={session.session_id}
-            onClick={() => onSelect(session.session_id)}
-          >
-            <span className="history-icon">
-              <Icon
-                name={session.feature_type === 'purchase' ? 'box' : 'clock'}
-              />
-            </span>
-            <span>
-              <strong>{session.title}</strong>
-              <small>
-                {featureName(session.feature_type)} · 입력{' '}
-                {session.current_version} · {dateTime(session.updated_at)}
-              </small>
-            </span>
-            <span className="status-pill">
-              {(
-                {
-                  input: '입력 중',
-                  review: '검토 중',
-                  result: '결과 확인',
-                  saved: '저장 완료',
-                  running: '계산 중',
-                } as Record<string, string>
-              )[session.step] ?? '진행 중'}
-            </span>
-            <Icon name="chevron" size={16} />
-          </button>
+          <div className="history-entry" key={session.session_id}>
+            <button
+              className="history-row"
+              disabled={deleting !== null}
+              onClick={() => onSelect(session.session_id)}
+            >
+              <span className="history-icon">
+                <Icon
+                  name={session.feature_type === 'purchase' ? 'box' : 'clock'}
+                />
+              </span>
+              <span>
+                <strong>{session.title}</strong>
+                <small>
+                  {featureName(session.feature_type)} · 입력{' '}
+                  {session.current_version} · {dateTime(session.updated_at)}
+                </small>
+              </span>
+              <span className="status-pill">
+                {(
+                  {
+                    input: '입력 중',
+                    review: '검토 중',
+                    result: '결과 확인',
+                    saved: '저장 완료',
+                    running: '계산 중',
+                  } as Record<string, string>
+                )[session.step] ?? '진행 중'}
+              </span>
+              <Icon name="chevron" size={16} />
+            </button>
+            <button type="button" className="text-button delete-action" disabled={deleting !== null}
+              aria-label={`${session.title} 업무 삭제`} onClick={() => { setTarget(session); setDeleteError('') }}>
+              업무 삭제
+            </button>
+          </div>
         ))}
       </div>
       {history.loading && (

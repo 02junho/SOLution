@@ -4,6 +4,8 @@ import { request } from '../src/api/client.ts'
 import { workflowApi } from '../src/api/workflowApi.ts'
 import {
   applicableWarnings,
+  fieldName,
+  visibleMessages,
   confirmationKey,
   currentInput,
   currentQuestion,
@@ -257,4 +259,38 @@ test('폼 초안은 같은 버전의 후속 해석 실패에도 보존하고 다
     160000,
   )
   assert.equal(questionDraft(messages, { current_version_id: 11 }), null)
+})
+
+
+test('질문 선택지는 한국어로 표시하며 모르는 선택지는 그대로 유지한다', () => {
+  assert.equal(fieldName('gross_need', 'gross_need'), '필요 총량')
+  assert.equal(fieldName('usable_inventory', 'usable_inventory'), '현재 사용 가능한 재고')
+  assert.equal(fieldName('safety_stock', 'safety_stock'), '남겨 둘 안전재고')
+  assert.equal(fieldName('storage_capacity', 'storage_capacity'), '보관 한도')
+  assert.equal(fieldName('max_end_inventory', 'max_end_inventory'), '기간 끝 재고 한도')
+  assert.equal(fieldName('네, 같이 일해요', '네, 같이 일해요'), '네, 같이 일해요')
+})
+
+test('삭제된 메시지 표시를 숨겨도 진행 중 질문은 유지한다', () => {
+  const messages = [{ message_id: 1, role: 'assistant', metadata_json: {
+    deleted: true, response: { status: 'needs_input', data: { question_id: 'q1', base_version_id: 10 } },
+  } }]
+  assert.deepEqual(visibleMessages(messages), [])
+  assert.equal(currentQuestion(messages, { current_version_id: 10 }).question_id, 'q1')
+})
+
+test('삭제 API는 업무와 메시지 경로를 구분하고 실패를 전달한다', async () => {
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push([url, init.method])
+    return json({ status: 'ok', data: {} })
+  }
+  await workflowApi.deleteSession(500)
+  await workflowApi.deleteMessage(500, 30)
+  assert.deepEqual(calls, [
+    ['/api/v1/work-sessions/500', 'DELETE'],
+    ['/api/v1/work-sessions/500/messages/30', 'DELETE'],
+  ])
+  globalThis.fetch = async () => json({ status: 'error', data: { detail_code: 'SESSION_NOT_FOUND' }, message: '업무를 찾을 수 없습니다.' }, 404)
+  await assert.rejects(() => workflowApi.deleteSession(600), { code: 'SESSION_NOT_FOUND' })
 })

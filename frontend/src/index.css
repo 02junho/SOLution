@@ -2101,3 +2101,16 @@ input[type='checkbox'] {
     white-space: nowrap;
   }
 }
+
+.history-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border, #e2e5ec);
+}
+.history-entry .history-row { flex: 1; min-width: 0; border-bottom: 0; }
+.delete-action { color: #a33434; flex-shrink: 0; }
+.message .delete-action { font-size: 12px; margin-top: 6px; }
+.delete-confirm { padding: 16px; margin: 12px 0; border: 1px solid #dcbaba; border-radius: 12px; background: #fffafa; }
+.delete-confirm p { margin: 8px 0 12px; }
+.delete-confirm .button + .button { margin-left: 8px; }

@@ -75,7 +75,7 @@ public class SessionRepository {
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.version_no = s.current_version
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionContextRow(
 				rs.getLong("session_id"),
 				rs.getLong("store_id"),
@@ -106,7 +106,7 @@ public class SessionRepository {
 				SELECT s.session_id, s.feature_type, s.title, s.step, s.current_version, s.updated_at
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
-				WHERE st.owner_key = ?
+				WHERE st.owner_key = ? AND s.deleted_at IS NULL
 				""");
 		List<Object> args = new ArrayList<>();
 		args.add(ownerKey);
@@ -131,6 +131,20 @@ public class SessionRepository {
 				rs.getInt("current_version"),
 				rs.getObject("updated_at", OffsetDateTime.class)),
 				args.toArray());
+	}
+
+	/** 확정 기록과 참조 관계는 남기고 업무를 이어하기에서 삭제한다. */
+	public void deleteSession(long sessionId) {
+		jdbcTemplate.update("UPDATE work_session SET deleted_at = now() WHERE session_id = ?", sessionId);
+	}
+
+	/** 요청 재전송·질문 처리에 필요한 메타데이터는 보존하고 대화 표시를 삭제한다. */
+	public int deleteMessage(long sessionId, long messageId) {
+		return jdbcTemplate.update("""
+				UPDATE session_message SET content = '삭제된 대화입니다.',
+				metadata_json = COALESCE(metadata_json, '{}'::jsonb) || '{"deleted":true}'::jsonb
+				WHERE session_id = ? AND message_id = ? AND role IN ('user', 'assistant')
+				""", sessionId, messageId);
 	}
 
 	// ===== events(대화·폼·질문답변) 처리용 =====
@@ -241,7 +255,7 @@ public class SessionRepository {
 	public Optional<String> findSessionOwnerKey(long sessionId) {
 		return jdbcTemplate.query("""
 				SELECT st.owner_key FROM work_session s JOIN store st ON st.store_id = s.store_id
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> rs.getString("owner_key"), sessionId).stream().findFirst();
 	}
 
@@ -252,7 +266,7 @@ public class SessionRepository {
 				FROM session_message m
 				JOIN work_session s ON s.session_id = m.session_id
 				JOIN store st ON st.store_id = s.store_id
-				WHERE m.session_id = ? AND st.owner_key = ?
+				WHERE m.session_id = ? AND st.owner_key = ? AND s.deleted_at IS NULL
 				""";
 		List<Object> args = new ArrayList<>();
 		args.add(sessionId);

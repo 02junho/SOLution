@@ -11,6 +11,7 @@ import {
   dateTime,
   featureName,
   object,
+  visibleMessages,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import PurchaseForm from './PurchaseForm'
@@ -385,6 +386,7 @@ export default function Workspace({
     () => context?.input_method === 'form' && !context.current_version_id,
   )
   const [draft, setDraft] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
   const question = currentQuestion(messages, context)
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -557,11 +559,10 @@ export default function Workspace({
                 </div>
               )}
             </div>
-            {messages
-              .filter(
-                (message) =>
-                  message.role === 'user' || message.role === 'assistant',
-              )
+            {visibleMessages(messages)
+              .filter((message) => !(question && message.role === 'assistant' &&
+                message.metadata_json?.question_id === question.question_id &&
+                message.content.trim() === question.question?.text?.trim()))
               .map((message) => (
                 <div
                   className={`message ${message.role}`}
@@ -580,6 +581,9 @@ export default function Workspace({
                         ? '폼으로 입력 조건을 저장했어요.'
                         : message.content}
                     </p>
+                    <button type="button" className="text-button delete-action" disabled={!!busy}
+                      aria-label={`${message.role === 'user' ? '내' : 'AI'} 대화 삭제`}
+                      onClick={() => setDeleteTarget(message.message_id)}>대화 삭제</button>
                   </div>
                 </div>
               ))}
@@ -587,7 +591,9 @@ export default function Workspace({
               <div className="question-card">
                 <p className="eyebrow">한 가지만 더 확인할게요</p>
                 <h3>{question.question?.text ?? '빠진 입력을 알려 주세요.'}</h3>
-                {question.missing_fields?.map((field) => (
+                {question.missing_fields?.filter((field) =>
+                  fieldName(field.path, field.label).trim() !== question.question?.text?.trim(),
+                ).map((field) => (
                   <p className="muted" key={field.path}>
                     {fieldName(field.path, field.label)}
                   </p>
@@ -600,7 +606,7 @@ export default function Workspace({
                       disabled={!!busy}
                       onClick={(e) => send(e, answer)}
                     >
-                      {answer}
+                      {fieldName(answer, answer)}
                     </button>
                   ))}
                 </div>
@@ -616,6 +622,16 @@ export default function Workspace({
             <div ref={bottom} />
           </div>
           <div className="composer">
+            {deleteTarget !== null && (
+              <section className="delete-confirm" aria-label="대화 삭제 확인">
+                <strong>이 대화를 삭제할까요?</strong>
+                <p>대화 표시만 삭제돼요. 입력 조건·현재 확인 질문·계산 결과·저장한 계획은 유지돼요.</p>
+                <button className="button secondary" disabled={!!busy} onClick={() => setDeleteTarget(null)}>취소</button>
+                <button className="button primary" disabled={!!busy} onClick={() => {
+                  void workspace.deleteMessage(deleteTarget).then((ok) => { if (ok) setDeleteTarget(null) })
+                }}>대화 삭제</button>
+              </section>
+            )}
             <div className="composer-toolbar">
               <span>
                 {question ? '질문에 답해 주세요' : '사장님 말씀을 남겨 주세요'}
