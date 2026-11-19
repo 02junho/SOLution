@@ -7,7 +7,13 @@ export type Sales = {
   recent_actuals: {menu_id: string; cups: number; start_date: string; end_date: string}[]
   sales_plan: {menu_id: string; cups: number; takeaway_cups?: number}[]
 }
-export type Issue = {code: string; target_id?: string; field?: string; menu_id?: string; item_id?: string}
+export type Issue = {code: string; target_id?: string; field?: string; menu_id?: string; item_id?: string; blocks_comparison?: boolean}
+// "이 견적으로 구매안 만들기" 응답. 업무 입력(/events)과 같은 공통 응답 모양이다.
+export type PurchaseInput = {
+  status: 'ok' | 'needs_input'
+  data: {session_id: number; excluded_lines: {line_id: string; reason: string}[]}
+  message: string
+}
 export type ManualQuote = {items: {
   supplier_name: string; raw_item_name: string; quantity_per_unit: number; quantity_unit: string
   units_per_pack: number; order_unit: string; price: number; price_basis: string; vat_status: string

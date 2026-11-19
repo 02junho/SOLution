@@ -1,0 +1,144 @@
+package com.solution.quote.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.solution.common.exception.ApiException;
+
+@SuppressWarnings("unchecked")
+class PurchaseInputBuilderTest {
+
+	private final ObjectMapper json = new ObjectMapper();
+
+	private JsonNode node(String text) throws Exception {
+		return json.readTree(text.replace('\'', '"'));
+	}
+
+	private final String dictionary = """
+			{'version': 3, 'items': [
+			  {'item_id': 'bean', 'name': '원두', 'base_unit': 'g'},
+			  {'item_id': 'cup', 'name': '컵', 'base_unit': '개'}]}""";
+
+	private final String preview = """
+			{'status': 'ok', 'items': [
+			  {'item_id': 'bean', 'unit': 'g', 'gross_need': 2700, 'usable_inventory': 1000, 'safety_stock': 500},
+			  {'item_id': 'cup', 'unit': '개', 'gross_need': 150.0, 'usable_inventory': null, 'safety_stock': null}]}""";
+
+	private String row(String line, String supplier, String item, String qty, String unit, String price, String vat,
+			boolean comparable, String issue) {
+		return ("{'line_id': '%s', 'supplier_name': %s, 'item_id': %s, 'normalized_quantity_per_pack': %s,"
+				+ " 'normalized_unit': %s, 'pack_price': %s, 'vat_status': '%s', 'comparable': %s, 'issues': [%s]}")
+				.formatted(line, supplier, item, qty, unit, price, vat, comparable,
+						issue == null ? "" : "{'code': '" + issue + "', 'blocks_comparison': true}");
+	}
+
+	private PurchaseInputBuilder.Batch batch(String id, String delivery, String... rows) throws Exception {
+		return new PurchaseInputBuilder.Batch(id, node("{'normalization': {'items': [" + String.join(",", rows)
+				+ "]}, 'delivery': [" + delivery + "]}"));
+	}
+
+	private Map<String, Object> conditions(Object days, Object budget, Object deliveries) {
+		Map<String, Object> map = new LinkedHashMap<>();
+		map.put("planning_days", days);
+		map.put("budget_krw", budget);
+		map.put("max_delivery_count", deliveries);
+		return map;
+	}
+
+	@Test
+	void 견적_정리_결과를_구매_입력으로_묶는다() throws Exception {
+		var batch = batch("b1", "{'supplier_name': 'A 식자재', 'fee_amount': 3000, 'free_shipping_minimum': 50000}",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'a식자재'", "'cup'", "50", "'개'", "5000", "unknown", true, null),
+				// 같은 줄이 또 오면 하나만 넣는다.
+				row("quote-line-003", "'A식자재'", "'bean'", "1000.0", "'g'", "18000", "included", true, null),
+				row("quote-line-004", "'B마트'", "null", "null", "null", "9000", "excluded", false,
+						"ITEM_CONFIRMATION_REQUIRED"));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(7, null, 2), Map.of("preparation_id", "p1"));
+		Map<String, Object> input = built.input();
+
+		assertThat(input).containsEntry("planning_days", 7).containsEntry("budget_krw", null)
+				.containsEntry("max_delivery_count", 2);
+		var items = (List<Map<String, Object>>) input.get("items");
+		assertThat(items).extracting("item_id", "item_name", "base_unit", "gross_need")
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("bean", "원두", "g", 2700L),
+						org.assertj.core.groups.Tuple.tuple("cup", "컵", "ea", 150L));
+		assertThat(items.get(1)).containsEntry("usable_inventory", null).containsEntry("storage_capacity", null);
+
+		var suppliers = (List<Map<String, Object>>) input.get("suppliers");
+		assertThat(suppliers).hasSize(1);
+		assertThat(suppliers.get(0)).containsEntry("supplier_id", "a식자재").containsEntry("supplier_name", "A식자재")
+				.containsEntry("minimum_order_krw", null).containsEntry("delivery_fee_krw", 3000L)
+				.containsEntry("free_delivery_min_krw", 50000L);
+
+		var quotes = (List<Map<String, Object>>) input.get("quotes");
+		assertThat(quotes).extracting("item_id", "pack_size", "pack_unit", "pack_price_krw", "vat_included")
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("bean", 1000L, "g", 18000L, true),
+						org.assertj.core.groups.Tuple.tuple("cup", 50L, "ea", 5000L, null));
+
+		assertThat(built.excludedLines()).containsExactly(
+				Map.of("line_id", "b1:quote-line-004", "reason", "ITEM_CONFIRMATION_REQUIRED"));
+		var source = (Map<String, Object>) input.get("source");
+		assertThat(source).containsEntry("preparation_id", "p1").containsEntry("dictionary_version", 3L);
+	}
+
+	@Test
+	void 배송_줄에_거래처가_없으면_묶음의_유일한_거래처에_붙인다() throws Exception {
+		var batch = batch("b1", "{'supplier_name': null, 'fee_amount': 2500, 'free_shipping_minimum': null}",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(null, null, null), Map.of());
+
+		var supplier = ((List<Map<String, Object>>) built.input().get("suppliers")).get(0);
+		assertThat(supplier).containsEntry("delivery_fee_krw", 2500L).containsEntry("free_delivery_min_krw", null);
+	}
+
+	@Test
+	void 필요없는_품목이나_단위가_다른_견적은_빼고_이유를_남긴다() throws Exception {
+		var batch = batch("b1", "",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null),
+				row("quote-line-002", "'A식자재'", "'cup'", "50", "'개'", "5000", "included", true, null),
+				row("quote-line-003", "'A식자재'", "'milk'", "1000", "'ml'", "2500", "included", true, null),
+				row("quote-line-004", "'A식자재'", "'cup'", "50", "'g'", "5000", "included", true, null));
+
+		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(null, null, null), Map.of());
+
+		assertThat(built.excludedLines()).containsExactly(
+				Map.of("line_id", "b1:quote-line-003", "reason", "ITEM_NOT_NEEDED"),
+				Map.of("line_id", "b1:quote-line-004", "reason", "UNIT_MISMATCH"));
+	}
+
+	@Test
+	void 필요한_품목에_쓸_견적이_하나도_없으면_400() throws Exception {
+		var batch = batch("b1", "",
+				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null));
+
+		assertThatThrownBy(() -> PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(batch),
+				conditions(null, null, null), Map.of()))
+				.isInstanceOf(ApiException.class)
+				.hasMessageContaining("견적이 없는 품목이 있어요: 컵");
+	}
+
+	@Test
+	void 단위와_부가세_표기를_구매_쪽_형식으로_바꾼다() {
+		assertThat(PurchaseInputBuilder.unit("개")).isEqualTo("ea");
+		assertThat(PurchaseInputBuilder.unit("ml")).isEqualTo("ml");
+		assertThat(PurchaseInputBuilder.vat("included")).isEqualTo(true);
+		assertThat(PurchaseInputBuilder.vat("excluded")).isEqualTo(false);
+		assertThat(PurchaseInputBuilder.vat("unknown")).isNull();
+		assertThat(PurchaseInputBuilder.supplierId(" Ａ 식자재 ")).isEqualTo("a식자재");
+	}
+}

@@ -110,6 +110,28 @@ class WorkSessionEventServiceTest {
 	}
 
 	@Test
+	void 거래처_최소주문금액이나_배송비를_모르면_저장하지_않고_질문한다() {
+		// 견적에서 넘어온 입력은 최소 주문 금액이 늘 비어 있다. 질문 없이 저장되면 계산에서 502가 난다.
+		given(currentOwner.key()).willReturn("owner-demo");
+		given(repository.findSessionContext(100L)).willReturn(Optional.of(ctx(1, null, "owner-demo")));
+		given(idGenerator.next()).willReturn(1000L, 1001L);
+		Map<String, Object> supplier = new java.util.LinkedHashMap<>();
+		supplier.put("supplier_id", "a");
+		supplier.put("minimum_order_krw", null);
+		supplier.put("delivery_fee_krw", null);
+
+		WorkSessionEventRequest request = new WorkSessionEventRequest("form", null, null,
+				Map.of("budget_krw", 100000, "suppliers", java.util.List.of(supplier)), null, null);
+		ApiResponse<Map<String, Object>> response = service.handleEvent(100L, "key-1", request);
+
+		assertThat(response.status()).isEqualTo(ResponseStatus.NEEDS_INPUT);
+		assertThat(response.data().get("missing_fields")).asList().extracting("path")
+				.containsExactly("suppliers[0].minimum_order_krw", "suppliers[0].delivery_fee_krw");
+		verify(repository, never()).insertVersion(anyLong(), anyLong(), anyInt(), anyString(), any(), anyString(),
+				any());
+	}
+
+	@Test
 	void 폼_입력이_비어있으면_400() {
 		given(currentOwner.key()).willReturn("owner-demo");
 		given(repository.findSessionContext(100L)).willReturn(Optional.of(ctx(1, null, "owner-demo")));
