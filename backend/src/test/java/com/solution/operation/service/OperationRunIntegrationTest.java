@@ -225,12 +225,13 @@ class OperationRunIntegrationTest {
     @Test
     void 종료_정리가_실패해도_그_실행만_만료_후_회수한다() {
         var abandoned = runs.start(520001, "operation", () -> {});
+        var abandonedId = jdbc.queryForObject("SELECT run_id FROM calculation_run WHERE session_id=520001", java.util.UUID.class);
         try (var live = runs.start(520001, "operation", () -> {})) {
             org.mockito.Mockito.doThrow(new RuntimeException("cleanup unavailable")).when(sessions).lockSession(520001);
             abandoned.close();
             org.mockito.Mockito.doCallRealMethod().when(sessions).lockSession(520001);
             // The closed request stopped renewing. Simulate expiry without sleeping for two minutes.
-            jdbc.update("UPDATE calculation_run SET lease_until=now()-interval '1 minute' WHERE run_id=(SELECT run_id FROM calculation_run ORDER BY lease_until LIMIT 1)");
+            jdbc.update("UPDATE calculation_run SET lease_until=now()-interval '1 minute' WHERE run_id=?", abandonedId);
             new TransactionTemplate(transactions).executeWithoutResult(status -> {
                 sessions.lockSession(520001);
                 runs.recover(520001);

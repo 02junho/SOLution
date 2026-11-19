@@ -319,3 +319,34 @@ test('삭제 뒤 같은 계획 서명의 저장 키는 교체되고 새 키의 �
   invalidateConfirmationKeys(2002, storage)
   assert.equal(confirmationKey(unrelated, storage), other)
 })
+
+
+test('복원한 확정 세대는 저장소 장애에도 유지하고 명시적 삭제 후에만 교체한다', () => {
+  const resultId = 990002
+  const signature = JSON.stringify([resultId, 1002, 'purchase_1', []])
+  const generation = 'restored-generation'
+  const savedKey = 'restored-request-key'
+  const values = new Map([
+    [`solution:confirm-generation:${resultId}`, generation],
+    [`solution:confirm:${signature}:${generation}`, savedKey],
+  ])
+  let unavailable = false
+  const storage = {
+    getItem(name) {
+      if (unavailable) throw new Error('storage unavailable')
+      return values.get(name) ?? null
+    },
+    setItem(name, value) {
+      if (unavailable) throw new Error('storage unavailable')
+      values.set(name, value)
+    },
+  }
+  assert.equal(confirmationKey(signature, storage), savedKey)
+  unavailable = true
+  assert.equal(confirmationKey(signature, storage), savedKey)
+  assert.equal(confirmationKey(signature, undefined), savedKey)
+  invalidateConfirmationKeys(resultId, storage)
+  const next = confirmationKey(signature, storage)
+  assert.notEqual(next, savedKey)
+  assert.equal(confirmationKey(signature, storage), next)
+})

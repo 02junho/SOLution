@@ -178,7 +178,10 @@ export function confirmationKey(
     const [resultId] = JSON.parse(signature)
     let generation = confirmationGenerations.get(resultId)
     try { generation ??= storage?.getItem(`solution:confirm-generation:${resultId}`) ?? undefined } catch { /* Memory fallback. */ }
-    if (generation) signature = `${signature}:${generation}`
+    if (generation) {
+      confirmationGenerations.set(resultId, generation)
+      signature = `${signature}:${generation}`
+    }
   } catch { /* Non-JSON signatures and unavailable storage retain memory retries. */ }
   const name = `solution:confirm:${signature}`
   const fallback = confirmationKeys.for(signature)
