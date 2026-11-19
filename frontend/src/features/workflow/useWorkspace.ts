@@ -89,6 +89,7 @@ export function useWorkspace() {
   const scope = useRef(0)
   const locked = useRef(false)
   const queuedOpen = useRef<number | null>(null)
+  const activeSession = useRef<number | null>(null)
   const pendingEvents = useRef(
     new Map<number, { signature: string; payload: JsonObject; key: string }>(),
   )
@@ -97,6 +98,7 @@ export function useWorkspace() {
   // 운영 대화에서 "비교 시작해줘"라고 하면 대화 응답에 계산 시작 표시(action: run_operation)가 온다.
   const runAfterEvent = useRef(false)
   const open = useCallback(async (id: number) => {
+    activeSession.current = id
     if (locked.current) {
       queuedOpen.current = id
       scope.current++
@@ -136,12 +138,26 @@ export function useWorkspace() {
   }
   function reset() {
     if (!locked.current) {
+      activeSession.current = null
       scope.current++
       setWorkspace(empty)
       setError('')
       setNotice('')
       setBusy('')
     }
+  }
+  // 삭제 완료 시점의 표시/조회 대상을 확인한다. 다른 업무의 진행 중인 open은 건드리지 않는다.
+  function invalidate(id: number) {
+    clearPending(id)
+    if (queuedOpen.current === id) queuedOpen.current = null
+    if (activeSession.current !== id) return false
+    activeSession.current = null
+    scope.current++
+    setWorkspace(empty)
+    setError('')
+    setNotice('')
+    setBusy('')
+    return true
   }
   async function create(
     feature: FeatureType,
@@ -407,6 +423,7 @@ export function useWorkspace() {
     notice,
     open,
     reset,
+    invalidate,
     create,
     event,
     pendingEvent:

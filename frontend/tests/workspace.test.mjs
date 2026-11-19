@@ -185,3 +185,47 @@ test('대화 없는 업무도 서버에 저장된 현재 입력을 복원한다'
   assert.deepEqual(current.input, storedInput)
   assert.deepEqual(current.messages, [])
 })
+
+test('오래된 삭제 콜백은 현재 다른 업무와 진행 중인 open을 초기화하지 않는다', async () => {
+  const invalidateFromOldRender = current.invalidate
+  const original = globalThis.fetch
+  let finish
+  globalThis.fetch = (url, init) => url.endsWith('/work-sessions/2')
+    ? new Promise((resolve) => { finish = () => resolve(ok({ session_id: 2, current_version: 1, current_version_id: 10, feature_type: 'purchase' })) })
+    : original(url, init)
+  let opening
+  await act(async () => { opening = current.open(2); await Promise.resolve() })
+  await act(async () => { assert.equal(invalidateFromOldRender(1), false) })
+  await act(async () => { finish(); await opening })
+  assert.equal(current.context.session_id, 2)
+  await act(async () => { assert.equal(invalidateFromOldRender(2), true) })
+  assert.equal(current.context, null)
+})
+
+test('삭제한 업무의 진행 중인 open 응답은 표시를 되살리지 않는다', async () => {
+  const original = globalThis.fetch
+  let finish
+  globalThis.fetch = (url, init) => url.endsWith('/work-sessions/2')
+    ? new Promise((resolve) => { finish = () => resolve(ok({ session_id: 2, current_version: 1, current_version_id: 10, feature_type: 'purchase' })) })
+    : original(url, init)
+  let opening
+  await act(async () => { opening = current.open(2); await Promise.resolve() })
+  await act(async () => { assert.equal(current.invalidate(2), true) })
+  await act(async () => { finish(); await opening })
+  assert.equal(current.context, null)
+  assert.equal(current.busy, '')
+})
+
+test('삭제한 업무의 대기 open만 취소하고 다른 업무의 대기 open은 유지한다', async () => {
+  for (const deleted of [1, 2]) {
+    await act(async () => { await current.open(1) })
+    let finish
+    post = () => new Promise((resolve) => { finish = () => resolve(ok({ input_version_id: 10 })) })
+    let action
+    await act(async () => { action = current.event(form); await Promise.resolve() })
+    await act(async () => { await current.open(2); current.invalidate(deleted) })
+    await act(async () => { finish(); await action })
+    assert.equal(current.context?.session_id ?? null, deleted === 2 ? null : 2)
+    assert.equal(current.busy, '')
+  }
+})

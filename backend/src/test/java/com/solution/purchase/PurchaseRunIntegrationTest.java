@@ -1,6 +1,9 @@
 package com.solution.purchase;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
+import com.solution.common.exception.ApiException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -72,6 +75,15 @@ class PurchaseRunIntegrationTest {
 				                          input_confirmed_by, input_confirmed_at)
 				VALUES (1001, 100, 1, 'purchase-v1', '{"budget_krw": 200000}'::jsonb, 'demo-owner', now())
 				""");
+	}
+
+	@Test
+	void 삭제된_업무는_계산을_시작하지_않는다() {
+		jdbcTemplate.update("UPDATE work_session SET deleted_at=now() WHERE session_id=100");
+		assertThatThrownBy(() -> purchaseService.run(100, 1001, "deleted"))
+				.isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getDetailCode()).isEqualTo("SESSION_NOT_FOUND"));
+		verifyNoInteractions(aiServerClient);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isZero();
 	}
 
 	@Test

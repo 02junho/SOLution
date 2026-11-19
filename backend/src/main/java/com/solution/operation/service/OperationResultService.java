@@ -118,7 +118,18 @@ public class OperationResultService {
 			return save(source, resultId, key, ApiResponse.needsInput(
 					Map.of("detail_status", "MISSING_OPERATION_INPUT", "missing_fields", missing), "계산에 필요한 운영 입력을 확인해 주세요."));
 		}
-		repository.markStep(sessionId, source.versionNo(), "running");
+		transaction.executeWithoutResult(status -> {
+			// 삭제와 계산 시작을 같은 세션 행 잠금으로 직렬화한다.
+			repository.lockSession(sessionId);
+			SessionVersion latest = ownedSource(sessionId, versionId);
+			if (!Objects.equals(latest.versionNo(), latest.currentVersion())) {
+				throw ApiException.badRequest(CODE_STALE_VERSION, "조건이 바뀌었어요. 최신 입력을 확인한 뒤 계산해 주세요.");
+			}
+			if (latest.inputConfirmedAt() == null) {
+				throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, "입력을 먼저 확인해 주세요.");
+			}
+			repository.markStep(sessionId, latest.versionNo(), "running");
+		});
 		try {
 			Map<String, Object> laborInput = map(input.get("labor"));
 			List<Map<String, Object>> staffing = OperationResultContract.staffing(laborInput.get("plans"));

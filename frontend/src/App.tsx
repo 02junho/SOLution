@@ -182,8 +182,7 @@ function WorkflowApp() {
           onClose={() => setHistoryOpen(false)}
           onSelect={selectSession}
           onDeleted={(id) => {
-            if (workspace.context?.session_id === id) {
-              workspace.reset()
+            if (workspace.invalidate(id)) {
               window.location.hash = '/work'
             }
           }}

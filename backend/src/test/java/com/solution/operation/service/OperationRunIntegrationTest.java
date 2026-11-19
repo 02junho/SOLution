@@ -15,6 +15,13 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.Future;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import static org.mockito.Mockito.verifyNoInteractions;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -55,6 +62,10 @@ class OperationRunIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+	@Autowired
+	private PlatformTransactionManager transactions;
+	@MockitoSpyBean
+	private OperationResultRepository repository;
 	@Autowired
 	private ObjectMapper mapper;
 	@Autowired
@@ -110,6 +121,36 @@ class OperationRunIntegrationTest {
 					.stream().map(StaffingPlan::fromConfirmedPlan).toList();
 			return new SimulationResult(ApiResponse.ok(data), staffing, call.getArgument(1));
 		}).when(simulation).compare(any(), anyString());
+	}
+
+	@Test
+	void 삭제_트랜잭션이_먼저_잠그면_대기한_계산은_running_기록_전에_거부한다() throws Exception {
+		var attemptingLock = new CountDownLatch(1);
+		doAnswer(call -> {
+			attemptingLock.countDown();
+			return call.callRealMethod();
+		}).when(repository).lockSession(520001);
+		try (var pool = Executors.newSingleThreadExecutor()) {
+			var pending = new AtomicReference<Future<?>>();
+			new TransactionTemplate(transactions).executeWithoutResult(status -> {
+				jdbc.query("SELECT session_id FROM work_session WHERE session_id=520001 FOR UPDATE", rs -> {});
+				jdbc.update("UPDATE work_session SET deleted_at=now() WHERE session_id=520001");
+				pending.set(pool.submit(() -> service.run(520001, 530001, "delete-wins")));
+				try {
+					assertThat(attemptingLock.await(10, TimeUnit.SECONDS)).isTrue();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException(e);
+				}
+			});
+			assertThatThrownBy(() -> pending.get().get(10, TimeUnit.SECONDS))
+					.hasCauseInstanceOf(ApiException.class)
+					.satisfies(error -> assertThat(((ApiException) error.getCause()).getDetailCode())
+							.isEqualTo("SESSION_NOT_FOUND"));
+		}
+		verifyNoInteractions(simulation, client);
+		assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=520001", String.class)).isEqualTo("input");
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isZero();
 	}
 
 	@Test

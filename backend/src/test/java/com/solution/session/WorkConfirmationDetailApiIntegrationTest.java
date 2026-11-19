@@ -175,6 +175,14 @@ class WorkConfirmationDetailApiIntegrationTest {
 	void 업무를_삭제해도_확정_계획의_목록과_상세_스냅샷은_보존한다() throws Exception {
 		var before = jdbc.queryForMap("SELECT * FROM work_confirmation WHERE confirmation_id=3002");
 		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
+		mvc.perform(post("/api/v1/purchase/sessions/500/results")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"input_version_id\":1002}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.data.detail_code").value("SESSION_NOT_FOUND"));
+		mvc.perform(get("/api/v1/purchase/results/2002")).andExpect(status().isOk());
+		mvc.perform(delete("/api/v1/work-sessions/700")).andExpect(status().isOk());
+		mvc.perform(post("/api/v1/operation/sessions/700/results").header("Idempotency-Key", "deleted-operation")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"input_version_id\":1003}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.data.detail_code").value("SESSION_NOT_FOUND"));
 		mvc.perform(get("/api/v1/work-confirmations").param("session_id", "500"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(2));
 		mvc.perform(get("/api/v1/work-confirmations/3002"))

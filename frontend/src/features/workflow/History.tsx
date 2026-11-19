@@ -44,6 +44,7 @@ function useHistory<T>(
   const [error, setError] = useState('')
   const generation = useRef(0)
   const busy = useRef(false)
+  const removed = useRef<((item: T) => boolean)[]>([])
   const read = useCallback(
     async (cursor: string | null, token: number) => {
       busy.current = true
@@ -54,7 +55,8 @@ function useHistory<T>(
         )
         if (token === generation.current) {
           setItems((previous) =>
-            cursor ? [...previous, ...page.items] : page.items,
+            (cursor ? [...previous, ...page.items] : page.items)
+              .filter((item) => !removed.current.some((matches) => matches(item))),
           )
           setNext(page.next_cursor)
         }
@@ -80,7 +82,7 @@ function useHistory<T>(
     fetcher(filter === 'all' ? undefined : filter, null)
       .then((page) => {
         if (token === generation.current) {
-          setItems(page.items)
+          setItems(page.items.filter((item) => !removed.current.some((matches) => matches(item))))
           setNext(page.next_cursor)
         }
       })
@@ -123,7 +125,10 @@ function useHistory<T>(
         void read(next, generation.current)
       }
     },
-    remove: (matches: (item: T) => boolean) => setItems((previous) => previous.filter((item) => !matches(item))),
+    remove: (matches: (item: T) => boolean) => {
+      removed.current.push(matches)
+      setItems((previous) => previous.filter((item) => !matches(item)))
+    },
     retry: () => {
       if (!busy.current) {
         setLoading(true)

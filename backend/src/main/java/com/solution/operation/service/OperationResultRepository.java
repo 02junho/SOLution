@@ -39,7 +39,7 @@ public class OperationResultRepository {
 				       v.input_version_id, v.version_no, v.input_json::text, v.input_confirmed_at
 				FROM work_session s JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.input_version_id = ?
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionVersion(rs.getLong("session_id"), rs.getLong("store_id"),
 				rs.getString("feature_type"), rs.getInt("current_version"), rs.getString("owner_key"),
 				(Long) rs.getObject("input_version_id"), (Integer) rs.getObject("version_no"),

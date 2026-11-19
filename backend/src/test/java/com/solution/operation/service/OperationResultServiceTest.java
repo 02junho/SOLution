@@ -111,6 +111,20 @@ class OperationResultServiceTest {
 	}
 
 	@Test
+	void 계산_시작_잠금_후_삭제_소유권을_재검사한다() throws IOException {
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(
+				Optional.of(source("demo-owner", "operation", 1, true)), Optional.empty());
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "deleted-before-running"))
+				.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND");
+		var order = inOrder(repository);
+		order.verify(repository).findSessionVersion(SESSION, VERSION);
+		order.verify(repository).lockSession(SESSION);
+		order.verify(repository).findSessionVersion(SESSION, VERSION);
+		verify(repository, never()).markStep(anyLong(), anyInt(), eq("running"));
+		verifyNoInteractions(simulationService, client);
+	}
+
+	@Test
 	void preservesStatisticsAndCallsThreeToolsInOrder() {
 		var response = service.run(SESSION, VERSION, "run-1");
 		assertThat(response.status().getValue()).isEqualTo("ok");

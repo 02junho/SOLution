@@ -43,7 +43,7 @@ public class PurchaseRepository {
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.input_version_id = ?
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionVersion(
 				rs.getLong("session_id"),
 				rs.getLong("store_id"),
