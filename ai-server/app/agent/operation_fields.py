@@ -6,16 +6,17 @@
 바쁜 시간은 입력이 아니다: 상권 데이터에서 손님이 가장 몰리는 시간대(Spring OperationInputBuilder.PEAK_START~PEAK_END)를 쓴다.
 
 대화 흐름
-- 처음 입력: 말할 때마다 지금까지의 폼 값을 저장하고, 하루 주문 수 → 사장님 근무 → 직원 시급 중 빠진 값을 묻는다.
+- 처음 입력: 사장님이 자유롭게 말한 값을 LLM이 읽어 저장하고, 빠진 필수 값(하루 주문 → 사장님 근무 → 직원 시급)만 묻는다.
+  방금 물은 칸은 LLM 요약에 함께 넣어("방금 물은 칸"), "네"·"최저" 같은 짧은 답도 LLM이 그 질문의 답으로 읽는다.
   필수 값이 다 모이기 전에는 계산할 수 없다(Spring이 입력 필요로 막는다).
 - 수정: 저장된 폼 값을 바꾼다.
-검사 기준은 폼과 같다: 하루 주문 1~300건, 라스트 오더 18:30~19:00, 시급은 그해 최저시급 이상, 처리시간 1~300초.
+값을 읽는 일은 LLM이 하고, 이 모듈은 형식 맞추기와 폼과 같은 검사만 한다:
+하루 주문 1~300건, 라스트 오더 18:30~19:00, 시급은 그해 최저시급 이상, 처리시간 1~300초.
 """
 
 from __future__ import annotations
 
 import math
-import re
 from datetime import date, datetime, time
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -68,9 +69,16 @@ GUIDED: list[tuple[str, str, list[str], str]] = [
     ),
 ]
 
+# 화면(입력 확인 카드)에 보이는 값 표기. LLM 요약에 넣어, 사장님이 화면 표기 그대로 말해도 뜻으로 읽게 한다.
+# 문장 예시를 늘리지 않고 이 표 하나만 고친다. 화면 문구와 같은지는 테스트로 확인한다(OperationInputReview.tsx).
+VALUE_LABELS: dict[str, dict[int, str]] = {
+    "is_owner_working": {1: "사장님 + 직원 1명", 0: "직원 2명"},
+}
+
 # 대화로는 바꾸지 않는 칸과 안내 문구.
 FORM_ONLY: dict[str, str] = {
-    "staff_count": "인원은 비교 안에 이미 들어 있어요. '한 명 추가' 안이 바쁜 시간에 1명을 더한 결과예요.",
+    "staff_count": "인원은 비교 안에 이미 들어 있어요. '한 명 추가' 안이 바쁜 시간에 1명을 더한 결과예요. "
+    "사장님 없이 직원 2명이 일하면 '사장님은 안 나와요'라고 말해 주세요.",
     "open_time": "영업시간은 07~19시로 고정해서 비교해요.",
     "close_time": "영업시간은 07~19시로 고정해서 비교해요. 마감은 라스트 오더(18:30~19:00)로 바꿀 수 있어요.",
     "repeat_count": "반복 횟수는 30회로 고정해서 비교해요.",
@@ -83,21 +91,6 @@ FORM_ONLY: dict[str, str] = {
 }
 FORM_ONLY["rush_end_time"] = FORM_ONLY["rush_start_time"]
 
-_YES_WORDS = {
-    "네",
-    "넵",
-    "넹",
-    "예",
-    "응",
-    "어",
-    "웅",
-    "엉",
-    "그래",
-    "그럼요",
-    "같이",
-    "일해요",
-    "일해",
-}
 _TRUE = {"1", "true", "yes", "y", "예", "네", "응", "일함", "근무"}
 _FALSE = {"0", "false", "no", "n", "아니오", "아니요", "아니", "안함", "안 함", "쉼"}
 
@@ -159,6 +152,32 @@ def _legacy_values(current: dict) -> dict:
     return {key: value for key, value in values.items() if value is not None}
 
 
+def pending_question(values: dict, asked: str | None = None, asked_text: str | None = None) -> dict | None:
+    """지금 묻고 있는 칸(LLM이 짧은 답을 그 질문의 답으로 읽게 요약에 넣는다).
+
+    실제로 발급한 질문의 칸(asked)이 있으면 그 칸을 쓰고, 없으면 처음 입력 순서의 다음 빈 칸. 둘 다 없으면 None.
+    """
+    guided = next((g for g in GUIDED if g[0] == asked), None) if asked in FIELDS else None
+    if guided is not None:
+        key, text, choices, label = guided
+        choices = guided_choices(key, choices)
+    elif asked in FIELDS:
+        key, text, choices, label = asked, None, [], FIELDS[asked]
+    else:
+        missing = next_missing(values)
+        if missing is None:
+            return None
+        _, key, text, choices, label = missing
+    question = {"target": key, "질문": asked_text or text, "칸 설명": label}
+    if choices:
+        question["예시 답"] = choices
+    if key == "hourly_wage_krw":
+        minimum = MINIMUM_WAGES.get(_year(values))
+        if minimum is not None:
+            question["최저시급"] = int(minimum)
+    return question
+
+
 def summary(current: dict | None) -> dict:
     """LLM에 줄 작은 요약. 지금 폼 값과, 비어 있으면 계산에 쓰는 기본값."""
     values = form_values(current)
@@ -169,7 +188,7 @@ def summary(current: dict | None) -> dict:
         "hourly_wage_krw": values.get("hourly_wage_krw"),
         "order_time_sec": values.get("order_time_sec", 60),
         "handoff_time_sec": values.get("handoff_time_sec", 30),
-        "fixed": f"영업 07~19시, 직원 2명 07~19시, 바쁜 시간 {PEAK[0]}~{PEAK[1]}(상권 데이터), 30회 반복",
+        "fixed": f"영업 07~19시, 일하는 사람 2명이 07~19시 근무, 바쁜 시간 {PEAK[0]}~{PEAK[1]}(상권 데이터), 30회 반복",
     }
 
 
@@ -245,38 +264,6 @@ def guided_choices(key: str, choices: list[str]) -> list[str]:
         minimum = MINIMUM_WAGES.get(today().year)
         return [f"최저시급 {int(minimum):,}원"] if minimum is not None else []
     return choices
-
-
-def parse_answer(key: str, answer) -> object | None:
-    """순서 질문의 답을 LLM 없이 읽는다(선택지 버튼·숫자만 적은 답). 못 읽으면 None → LLM 해석으로 넘긴다."""
-    text = str(answer or "").strip()
-    if not text:
-        return None
-    if key == "is_owner_working":
-        if any(word in text for word in ("아니", "안 해", "안해", "안 나", "안나")):
-            return 0
-        # "직원만 일하면 어때?"처럼 묻는 말은 답으로 확정하지 않는다(LLM 해석으로 넘김).
-        # "직원 둘이 같이 일해요"처럼 직원만 일한다는 말도 사장님 근무로 읽지 않는다.
-        if re.search(r"직원\s*(만|끼리|둘|들만|들끼리)", text):
-            return None
-        # "어떻게…", "예를 들면…"처럼 같은 글자로 시작하는 다른 말은 답으로 읽지 않는다(첫 낱말 전체로 본다).
-        first = re.split(r"[\s,.!~]+", text, maxsplit=1)[0]
-        if first in _YES_WORDS or text.startswith("일해") or "같이 일" in text:
-            return 1
-        return None
-    if key == "hourly_wage_krw" and "최저" in text:
-        # "최저 말고 12000원", "최저보다 높게"처럼 다른 금액·거절이 섞이면 확정하지 않는다.
-        if re.search(r"\d|아니|말고|싫|보다|넘게|이상|높게|올려", text):
-            return None
-        minimum = MINIMUM_WAGES.get(today().year)
-        return int(minimum) if minimum is not None else None
-    if "만" in text or "천" in text:
-        return None
-    # 부호까지 읽어 음수는 범위 검사에서 걸러지게 한다("-20" → -20, "20건" → 20).
-    digits = re.findall(r"-?\d[\d,]*", text)
-    if len(digits) != 1:
-        return None
-    return int(digits[0].replace(",", ""))
 
 
 def default_notes(values: dict) -> list[str]:

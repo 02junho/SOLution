@@ -1,6 +1,8 @@
 """운영 실험 대화 해석. 저장 입력은 폼 값만({"operation_form": {...}}), 근무표 세 안은 계산할 때 Spring이 만든다.
 
 실제 LLM 대신 정해 둔 해석을 돌려주는 가짜 해석기로 service.run만 확인한다(서버·DB 없이).
+사장님 말을 읽는 일은 LLM이 한다(키워드 규칙 없음). 여기서는 LLM에 넘기는 요약·규칙과,
+LLM이 돌려준 해석을 검사·저장하는 우리 코드를 본다. 실제 LLM이 맞게 읽는지는 live_tests에서 본다.
 """
 
 import json
@@ -74,10 +76,16 @@ def test_예전_완성본도_폼_값으로_읽고_수정하면_폼_값으로_저
 
 
 class Unused:
-    """LLM이 짧은 답을 못 읽은 경우(바꿀 값 없음)를 흉내 낸다. 서버가 다음에 물은 칸의 답으로 직접 읽어야 한다."""
+    """LLM이 답인지 애매해서 바꿀 값을 안 준 경우를 흉내 낸다. 서버는 추측하지 않고 같은 값을 다시 묻는다."""
 
     def interpret(self, req):
         return InterpretDraft(intent="ask")
+
+
+def _run_marker():
+    from app.agent import operation_flow
+
+    return _change(operation_flow.RUN, 1, "계산 시작")
 
 
 def _say(current, content):
@@ -118,19 +126,21 @@ def test_처음_입력은_매입처럼_말할_때마다_작성_중으로_저장�
         "몇 건" in start.message and "(1/3)" in start.message
     )  # 질문 카드 없이 말풍선으로
 
-    one = run(_say(None, "200건"), Unused())
+    assert "한 번에" in start.message  # 자유롭게 말해도 된다고 안내
+
+    one = run(_say(None, "200건"), Fake(_change("daily_orders", 200)))
     assert one.status == ResponseStatus.OK and _input(one) == {
         "operation_form": {"daily_orders": 200}
     }
     assert "(2/3)" in one.message and "사장님" in one.message
 
-    two = run(_say(_input(one), "아니요, 직원만 일해요"), Unused())
+    two = run(_say(_input(one), "아니요, 직원만 일해요"), Fake(_change("is_owner_working", 0)))
     assert _input(two) == {
         "operation_form": {"daily_orders": 200, "is_owner_working": False}
     }
     assert "(3/3)" in two.message and "시급" in two.message
 
-    done = run(_say(_input(two), "최저시급으로 할게요"), Unused())
+    done = run(_say(_input(two), "최저시급으로 할게요"), Fake(_change("hourly_wage_krw", 10320)))
     assert _input(done) == {
         "operation_form": {"daily_orders": 200, "is_owner_working": False, "hourly_wage_krw": 10320}
     }
@@ -147,7 +157,7 @@ def test_작성_중에는_말한_순서와_상관없이_이미_채운_값은_건
 
 def test_작성_중_틀린_값은_저장하지_않고_다시_묻는다():
     draft = {"operation_form": {"is_owner_working": False}}
-    wrong = run(_say(draft, "500건"), Unused())
+    wrong = run(_say(draft, "500건"), Fake(_change("daily_orders", 500)))
     assert wrong.status == ResponseStatus.NEEDS_INPUT
     assert (
         wrong.data["question"]["question_key"] == "daily_orders"
@@ -226,6 +236,33 @@ def test_비교_안_자체를_바꾸는_값은_안내한다():
         assert response.data["detail_status"] == "UNSUPPORTED"
 
 
+def test_LLM_요약에_화면_표기를_넣고_화면_문구와_같다():
+
+    from app.agent import operation_flow
+
+    for current in ({"operation_form": {"daily_orders": 150}}, deepcopy(SNAPSHOT)):
+        summary = json.loads(operation_flow.prompt_summary(_req(current_input=current)))
+        assert summary["화면 표기"]["is_owner_working"] == {"1": "사장님 + 직원 1명", "0": "직원 2명"}
+    review = Path(__file__).resolve().parents[2] / "frontend/src/features/operation/workspace/OperationInputReview.tsx"
+    if review.exists():  # ai-server만 따로 돌릴 때는 건너뜀
+        text = review.read_text(encoding="utf-8")
+        for label in operation_fields.VALUE_LABELS["is_owner_working"].values():
+            assert f"'{label}'" in text, label
+
+
+def test_답과_대화로_못_바꾸는_칸이_섞이면_답은_반영하고_안내를_덧붙인다():
+    # "네, 직원 둘이랑 같이 해요": 사장님 근무 답 + 인원(대화로 못 바꿈)
+    current = {"operation_form": {"daily_orders": 150}}
+    response = run(
+        _req(current_input=current),
+        Fake(_change("is_owner_working", 1), _change("staff_count", 3)),
+    )
+    assert response.status == ResponseStatus.OK
+    form = response.data["parsed_input"]["input"]["operation_form"]
+    assert form == {"daily_orders": 150, "is_owner_working": True}
+    assert "인원은 비교 안에 이미 들어 있어요" in response.message
+
+
 def test_같은_값이면_바뀐_것이_없다고_답한다():
     response = run(_req(), Fake(_change("daily_orders", 150)))
     assert (
@@ -255,40 +292,53 @@ def test_입력이_있을_때_설명_질문에는_AI_답을_그대로_쓴다():
     assert response.message.startswith("서로 돕기는")
 
 
-def test_채우는_중_응_같은_짧은_답은_AI가_잡담으로_봐도_읽는다():
-    class Smalltalk:
-        def interpret(self, req):
-            return InterpretDraft(intent="smalltalk", reply="네!")
-
-    draft = {"operation_form": {"daily_orders": 200}}
-    response = run(_req(current_input=draft, content="응"), Smalltalk())
-    assert _input(response) == {
-        "operation_form": {"daily_orders": 200, "is_owner_working": True}
-    }
-
-
-def test_비교_시작해줘는_입력이_다_있으면_계산_시작_표시를_보낸다():
-    response = run(_req(content="운영안 비교 시작"), Fake(intent="ask"))
+def test_LLM이_실행_표시를_주면_입력이_다_있을_때_계산_시작_표시를_보낸다():
+    response = run(_req(content="비교해줘"), Fake(_run_marker()))
     assert response.data.get("action") == "run_operation"
+    # 질문이나 하지 말라는 말은 LLM이 실행 표시를 주지 않는다 → 계산 시작 안 함
     question = run(_req(content="서로 돕기랑 비교하면 뭐가 나아?"), Fake(intent="ask"))
     assert "action" not in question.data
 
 
+def test_LLM이_잡담으로_분류해도_실행_표시가_있으면_계산을_시작한다():
+    # 예전에는 "비교해줘"가 잡담으로 분류되면 공통 흐름으로 넘어가 동문서답했다.
+    response = run(_req(content="비교해줘"), Fake(_run_marker(), intent="smalltalk"))
+    assert response.data.get("action") == "run_operation"
+
+
+def test_실행_표시와_값이_같이_오면_값만_바꾸고_계산은_시작하지_않는다():
+    response = run(_req(content="200건으로 하고 비교해줘"), Fake(_change("daily_orders", 200), _run_marker()))
+    assert "action" not in response.data and _form(response)["daily_orders"] == 200
+
+
 def test_채우는_중에_비교해_달라면_남은_값을_묻는다():
     draft = {"operation_form": {"daily_orders": 200}}
-    response = run(
-        _req(current_input=draft, content="비교 시작해줘"), Fake(intent="ask")
-    )
+    response = run(_req(current_input=draft, content="비교 시작해줘"), Fake(_run_marker()))
     assert "action" not in response.data and "(2/3)" in response.message
 
 
-def test_사장님_근무_질문에_같은_글자로_시작하는_다른_말은_답으로_읽지_않는다():
-    read = operation_fields.parse_answer
-    assert read("is_owner_working", "어") == 1
-    assert read("is_owner_working", "네, 같이 일해요") == 1
-    assert read("is_owner_working", "어떻게 해야 돼요?") is None
-    assert read("is_owner_working", "예를 들면요?") is None
-    assert read("is_owner_working", "아니요, 직원만 일해요") == 0
+def test_채우는_중_LLM에_방금_물은_칸과_최저시급을_같이_넘긴다(monkeypatch):
+    monkeypatch.setattr(operation_fields, "today", lambda: date(2026, 11, 18))
+    draft = {"operation_form": {"daily_orders": 200, "is_owner_working": False}}
+    prompt = _build_user_prompt(_req(current_input=draft, content="최저"))
+    assert "방금 물은 칸" in prompt and '"target": "hourly_wage_krw"' in prompt
+    assert '"최저시급": 10320' in prompt
+
+
+def test_채우는_중_LLM이_답을_못_읽으면_추측하지_않고_다시_묻는다():
+    draft = {"operation_form": {"daily_orders": 200}}
+    response = run(_req(current_input=draft, content="음.."), Unused())
+    assert response.data["detail_status"] == "NO_CHANGE" and "(2/3)" in response.message
+
+
+def test_채우는_중_잡담에는_AI_답_뒤에_묻던_값을_다시_묻는다():
+    class Smalltalk:
+        def interpret(self, req):
+            return InterpretDraft(intent="smalltalk", reply="반가워요!")
+
+    draft = {"operation_form": {"daily_orders": 200}}
+    response = run(_req(current_input=draft, content="안녕"), Smalltalk())
+    assert response.message.startswith("반가워요!") and "(2/3)" in response.message
 
 
 def test_작성_중_틀린_값이_와도_전에_채운_값은_그대로_둔다():
@@ -296,6 +346,124 @@ def test_작성_중_틀린_값이_와도_전에_채운_값은_그대로_둔다()
     wrong = run(_say(draft, "주문 500건"), Fake(_change("daily_orders", 500)))
     assert wrong.status == ResponseStatus.NEEDS_INPUT
     assert wrong.data["draft_input"] == {"operation_form": {"daily_orders": 200}}
+
+
+def test_실행_표시는_값이_1일_때만_계산을_시작한다():
+    for value in (0, None, "1", "네"):
+        response = run(_req(), Fake(_change("run_comparison", value)))
+        assert (response.data or {}).get("action") != "run_operation", value
+    assert run(_req(), Fake(_change("run_comparison", 1))).data["action"] == "run_operation"
+
+
+def test_값을_바꾸며_비교해_달라고_하면_값을_먼저_저장하고_바로_계산하지_않는다():
+    response = run(_req(), Fake(_change("daily_orders", 200), _change("run_comparison", 1)))
+    assert response.data.get("action") != "run_operation"
+    assert response.data["parsed_input"]["input"]["operation_form"]["daily_orders"] == 200
+
+
+def test_첫_말에서_틀린_값을_다시_물을_때_LLM_요약은_질문에_담긴_폼_값을_본다():
+    from app.agent import operation_flow
+
+    carried = {"daily_orders": 150, "is_owner_working": True}
+    req = _req(
+        current_input=None,
+        event_type="question_reply",
+        content="11000",
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": carried},
+            "question": {"question_key": "hourly_wage_krw"},
+        },
+    )
+    summary = json.loads(operation_flow.prompt_summary(req))
+    assert summary["작성 중"] == carried
+    assert summary["방금 물은 칸"]["target"] == "hourly_wage_krw"
+
+
+def test_다_채우면_요약에_지금_상태를_넣고_채우는_중에는_넣지_않는다():
+    from app.agent import operation_flow
+
+    done = json.loads(operation_flow.prompt_summary(_req(current_input=deepcopy(SNAPSHOT))))
+    assert done["지금 상태"] == operation_flow.READY_STATE
+    filling = json.loads(operation_flow.prompt_summary(_req(current_input={"operation_form": {"daily_orders": 150}})))
+    assert "지금 상태" not in filling
+    assert "'지금 상태'" in operation_flow.PROMPT_RULE
+
+
+def test_바꿀_수_없는_칸이면_바꿀_수_있는_값을_안내하고_고정값은_넣지_않는다():
+    complete = deepcopy(SNAPSHOT)
+    response = run(_req(current_input=complete), Fake(_change("menu_count", 10)))
+    assert response.status == ResponseStatus.NEEDS_INPUT
+    text = json.dumps(response.data, ensure_ascii=False)
+    for name in operation_fields.FIELDS.values():
+        assert name in text, name
+    assert "바쁜 시간" not in text
+
+
+def _wage_question_reply(content="11000", **overrides):
+    """첫 말 '하루 150건, 시급 9000원' 뒤 시급을 다시 묻는 질문에 답하는 요청(아직 저장한 값 없음)."""
+    base = dict(
+        current_input=None,
+        event_type="question_reply",
+        content=content,
+        question_id="q-wage",
+        answer=content,
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": {"daily_orders": 150}},
+            "question": {"question_key": "hourly_wage_krw", "text": "직원 시급은 최저시급 이상이어야 해요. 얼마인가요?"},
+        },
+    )
+    base.update(overrides)
+    return _req(**base)
+
+
+def test_방금_물은_칸은_실제로_발급한_질문의_칸을_쓴다():
+    from app.agent import operation_flow
+
+    # 다음 빈 칸 순서로는 사장님 근무지만, 실제로 물은 건 시급이다.
+    summary = json.loads(operation_flow.prompt_summary(_wage_question_reply()))
+    assert summary["방금 물은 칸"]["target"] == "hourly_wage_krw"
+    assert summary["방금 물은 칸"]["질문"] == "직원 시급은 최저시급 이상이어야 해요. 얼마인가요?"
+    # 발급한 질문이 폼 칸이 아니면 다음 빈 칸.
+    other = _wage_question_reply(
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": {"daily_orders": 150}},
+            "question": {"question_key": "content"},
+        }
+    )
+    assert json.loads(operation_flow.prompt_summary(other))["방금 물은 칸"]["target"] == "is_owner_working"
+    # 다 채운 뒤 값을 바꾸다 다시 물은 경우에도 그 칸.
+    done = _req(
+        current_input=deepcopy(SNAPSHOT),
+        event_type="question_reply",
+        content="11000",
+        question={"base_version_id": 200101, "question": {"question_key": "hourly_wage_krw"}},
+    )
+    assert json.loads(operation_flow.prompt_summary(done))["방금 물은 칸"]["target"] == "hourly_wage_krw"
+
+
+def test_다시_묻는_중_잡담하면_실제로_물은_질문을_다시_묻는다():
+    class Chat:
+        def interpret(self, req):
+            return InterpretDraft(intent="smalltalk", reply="네, 천천히 알려 주세요.")
+
+    response = run(_wage_question_reply(content="잠깐만요"), Chat())
+    assert response.data["detail_status"] == "NO_CHANGE"
+    assert "하루에 주문이" not in response.message  # 이미 받은 하루 주문을 다시 묻지 않는다
+    # 순서상 다음 빈 칸(사장님 근무)이 아니라 실제로 물은 시급 질문을 다시 묻는다.
+    assert "직원 시급은 최저시급 이상이어야 해요. 얼마인가요? (3/3)" in response.message
+
+
+def test_처음에_질문하면_AI_설명_뒤에_첫_값을_묻는다():
+    class Ask:
+        def interpret(self, req):
+            return InterpretDraft(intent="ask", reply="서로 돕기는 바쁜 시간에 주문과 제조를 서로 돕는 방식이에요.")
+
+    response = run(_req(current_input=None, content="서로 돕기가 뭐야?"), Ask())
+    assert response.message.startswith("서로 돕기는")
+    assert "(1/3)" in response.message
 
 
 def test_무한대_같은_숫자는_폼_값으로_받지_않는다():
@@ -313,24 +481,3 @@ def test_운영_규칙은_운영_요청의_지시문에만_붙는다():
 def test_정하지_않은_라스트_오더만_기본값으로_알린다():
     assert operation_fields.default_notes({"daily_orders": 100}) == ["라스트 오더는 기본 18:45"]
     assert operation_fields.default_notes({"last_order_time": "19:00"}) == []
-
-
-def test_애매한_짧은_답은_확정하지_않는다():
-    read = operation_fields.parse_answer
-    assert read("is_owner_working", "직원만 일하면 어때?") is None
-    assert read("is_owner_working", "직원 둘이 같이 일해요") is None
-    assert read("is_owner_working", "네, 직원끼리 같이 일해요") is None
-    assert read("is_owner_working", "네, 같이 일해요") == 1
-    assert read("is_owner_working", "아니요, 직원만 일해요") == 0
-    assert read("hourly_wage_krw", "최저 말고 12000원") is None
-    assert read("hourly_wage_krw", "최저시급보다 높게") is None
-    assert read("daily_orders", "-20") == -20  # 음수는 범위 검사에서 다시 묻는다
-    assert read("daily_orders", "20건") == 20
-
-
-def test_하지_말라는_말은_계산을_시작하지_않는다():
-    from app.agent import operation_flow
-
-    assert operation_flow._is_run_request("비교 시작해줘")
-    assert not operation_flow._is_run_request("비교 시작하지 마")
-    assert not operation_flow._is_run_request("아직 돌리지 말아줘")
