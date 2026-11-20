@@ -103,6 +103,22 @@ class ExplanationTextTest {
 	}
 
 	@Test
+	void 한_문장_안에_새_정보가_있으면_겹치는_구절이_있어도_남긴다() {
+		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
+				"per_choice", List.of(),
+				"warnings_echo", List.of(Map.of("warning_id", "SIMULATED_CONDITIONS",
+						"message", "모의 조건: 가정에 근거한 값이며 실제 매장과 다를 수 있어요.")),
+				"caveats", List.of("실제 매장과 다를 수 있고 휴게 시간은 반영하지 않았어요.",
+						"이 결과는 가정에 근거한 모의 조건이라 실제 매장과 다를 수 있어요.")));
+
+		Map<String, Object> explanation = (Map<String, Object>) ExplanationText.polish(data, "operation",
+				Map.of("recommended_choice_key", "ALT_A")).get("explanation");
+
+		assertThat((List<String>) explanation.get("caveats"))
+				.containsExactly("실제 매장과 다를 수 있고 휴게 시간은 반영하지 않았어요.");
+	}
+
+	@Test
 	void 매입에서_규모의처럼_모의가_들어간_정상_문장은_남긴다() {
 		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
 				"per_choice", List.of(), "warnings_echo", List.of(),

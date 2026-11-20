@@ -26,6 +26,9 @@ final class ExplanationText {
 	private static final Pattern NOUN_ENDING = Pattern.compile("(\\S)입니다(?=[.!,)]|$)");
 	private static final String SIMILAR_TO_WARNING = "실제 매장과 다를 수";
 	private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
+	private static final java.util.Set<String> WARNING_WORDS = java.util.Set.of("이", "이번", "이는", "결과는", "결과", "모든",
+			"값은", "값이며", "값이라", "값이에요", "가정에", "근거한", "가정", "가정이라", "모의", "조건", "조건이라", "조건에서",
+			"조건으로", "조건의", "나온", "계산한", "것이며", "것이라", "실제", "매장과", "다를", "수", "있어요", "있습니다", "있음");
 	private static final Pattern SIMULATION_WORDS = Pattern.compile("모의\\s*조건|시뮬레이션");
 
 	@SuppressWarnings("unchecked")
@@ -66,7 +69,7 @@ final class ExplanationText {
 				// 주의 하나에 여러 문장이 있을 수 있어, 겹치거나 맞지 않는 문장만 빼고 나머지 정보는 남긴다.
 				List<String> kept = new ArrayList<>();
 				for (String sentence : SENTENCE_END.split(text(caveat, operation).trim())) {
-					boolean repeatsWarning = sentence.contains(SIMILAR_TO_WARNING)
+					boolean repeatsWarning = sentence.contains(SIMILAR_TO_WARNING) && onlyRepeatsWarning(sentence)
 							&& warningMessages.stream().anyMatch(m -> m.contains(SIMILAR_TO_WARNING));
 					// 매입은 시뮬레이션이 아니라 견적으로 푼 최적화다. AI가 붙인 모의 조건·시뮬레이션 문장은 맞지 않아 뺀다.
 					boolean wrongForPurchase = !operation && SIMULATION_WORDS.matcher(sentence).find();
@@ -101,6 +104,19 @@ final class ExplanationText {
 		}
 		number.appendTail(grouped);
 		return grouped.toString();
+	}
+
+	/**
+	 * 문장이 모의 조건 경고와 같은 말만 하는지. 경고에 쓰이는 낱말(모의·조건·가정·실제 매장과 다를 수…) 밖의
+	 * 낱말이 하나라도 있으면(예: "휴게 시간은 반영하지 않았어요") 새 정보로 보고 남긴다.
+	 */
+	static boolean onlyRepeatsWarning(String sentence) {
+		for (String word : sentence.replaceAll("[.,!?:;()]", " ").trim().split("\\s+")) {
+			if (!word.isEmpty() && !WARNING_WORDS.contains(word)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** 화면은 해요체다. 설명에 자주 나오는 합니다체 끝맺음만 바꾸고, 문장 내용은 건드리지 않는다. */
