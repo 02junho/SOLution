@@ -21,6 +21,8 @@ from app.core.status import ResponseStatus
 
 # LLM이 "계산을 시작해 달라"는 말에 돌려주는 실행 표시(폼 칸이 아니다).
 RUN = "run_comparison"
+# 필수 값을 다 채웠을 때 LLM 요약에 넣는 상태(이때부터 세 운영안 비교를 시작할 수 있다).
+READY_STATE = "필수 값이 다 채워져 세 운영안 비교를 시작할 수 있음"
 
 # 해석기(LLM) 지시문에 붙이는 운영 규칙.
 PROMPT_RULE = (
@@ -42,8 +44,12 @@ PROMPT_RULE = (
     "그 target의 값으로 changes에 넣는다(사장님 근무 질문에 '네' → is_owner_working=1, '직원끼리 해요' → 0, "
     "시급 질문에 '최저' → 요약의 최저시급 값, '최저 말고 11000원' → 11000). 질문과 상관없는 말이면 그 말대로 해석하고, "
     "답인지 애매하면 changes에 넣지 말고 intent=ask로 reply에 다시 묻는다. "
-    f"세 운영안 계산(비교)을 지금 시작해 달라는 말이면('비교해줘', '돌려 봐', '실행해줘') changes에 target={RUN}, "
-    "value=1 하나만 넣는다. 하지 말라는 말('아직 돌리지 마')이나 질문('비교하면 뭐가 나아?')이면 넣지 않는다.\n"
+    "요약의 '지금 상태'는 화면이 사장님께 안내한 다음 단계다. 짧은 말은 그 단계에 맞춰 읽는다. "
+    f"사장님 말이 세 운영안 계산(비교)을 지금 시작하거나 진행하자는 뜻이면('비교해줘', '돌려 봐') changes에 "
+    f"target={RUN}, value=1을 넣는다. 짧은 말이나 줄임말이어도 진행하자는 뜻으로 읽히면 되묻지 않는다"
+    "(계산은 지금 값으로 바로 돌고 언제든 다시 돌릴 수 있다). 하지 말라는 말('아직 돌리지 마')이나 질문('비교하면 뭐가 나아?')이면 넣지 않는다. "
+    "값을 바꾸면서 비교도 해 달라고 하면('200건으로 바꾸고 비교해줘') 바꿀 값을 모두 changes에 넣고 "
+    f"{RUN}을 맨 뒤에 덧붙인다(서버가 값을 먼저 저장하고 확인을 받는다).\n"
 )
 
 
@@ -63,10 +69,15 @@ def prompt_summary(req: InterpretRequest) -> str | None:
     if req.feature_type != "operation":
         return None
     values = operation_fields.form_values(req.current_input)
+    if not values:
+        # 첫 말에서 틀린 값이 나와 아직 저장한 게 없으면, 질문에 담아 둔 폼 값을 기준으로 본다(_apply와 같은 방식).
+        values = _carried_form(req) or {}
     labels = {"화면 표기": operation_fields.VALUE_LABELS}
     if operation_fields.is_complete(values):
+        # 다 채웠으면 화면이 안내한 다음 단계를 알려 짧은 말('해 봐' 등)을 그 단계로 읽게 한다.
         return json.dumps(
-            {**operation_fields.summary(req.current_input), **labels}, ensure_ascii=False
+            {**operation_fields.summary({operation_fields.DRAFT_KEY: values}), **labels, "지금 상태": READY_STATE},
+            ensure_ascii=False,
         )
     # 채우는 중: 채운 값과 방금 물은 칸(짧은 답을 그 질문의 답으로 읽게).
     return json.dumps(
@@ -75,13 +86,18 @@ def prompt_summary(req: InterpretRequest) -> str | None:
     )
 
 
+def _is_one(value: object) -> bool:
+    """실행 표시는 숫자 1일 때만 인정한다(0·빈 값·글자면 실행하지 않음)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 1
+
+
 def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | None:
     """운영 해석. 잡담·처리 불가는 공통 흐름에 맡긴다(None)."""
     current = deepcopy(req.current_input or {})
     values = operation_fields.form_values(current)
     complete = operation_fields.is_complete(values)
     # 실행 표시는 의도 분류(잡담 등)와 상관없이 먼저 본다. 다른 값과 섞여 오면 값 바꾸기만 한다.
-    wants_run = any(c.target == RUN for c in draft.changes)
+    wants_run = any(c.target == RUN and _is_one(c.value) for c in draft.changes)
     changes = [c for c in draft.changes if c.target != RUN]
     draft = draft.model_copy(update={"changes": changes})
     if wants_run and changes:
@@ -274,7 +290,7 @@ def _apply(
                 "content",
                 "무엇을 바꿀까요? 예) 하루 200건, 라스트오더 7시, 사장님은 안 나와요",
                 values=values,
-                label="바꿀 수 있는 값: 하루 주문·라스트 오더·사장님 근무·시급·바쁜 시간",
+                label="바꿀 수 있는 값: " + "·".join(operation_fields.FIELDS.values()),
                 evidence=draft.evidence,
             )
         try:
@@ -315,7 +331,8 @@ def _apply(
             step, _, text, _, _ = missing
             ask = f"{text} ({step}/{len(operation_fields.GUIDED)})"
             if not values:
-                # 아직 채운 값이 없으면 저장할 것도 없다. 한 번에 말해도 된다고 안내하고 첫 값을 묻는다.
+                # 아직 채운 값이 없으면 저장할 것도 없다. AI 설명이 있으면 그 뒤에 첫 값을 묻고,
+                # 없으면 한 번에 말해도 된다고 안내하고 첫 값을 묻는다.
                 return ApiResponse(
                     status=ResponseStatus.OK,
                     data={
@@ -323,7 +340,9 @@ def _apply(
                         "interpretation": {"intent": draft.intent, "changes": []},
                     },
                     message=(
-                        "운영 실험 조건을 채울게요. 하루 주문, 사장님 근무 여부, 직원 시급을 한 번에 말씀해 주셔도 돼요"
+                        f"{draft.reply} {ask}"
+                        if draft.reply
+                        else "운영 실험 조건을 채울게요. 하루 주문, 사장님 근무 여부, 직원 시급을 한 번에 말씀해 주셔도 돼요"
                         f"(예: 하루 200건, 사장님은 안 나와요, 시급 11000원). {ask}"
                     ),
                 )

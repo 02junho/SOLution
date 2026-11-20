@@ -348,6 +348,68 @@ def test_작성_중_틀린_값이_와도_전에_채운_값은_그대로_둔다()
     assert wrong.data["draft_input"] == {"operation_form": {"daily_orders": 200}}
 
 
+def test_실행_표시는_값이_1일_때만_계산을_시작한다():
+    for value in (0, None, "1", "네"):
+        response = run(_req(), Fake(_change("run_comparison", value)))
+        assert (response.data or {}).get("action") != "run_operation", value
+    assert run(_req(), Fake(_change("run_comparison", 1))).data["action"] == "run_operation"
+
+
+def test_값을_바꾸며_비교해_달라고_하면_값을_먼저_저장하고_바로_계산하지_않는다():
+    response = run(_req(), Fake(_change("daily_orders", 200), _change("run_comparison", 1)))
+    assert response.data.get("action") != "run_operation"
+    assert response.data["parsed_input"]["input"]["operation_form"]["daily_orders"] == 200
+
+
+def test_첫_말에서_틀린_값을_다시_물을_때_LLM_요약은_질문에_담긴_폼_값을_본다():
+    from app.agent import operation_flow
+
+    carried = {"daily_orders": 150, "is_owner_working": True}
+    req = _req(
+        current_input=None,
+        event_type="question_reply",
+        content="11000",
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": carried},
+            "question": {"question_key": "hourly_wage_krw"},
+        },
+    )
+    summary = json.loads(operation_flow.prompt_summary(req))
+    assert summary["작성 중"] == carried
+    assert summary["방금 물은 칸"]["target"] == "hourly_wage_krw"
+
+
+def test_다_채우면_요약에_지금_상태를_넣고_채우는_중에는_넣지_않는다():
+    from app.agent import operation_flow
+
+    done = json.loads(operation_flow.prompt_summary(_req(current_input=deepcopy(SNAPSHOT))))
+    assert done["지금 상태"] == operation_flow.READY_STATE
+    filling = json.loads(operation_flow.prompt_summary(_req(current_input={"operation_form": {"daily_orders": 150}})))
+    assert "지금 상태" not in filling
+    assert "'지금 상태'" in operation_flow.PROMPT_RULE
+
+
+def test_바꿀_수_없는_칸이면_바꿀_수_있는_값을_안내하고_고정값은_넣지_않는다():
+    complete = deepcopy(SNAPSHOT)
+    response = run(_req(current_input=complete), Fake(_change("menu_count", 10)))
+    assert response.status == ResponseStatus.NEEDS_INPUT
+    text = json.dumps(response.data, ensure_ascii=False)
+    for name in operation_fields.FIELDS.values():
+        assert name in text, name
+    assert "바쁜 시간" not in text
+
+
+def test_처음에_질문하면_AI_설명_뒤에_첫_값을_묻는다():
+    class Ask:
+        def interpret(self, req):
+            return InterpretDraft(intent="ask", reply="서로 돕기는 바쁜 시간에 주문과 제조를 서로 돕는 방식이에요.")
+
+    response = run(_req(current_input=None, content="서로 돕기가 뭐야?"), Ask())
+    assert response.message.startswith("서로 돕기는")
+    assert "(1/3)" in response.message
+
+
 def test_무한대_같은_숫자는_폼_값으로_받지_않는다():
     with pytest.raises(ValueError):
         operation_fields.normalize("daily_orders", float("inf"))
