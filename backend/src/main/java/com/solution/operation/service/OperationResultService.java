@@ -36,6 +36,7 @@ import com.solution.operation.dto.simulation.SimulationResult;
 import com.solution.operation.dto.StaffingPlan;
 import com.solution.operation.dto.labor.LaborRequest;
 import com.solution.operation.dto.OperationResultResponse;
+import com.solution.operation.service.input.OperationInputBuilder;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -102,10 +103,15 @@ public class OperationResultService {
 			}
 			return runResponse(existing.get());
 		}
-		Map<String, Object> input = read(source.inputJson());
+		// 저장 입력은 폼 값이다. 근무표 세 안까지 만든 계산 입력은 여기서 만든다.
+		Map<String, Object> storedInput = read(source.inputJson());
+		Map<String, Object> input = OperationInputBuilder.expand(storedInput);
 		long resultId = ids.next();
-		List<Map<String, Object>> missing = new ArrayList<>();
-		for (String field : List.of("business_date", "wage_year", "assumptions_version", "simulation", "labor")) {
+		// 폼 필수 값이 빠졌으면 그 칸(operation_form.필드명)을 알려 주고, 아니면 계산 입력의 빈 칸을 본다.
+		List<Map<String, Object>> missing = new ArrayList<>(OperationInputBuilder.missingFormFields(storedInput));
+		List<String> required = missing.isEmpty()
+				? List.of("business_date", "wage_year", "assumptions_version", "simulation", "labor") : List.of();
+		for (String field : required) {
 			if (input.get(field) == null) {
 				Map<String, Object> row = new LinkedHashMap<>();
 				row.put("path", field);
