@@ -122,6 +122,9 @@ export const workflowApi = {
     return response
   },
   result: (id: number) => read<PurchaseResult>(`/v1/purchase/results/${id}`),
+  // 결과 설명(매입·운영 공통). Spring이 저장된 결과에서 요약을 추려 /agent/explain을 부른다. 저장하지 않는다.
+  explain: <T>(result: number) =>
+    write<T>(`/v1/work-results/${result}/explanation`, {}),
   confirm: (
     result: number,
     version: number,

@@ -15,6 +15,7 @@ import {
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
 import ResultExplanation from './ResultExplanation'
+import type { ExplanationData, ExplanationState } from './ResultExplanation'
 // 운영 결과 비교·확정 요약 화면 연결
 import OperationComparison from '../operation/workspace/OperationComparison'
 import OperationConfirmationSummary from '../operation/workspace/OperationConfirmationSummary'
@@ -106,6 +107,28 @@ export default function Results({
   )
   const [acks, setAcks] = useState<string[]>([])
   const [copyNotice, setCopyNotice] = useState('')
+  const [explanation, setExplanation] = useState<ExplanationState>({
+    status: 'idle',
+  })
+  const explainedId = result?.result_id ?? operation?.result_id ?? null
+  // 설명은 저장된 결과를 다시 읽어 만든다. 결과가 바뀌면 ResultExplanation이 이전 설명을 버린다.
+  async function requestExplanation() {
+    if (explainedId === null) return
+    setExplanation({ status: 'loading', resultId: explainedId })
+    try {
+      const data = await workflowApi.explain<ExplanationData>(explainedId)
+      setExplanation({ status: 'ready', resultId: explainedId, data })
+    } catch (e) {
+      setExplanation({
+        status: 'error',
+        resultId: explainedId,
+        message:
+          e instanceof Error && e.message
+            ? e.message
+            : '설명을 불러오지 못했어요. 다시 시도해 주세요.',
+      })
+    }
+  }
   const choices = result?.summary.choices ?? []
   const choiceLabels = Object.fromEntries(
     choices.map((item, index) => [
@@ -164,10 +187,12 @@ export default function Results({
         </span>
       </div>
       <ResultExplanation
-        resultId={result?.result_id ?? operation?.result_id ?? null}
+        resultId={explainedId}
         eligible={!!validResult || operation?.response_status === 'ok'}
         busy={!!busy}
-        choiceLabels={choiceLabels}
+        state={explanation}
+        onRequest={() => void requestExplanation()}
+        choiceLabels={type === 'operation' ? CHOICE_TITLE : choiceLabels}
         subject={type === 'operation' ? '세 운영안을 비교' : '구매안을 계산'}
       />
       {saved && (
