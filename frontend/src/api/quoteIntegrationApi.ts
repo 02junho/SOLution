@@ -1,4 +1,4 @@
-import type {Batch, Dictionary, ManualQuote, Preview, Sales} from '../types/quoteIntegration'
+import type {Batch, Dictionary, ManualQuote, Preview, PurchaseInput, Sales} from '../types/quoteIntegration'
 
 export type Trace = {method: string; path: string; status: number | null; response: unknown}
 export class QuoteRequestError extends Error {
@@ -45,5 +45,8 @@ export function quoteIntegrationApi(storeId: string, id: string, trace: (entry: 
       request<Batch>('PATCH', batchPath(batch) + '/confirmation?' + new URLSearchParams({supplierName: supplier}),
         {confirmed}),
     preview: () => request<Preview>('POST', preparation + '/material-requirements/preview'),
+    // workStoreId는 구매 업무를 만들 매장(work_session.store_id)이다. 견적 테스트 매장 ID와 다를 수 있다.
+    purchaseInput: (workStoreId: number, batchIds: string[]) =>
+      request<PurchaseInput>('POST', preparation + '/purchase-input', {store_id: workStoreId, quote_batch_ids: batchIds}),
   }
 }

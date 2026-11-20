@@ -73,6 +73,16 @@ export default function QuoteIntegrationPage() {
       showBatch(await api.analyze(source.trim(), supplier.trim(), useRag))
     })
   }
+  // 구매 업무는 화면이 쓰는 매장(업무 공간과 같은 VITE_STORE_ID)에 만든다. 견적 테스트 매장 ID와는 따로다.
+  function makePurchase() {
+    if (!batch) return
+    void run('구매안 만들기', async () => {
+      const result = await api.purchaseInput(Number(import.meta.env.VITE_STORE_ID ?? 1), [batch.quote_batch_id])
+      // 빈 값이 있으면 업무 화면이 질문 카드와 조건 폼으로 이어서 받는다.
+      window.location.assign(`${window.location.pathname}#/work/${result.data.session_id}`)
+    })
+  }
+  const skipped = batch?.normalization.items.filter(r => !r.item_id || r.issues.some(i => i.blocks_comparison)).length ?? 0
   const suppliers = quotesTable(batch).suppliers
   const disabled = !!busy || !valid
   return <main className="pp qi">
@@ -132,6 +142,13 @@ export default function QuoteIntegrationPage() {
         {!!preview?.issues.length && <div className="pp-card" role="status">{presentIssues(preview.issues).map((i,n) =>
           <p key={n}>{i.target_id} · {i.message}</p>)}</div>}
         <QuotesTable data={quotesTable(batch)} issues={presentIssues(batch?.normalization.items.flatMap(r => r.issues) ?? [])} />
+        <section className="pp-card qi-next" aria-label="구매안 만들기">
+          <h2>다음: 구매안 만들기</h2>
+          <p>{batch
+            ? `정리한 견적으로 구매 업무를 만들고 계산 전 확인으로 넘어가요.${skipped ? ` 확인이 필요한 견적 ${skipped}줄은 빼고 계산해요.` : ''}`
+            : '견적을 먼저 정리하면 구매안을 만들 수 있어요.'}</p>
+          <button className="pp-primary" disabled={disabled || !batch} onClick={makePurchase}>이 견적으로 구매안 만들기</button>
+        </section>
         <section className="pp-card qi-controls">
           <label>견적 분석 묶음 UUID<input disabled={!!busy} value={batchId} onChange={e => setBatchId(e.target.value)} /></label>
           <button className="pp-plain" disabled={disabled || !uuid.test(batchId.trim())} onClick={() => void run('저장 견적 조회', async () => {
