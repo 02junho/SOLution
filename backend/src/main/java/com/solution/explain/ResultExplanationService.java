@@ -73,7 +73,11 @@ public class ResultExplanationService {
 				|| !(response.data().get("explanation") instanceof Map<?, ?>)) {
 			throw new AiServerException("결과 설명을 받지 못했어요.");
 		}
-		return response;
+		// 숫자 값은 그대로 두고 쉼표·말투·운영 첫 줄·겹치는 주의만 다듬는다(ExplanationText).
+		Map<String, Object> polished = ExplanationText.polish(response.data(), source.featureType(), summary);
+		Object headline = polished.get("explanation") instanceof Map<?, ?> e ? e.get("headline") : null;
+		return new ApiResponse<>(response.status(), polished,
+				headline instanceof String text ? text : response.message());
 	}
 
 	Optional<Source> find(long resultId) {

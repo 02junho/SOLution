@@ -41,6 +41,7 @@ class ExplanationSummaryTest {
 				"warning_ids", "suppliers")
 				.containsEntry("total_krw", 113280).containsEntry("suppliers", List.of("원두 로스터리 다"));
 		assertThat((Map<String, Object>) summary.get("baseline")).containsEntry("total_krw", 166090)
+				.containsEntry("label", "품목마다 가장 싼 견적만 고른 조합(비교용)")
 				.containsEntry("confirmable", false);
 		assertThat((List<Map<String, Object>>) summary.get("warnings")).singleElement()
 				.satisfies(w -> assertThat(w).containsOnlyKeys("warning_id", "message", "requires_ack"));

@@ -52,7 +52,8 @@ final class ExplanationSummary {
 		summary.put("choices", choices);
 		if (stored.get("baseline") instanceof Map<?, ?> baseline) {
 			Map<String, Object> row = new LinkedHashMap<>();
-			row.put("label", baseline.get("label"));
+			// 저장된 이름("단위단가순 담기")은 어려워서 화면 말투로 넘긴다.
+			row.put("label", "품목마다 가장 싼 견적만 고른 조합(비교용)");
 			row.put("total_krw", baseline.get("total_krw"));
 			row.put("confirmable", baseline.get("confirmable"));
 			summary.put("baseline", row);

@@ -64,7 +64,11 @@ class ResultExplanationServiceTest {
 
 		ApiResponse<Map<String, Object>> response = service.explain(7L, "key-1");
 
-		assertThat(response.data()).isEqualTo(data);
+		// 값은 FastAPI 응답 그대로, 표기만 다듬어서 돌려준다.
+		assertThat(response.data()).containsEntry("source", "template");
+		assertThat((Map<String, Object>) response.data().get("explanation"))
+				.containsEntry("headline", "총비용 최소: 113,280원.");
+		assertThat(response.message()).isEqualTo("총비용 최소: 113,280원.");
 		assertThat(body.getValue()).containsEntry("result_id", 7L).containsEntry("session_id", 100L)
 				.containsEntry("store_id", 1L).containsEntry("feature_type", "purchase");
 		assertThat((Map<String, Object>) body.getValue().get("result_summary")).containsKey("choices");
