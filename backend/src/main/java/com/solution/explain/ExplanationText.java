@@ -30,6 +30,15 @@ final class ExplanationText {
 			"값은", "값이며", "값이라", "값이에요", "가정에", "근거한", "가정", "가정이라", "모의", "조건", "조건이라", "조건에서",
 			"조건으로", "조건의", "나온", "계산한", "것이며", "것이라", "실제", "매장과", "다를", "수", "있어요", "있습니다", "있음");
 	private static final Pattern SIMULATION_WORDS = Pattern.compile("모의\\s*조건|시뮬레이션");
+	/**
+	 * 모의 조건 뒤에 흔히 붙는 마디("실제 매장과 다를 수…", "실제 효과를 보장하지…"). 모의 조건 마디에 이어질 때만
+	 * 함께 뺀다. "거래처 단가는 견적과 다를 수 있어요"처럼 다른 대상을 말하는 마디는 남긴다.
+	 */
+	private static final Pattern FOLLOWS_SIMULATION = Pattern.compile("^\\s*실제\\s+\\S+\\s+(?:다를 수|보장하지)");
+	/** 마디를 잇는 낱말 끝("~이며", "~있고", "~지만"이나 쉼표). "재고"처럼 '고'로 끝나는 낱말은 넣지 않는다. */
+	private static final Pattern CLAUSE_END = Pattern.compile(
+			"(?:며|있고|없고|았고|었고|였고|했고|이고|않고|되고|지만|는데),?$|,$");
+	private static final Pattern TOKEN = Pattern.compile("\\S+");
 
 	@SuppressWarnings("unchecked")
 	static Map<String, Object> polish(Map<String, Object> data, String featureType, Map<String, Object> summary) {
@@ -68,12 +77,13 @@ final class ExplanationText {
 				}
 				// 주의 하나에 여러 문장이 있을 수 있어, 겹치거나 맞지 않는 문장만 빼고 나머지 정보는 남긴다.
 				List<String> kept = new ArrayList<>();
-				for (String sentence : SENTENCE_END.split(text(caveat, operation).trim())) {
+				for (String whole : SENTENCE_END.split(text(caveat, operation).trim())) {
+					// 매입은 시뮬레이션이 아니라 견적으로 푼 최적화다. AI가 붙인 모의 조건·시뮬레이션 말은 맞지 않아 빼되,
+					// 같은 문장 뒤에 이어진 다른 정보는 남긴다.
+					String sentence = operation ? whole : withoutSimulation(whole);
 					boolean repeatsWarning = sentence.contains(SIMILAR_TO_WARNING) && onlyRepeatsWarning(sentence)
 							&& warningMessages.stream().anyMatch(m -> m.contains(SIMILAR_TO_WARNING));
-					// 매입은 시뮬레이션이 아니라 견적으로 푼 최적화다. AI가 붙인 모의 조건·시뮬레이션 문장은 맞지 않아 뺀다.
-					boolean wrongForPurchase = !operation && SIMULATION_WORDS.matcher(sentence).find();
-					if (!sentence.isBlank() && !repeatsWarning && !wrongForPurchase) {
+					if (!sentence.isBlank() && !repeatsWarning) {
 						kept.add(sentence.trim());
 					}
 				}
@@ -117,6 +127,34 @@ final class ExplanationText {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * 매입 문장에서 앞쪽의 모의 조건 마디만 뺀다. 문장을 잇는 말("~있고", "~이며")로 마디를 나눠 앞에서부터
+	 * 모의 조건·시뮬레이션 마디와 그에 이어진 "실제 …와 다를 수" 마디를 빼고, 다른 정보가 있는 마디부터는
+	 * 문장 끝까지 그대로 남긴다. 예: "모의 조건이라 실제 매장과 다를 수 있고 배송비는 반영하지 않았어요."
+	 * → "배송비는 반영하지 않았어요." 모두 빠지면 빈 문자열을 돌려준다.
+	 */
+	static String withoutSimulation(String sentence) {
+		if (!SIMULATION_WORDS.matcher(sentence).find()) {
+			return sentence;
+		}
+		Matcher token = TOKEN.matcher(sentence);
+		int start = 0;
+		while (token.find()) {
+			if (CLAUSE_END.matcher(token.group()).find()) {
+				if (!simulationClause(sentence.substring(start, token.end()))) {
+					return sentence.substring(start).trim();
+				}
+				start = token.end();
+			}
+		}
+		String last = sentence.substring(start);
+		return simulationClause(last) ? "" : last.trim();
+	}
+
+	private static boolean simulationClause(String clause) {
+		return SIMULATION_WORDS.matcher(clause).find() || FOLLOWS_SIMULATION.matcher(clause).find();
 	}
 
 	/** 화면은 해요체다. 설명에 자주 나오는 합니다체 끝맺음만 바꾸고, 문장 내용은 건드리지 않는다. */
