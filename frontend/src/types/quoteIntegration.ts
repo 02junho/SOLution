@@ -26,7 +26,7 @@ export type Batch = {
     pack_price: Amount; vat_status: string; issues: Issue[]
   }[]}
   confirmations: Record<string, boolean>
-  delivery: {supplier_name: string | null; fee_amount: Amount; free_shipping_minimum: Amount; minimum_order_amount?: Amount}[]
+  delivery: {supplier_name: string | null; fee_amount: Amount; free_shipping_minimum: Amount}[]
   sales_candidates: unknown[]
 }
 export type Preview = {
