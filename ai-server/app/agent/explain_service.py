@@ -22,6 +22,9 @@ _UNSAFE = re.compile(r"발주|결제|주문|(?:구매|구입).{0,12}(?:하세요
 _SCALED = re.compile(r"\d\s*(?:십|백|천|만|억|조)")
 _SPELLED = re.compile(r"[일이삼사오육칠팔구십백천만억조]+\s*(?:원|회|퍼센트)|(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:번|명|개)")
 _SIMULATION = "모의 조건에 따른 시뮬레이션 결과이며 실제 효과를 보장하지 않습니다."
+# 매입은 견적으로 푼 최적화라 모의 조건·시뮬레이션 안내가 맞지 않는다.
+_SIMULATION_WORDS = re.compile(r"모의\s*조건|시뮬레이션")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 class Explainer(Protocol):
@@ -106,6 +109,11 @@ class LlmExplainer:
             return None
         verified_caveats = []
         for caveat in caveats:
+            if req.feature_type != "operation":
+                # 모의 조건·시뮬레이션이 들어간 문장만 빼고, 같은 주의의 다른 문장은 남긴다.
+                caveat = " ".join(s for s in _SENTENCE_END.split(caveat.strip()) if not _SIMULATION_WORDS.search(s))
+                if not caveat:
+                    continue
             if (not _safe_text(caveat, allowed)
                     or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)):
                 continue
@@ -158,7 +166,7 @@ class LlmExplainer:
         system = (
             "카페 계산 결과를 쉬운 한국어로 설명한다. 제공한 수치와 사실만 그대로 사용하고 "
             "원인·효과·보장을 지어내지 않는다. 발주·결제를 권하지 않는다. "
-            "운영은 모의 조건임을 명시한다. 안마다 짧은 한 문장으로 설명한다. "
+            "운영은 모의 조건임을 명시한다. 매입은 견적으로 푼 최적화이므로 모의 조건·시뮬레이션을 언급하지 않는다. 안마다 짧은 한 문장으로 설명한다. "
             "total_krw와 delivery_count가 있으면 각각 원·회 단위를 붙인 아라비아 숫자로 빠짐없이 쓴다. "
             "다른 안의 수치를 섞거나 차액·비율을 새로 계산하지 않는다. headline은 짧은 안내로 쓰고 "
             "caveats는 숫자 없는 문장이나 빈 배열로 둔다. JSON만 출력한다: "
