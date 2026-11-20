@@ -110,6 +110,8 @@ export function fieldName(path: string, label: string) {
     safety_stock: '남겨 둘 안전재고',
     storage_capacity: '보관 한도',
     max_end_inventory: '기간 끝 재고 한도',
+    minimum_order_krw: '거래처 최소 주문 금액',
+    delivery_fee_krw: '거래처 배송비',
     form_input: '폼 입력',
   }
   return names[path.split('.').at(-1) ?? path] ?? label

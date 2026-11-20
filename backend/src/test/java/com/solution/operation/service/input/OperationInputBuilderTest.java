@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,7 +26,7 @@ class OperationInputBuilderTest {
 	private static final LocalDate DAY = LocalDate.of(2026, 11, 18);
 
 	private static OperationInputDraftRequest form(boolean owner) {
-		return new OperationInputDraftRequest(null, 150, null, null, owner, 10320, null, null, null, null, null, null);
+		return new OperationInputDraftRequest(null, 150, null, null, owner, 10320, null, null, null, null);
 	}
 
 	private static Map<String, Object> labor(Map<String, Object> input) {
@@ -71,18 +72,82 @@ class OperationInputBuilderTest {
 	}
 
 	@Test
-	void 바쁜_시간을_바꾸면_서로_돕기와_한_명_추가_구간과_휴게_피할_시간이_같이_바뀐다() {
-		var rush = new OperationInputDraftRequest(null, 150, null, null, true, 10320, null, "12:00", "15:30", null, null, null);
-		Map<String, Object> input = OperationInputBuilder.build(rush, DAY);
-		assertThat(shifts(input, "ALT_A")).filteredOn(s -> "OWNER".equals(s.get("worker_key")))
-				.extracting(s -> s.get("start_time") + "-" + s.get("end_time"))
-				.containsExactly("07:00-12:00", "12:00-15:30", "15:30-19:00");
-		assertThat(shifts(input, "ALT_C")).filteredOn(s -> "STAFF_2".equals(s.get("worker_key")))
-				.extracting(s -> s.get("start_time") + "-" + s.get("end_time")).containsExactly("12:00-15:30");
-		assertThat((List<Map<String, Object>>) labor(input).get("avoid_break_windows"))
-				.containsExactly(Map.of("start_time", "12:00", "end_time", "15:30"));
-		var reversed = new OperationInputDraftRequest(null, 150, null, null, true, 10320, null, "14:00", "11:00", null, null, null);
-		assertThatThrownBy(() -> OperationInputBuilder.build(reversed, DAY)).hasMessageContaining("늦게");
+	void 바쁜_시간은_입력이_아니라_상권_데이터의_가장_바쁜_시간대다() throws Exception {
+		// 손님 몰림은 엔진이 demand_shares.json으로 정한다. 서로 돕기·한 명 추가·휴게 피하기도 같은 시간대를 써야 맞는다.
+		String shares = Files.readString(Path.of("../ai-server/app/tools/simulation/data/demand_shares.json"));
+		Matcher block = Pattern.compile("\"normalized_shares\"\\s*:\\s*\\{([^}]*)\\}").matcher(shares);
+		assertThat(block.find()).isTrue();
+		Matcher band = Pattern.compile("\"(\\d{2}):00-(\\d{2}):00\"\\s*:\\s*([0-9.eE-]+)").matcher(block.group(1));
+		String busiest = null;
+		double best = -1;
+		while (band.find()) {
+			int hours = Integer.parseInt(band.group(2)) - Integer.parseInt(band.group(1));
+			double perHour = Double.parseDouble(band.group(3)) / hours;
+			if (perHour > best) {
+				best = perHour;
+				busiest = band.group(1) + ":00-" + band.group(2) + ":00";
+			}
+		}
+		assertThat(busiest).isEqualTo(OperationInputBuilder.PEAK_START + "-" + OperationInputBuilder.PEAK_END);
+	}
+
+	@Test
+	void 저장된_폼_값은_계산할_때_근무표_세_안까지_만든다() {
+		Map<String, Object> stored = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThat(OperationInputBuilder.expand(stored, DAY)).isEqualTo(OperationInputBuilder.build(form(true), DAY));
+		// JSON에서 읽은 숫자(150.0)도 정수로 받는다.
+		Map<String, Object> fromJson = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", 150.0, "is_owner_working", true, "hourly_wage_krw", 10320L));
+		assertThat(OperationInputBuilder.expand(fromJson, DAY)).isEqualTo(OperationInputBuilder.build(form(true), DAY));
+	}
+
+	@Test
+	void 필수_값이_빠진_폼과_예전_완성본은_그대로_둔다() {
+		Map<String, Object> partial = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150));
+		assertThat(OperationInputBuilder.expand(partial, DAY)).isSameAs(partial);
+		Map<String, Object> built = OperationInputBuilder.build(form(true), DAY);
+		assertThat(OperationInputBuilder.expand(built, DAY)).isSameAs(built);
+	}
+
+	@Test
+	void 저장된_폼_값의_모양이_틀리면_400() {
+		Map<String, Object> wrong = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", "많이", "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(wrong, DAY)).isInstanceOf(ApiException.class);
+		Map<String, Object> fraction = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", 150.5, "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(fraction, DAY)).isInstanceOf(ApiException.class);
+		// 메뉴 칸도 값이 있는데 배열·맵이 아니면 조용히 넘기지 않고 400.
+		Map<String, Object> menusNotList = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150,
+				"is_owner_working", true, "hourly_wage_krw", 10320, "selected_menu_ids", "iced_americano"));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(menusNotList, DAY)).isInstanceOf(ApiException.class);
+		Map<String, Object> weightsNotMap = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150,
+				"is_owner_working", true, "hourly_wage_krw", 10320, "menu_weights", List.of(0.5, 0.5)));
+		assertThatThrownBy(() -> OperationInputBuilder.expand(weightsNotMap, DAY)).isInstanceOf(ApiException.class);
+	}
+
+	@Test
+	void 메뉴_칸이_없거나_null이면_생략으로_본다() {
+		Map<String, Object> form = new HashMap<>(Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
+		form.put("selected_menu_ids", null);
+		form.put("menu_weights", null);
+		assertThat(OperationInputBuilder.expand(Map.of(OperationInputBuilder.FORM_KEY, form), DAY))
+				.isEqualTo(OperationInputBuilder.build(form(true), DAY));
+	}
+
+	@Test
+	void 빠진_필수_값은_operation_form_경로로_알려_준다() {
+		Map<String, Object> partial = Map.of(OperationInputBuilder.FORM_KEY, Map.of("daily_orders", 150));
+		assertThat(OperationInputBuilder.missingFormFields(partial).stream().map(row -> row.get("path")).toList())
+				.containsExactly("operation_form.is_owner_working", "operation_form.hourly_wage_krw");
+		assertThat(OperationInputBuilder.missingFormFields(Map.of(OperationInputBuilder.FORM_KEY, Map.of()))
+				.stream().map(row -> row.get("label")).toList())
+				.containsExactly("하루 주문 수", "사장님 근무 여부", "직원 시급");
+		Map<String, Object> full = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThat(OperationInputBuilder.missingFormFields(full)).isEmpty();
+		assertThat(OperationInputBuilder.missingFormFields(OperationInputBuilder.build(form(true), DAY))).isEmpty();
 	}
 
 	@Test
@@ -131,48 +196,48 @@ class OperationInputBuilderTest {
 
 	@Test
 	void 라스트_오더는_18시30분부터_19시까지만_받는다() {
-		var early = new OperationInputDraftRequest(null, 150, "18:00", null, true, 10320, null, null, null, null, null, null);
+		var early = new OperationInputDraftRequest(null, 150, "18:00", null, true, 10320, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(early, DAY)).isInstanceOf(ApiException.class)
 				.hasMessageContaining("18:30");
 	}
 
 	@Test
 	void 시급은_그해_최저시급_이상이어야_한다() {
-		var low = new OperationInputDraftRequest(null, 150, null, null, true, 9000, null, null, null, null, null, null);
+		var low = new OperationInputDraftRequest(null, 150, null, null, true, 9000, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(low, DAY)).isInstanceOf(ApiException.class)
 				.hasMessageContaining("10,320");
-		var nextYear = new OperationInputDraftRequest(LocalDate.of(2027, 1, 4), 150, null, null, true, 10320, null, null, null, null, null, null);
+		var nextYear = new OperationInputDraftRequest(LocalDate.of(2027, 1, 4), 150, null, null, true, 10320, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(nextYear, DAY)).hasMessageContaining("10,700");
-		var unknownYear = new OperationInputDraftRequest(LocalDate.of(2030, 1, 2), 150, null, null, true, 20000, null, null, null, null, null, null);
+		var unknownYear = new OperationInputDraftRequest(LocalDate.of(2030, 1, 2), 150, null, null, true, 20000, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(unknownYear, DAY)).hasMessageContaining("2030");
 	}
 
 	@Test
 	void 시각_형식을_검사한다() {
-		var wrong = new OperationInputDraftRequest(null, 150, "9시", null, true, 10320, null, null, null, null, null, null);
+		var wrong = new OperationInputDraftRequest(null, 150, "9시", null, true, 10320, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(wrong, DAY)).isInstanceOf(ApiException.class)
 				.hasMessageContaining("HH:mm");
 	}
 
 	@Test
 	void 주문_수는_300건까지() {
-		var many = new OperationInputDraftRequest(null, 301, null, null, true, 10320, null, null, null, null, null, null);
+		var many = new OperationInputDraftRequest(null, 301, null, null, true, 10320, null, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(many, DAY)).isInstanceOf(ApiException.class);
 	}
 
 	@Test
 	void 판매_비중은_고른_메뉴와_같고_합계가_100이어야_한다() {
 		var ok = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte", "iced_americano"), true, 10320, null,
-				null, null, Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.4), 50, 25);
+				Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.4), 50, 25);
 		Map<String, Object> simulation = (Map<String, Object>) OperationInputBuilder.build(ok, DAY).get("simulation");
 		assertThat(simulation.get("selected_menu_ids")).isEqualTo(List.of("iced_americano", "iced_cafe_latte"));
 		assertThat((Map<String, Object>) simulation.get("menu_weights")).containsEntry("iced_americano", 0.6)
 				.containsEntry("iced_cafe_latte", 0.4);
 		assertThat(simulation).containsEntry("order_time_sec", 50).containsEntry("handoff_time_sec", 25);
 		var wrongSum = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte", "iced_americano"), true, 10320,
-				null, null, null, Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.3), null, null);
+				null, Map.of("iced_americano", 0.6, "iced_cafe_latte", 0.3), null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(wrongSum, DAY)).hasMessageContaining("100%");
-		var extraMenu = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte"), true, 10320, null, null, null,
+		var extraMenu = new OperationInputDraftRequest(null, 150, null, List.of("iced_cafe_latte"), true, 10320, null,
 				Map.of("iced_americano", 0.5, "iced_cafe_latte", 0.5), null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(extraMenu, DAY)).hasMessageContaining("고른 메뉴");
 	}
@@ -180,14 +245,14 @@ class OperationInputBuilderTest {
 	@Test
 	void 메뉴를_고르면_비중도_있어야_한다() {
 		// 기본 비중이 0인 메뉴(hot_americano)만 고르면 계산 단계에서 막히므로 초안에서 먼저 거부한다.
-		var noWeights = new OperationInputDraftRequest(null, 150, null, List.of("hot_americano"), true, 10320, null, null, null,
+		var noWeights = new OperationInputDraftRequest(null, 150, null, List.of("hot_americano"), true, 10320, null,
 				null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(noWeights, DAY)).hasMessageContaining("판매 비중");
 	}
 
 	@Test
 	void 엔진에_없는_메뉴는_거부한다() {
-		var unknown = new OperationInputDraftRequest(null, 150, null, List.of("latte"), true, 10320, null, null, null,
+		var unknown = new OperationInputDraftRequest(null, 150, null, List.of("latte"), true, 10320, null,
 				Map.of("latte", 1.0), null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(unknown, DAY)).hasMessageContaining("메뉴");
 	}
@@ -206,7 +271,7 @@ class OperationInputBuilderTest {
 	@Test
 	void 연소자_직원은_계산할_수_없다고_알린다() {
 		// 07-19시 근무는 연소자 하루 7시간 한도를 넘어 노동 계산에서 막힌다.
-		var minor = new OperationInputDraftRequest(null, 150, null, null, false, 10320, true, null, null, null, null, null);
+		var minor = new OperationInputDraftRequest(null, 150, null, null, false, 10320, true, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(minor, DAY)).hasMessageContaining("연소자");
 	}
 }

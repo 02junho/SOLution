@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import com.solution.session.service.WorkDeletionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -282,9 +283,10 @@ class OperationRunIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isZero();
 	}
 
-	@Test
-	void 필수_입력_누락_결과_저장_직전에_업무가_삭제되면_저장하지_않는다() {
-		jdbc.update("UPDATE work_version SET input_json='{}' WHERE input_version_id=530001");
+	@ParameterizedTest
+	@ValueSource(strings = {"{}", "{\"operation_form\":{\"daily_orders\":150}}"})
+	void 필수_입력_누락_결과_저장_직전에_업무가_삭제되면_저장하지_않는다(String inputJson) {
+		jdbc.update("UPDATE work_version SET input_json=?::jsonb WHERE input_version_id=530001", inputJson);
 		doAnswer(call -> {
 			var deletionTransaction = new TransactionTemplate(transactions);
 			deletionTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -298,9 +300,10 @@ class OperationRunIntegrationTest {
 		verifyNoInteractions(simulation, client);
 	}
 
-	@Test
-	void 삭제되지_않은_업무의_필수_입력_누락은_실제_DB에_저장된다() {
-		jdbc.update("UPDATE work_version SET input_json='{}' WHERE input_version_id=530001");
+	@ParameterizedTest
+	@ValueSource(strings = {"{}", "{\"operation_form\":{\"daily_orders\":150}}"})
+	void 삭제되지_않은_업무의_필수_입력_누락은_실제_DB에_저장된다(String inputJson) {
+		jdbc.update("UPDATE work_version SET input_json=?::jsonb WHERE input_version_id=530001", inputJson);
 		assertThat(service.run(520001, 530001, "missing-valid").status())
 				.isEqualTo(com.solution.common.response.ResponseStatus.NEEDS_INPUT);
 		assertThat(jdbc.queryForObject("SELECT response_status FROM work_result", String.class)).isEqualTo("needs_input");

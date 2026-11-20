@@ -367,8 +367,9 @@ public class WorkSessionEventService {
 			map.forEach((key, item) -> {
 				String name = String.valueOf(key);
 				String path = prefix.isEmpty() ? name : prefix + "." + name;
+				// 거래처 최소 주문 금액·배송비도 구매 계산에 꼭 필요하다. 빠지면 저장은 되고 계산에서 502가 난다.
 				if (item == null && List.of("budget_krw", "planning_days", "max_delivery_count", "gross_need",
-						"usable_inventory", "safety_stock").contains(name)) {
+						"usable_inventory", "safety_stock", "minimum_order_krw", "delivery_fee_krw").contains(name)) {
 					missing.add(Map.of("path", path, "label", name));
 				}
 				else {

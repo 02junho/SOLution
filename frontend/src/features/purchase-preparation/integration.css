@@ -6,6 +6,9 @@
 .qi-input .qi-check {display:flex;align-items:center;gap:6px}
 .qi-actions {display:flex;flex-wrap:wrap;gap:6px}
 .qi-grid,.qi-feedback {margin-top:12px}
+.qi-next {display:grid;gap:8px}
+.qi-next h2 {margin:0;font-size:16px}
+.qi-next p {margin:0}
 .qi pre {max-width:100%;overflow:auto;font-size:12px;background:#f0f2f5;padding:8px}
 .qi summary {overflow-wrap:anywhere;cursor:pointer}
 .solution-shell {display:grid;grid-template-columns:156px minmax(0,1fr);min-height:100vh}
