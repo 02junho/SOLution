@@ -133,38 +133,15 @@ class ExplanationTextTest {
 	}
 
 	@Test
-	void 매입에서_모의_조건_마디만_빼고_같은_문장의_다른_정보는_남긴다() {
-		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
-				"per_choice", List.of(), "warnings_echo", List.of(),
-				"caveats", List.of("모의 조건이라 실제 매장과 다를 수 있고 배송비는 반영하지 않았어요.",
-						"모의 조건에 따른 시뮬레이션 결과이며 실제 효과를 보장하지 않습니다.",
-						"모의 조건이며 거래처 단가는 견적과 다를 수 있어요.")));
-
-		Map<String, Object> explanation = (Map<String, Object>) ExplanationText.polish(data, "purchase", Map.of())
-				.get("explanation");
-
-		assertThat((List<String>) explanation.get("caveats")).containsExactly(
-				"배송비는 반영하지 않았어요.", "거래처 단가는 견적과 다를 수 있어요.");
-	}
-
-	@Test
-	void 매입에서_뒤나_가운데의_모의_조건_마디도_빼고_남은_문장을_맺는다() {
+	void 매입에서_모의_조건이_들어간_문장은_위치와_관계없이_통째로_뺀다() {
 		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
 				"per_choice", List.of(), "warnings_echo", List.of(),
 				"caveats", List.of("배송비는 별도이며 모의 조건이라 실제 매장과 다를 수 있어요.",
-						"재고는 그대로 두었고 시뮬레이션 결과이며 최소 주문은 지켰어요.",
-						"단가가 오를 수 있지만 모의 조건이라 실제 매장과 다를 수 있습니다.")));
+						"배송비를 줄이고 시뮬레이션 결과예요. 최소 주문은 지켰어요.")));
 
 		Map<String, Object> explanation = (Map<String, Object>) ExplanationText.polish(data, "purchase", Map.of())
 				.get("explanation");
 
-		assertThat((List<String>) explanation.get("caveats")).containsExactly("배송비는 별도예요.",
-				"재고는 그대로 두었고 최소 주문은 지켰어요.", "단가가 오를 수 있어요.");
-	}
-
-	@Test
-	void 매입에서_맺는_말로_바꿀_수_없으면_정보를_지키려고_문장을_그대로_둔다() {
-		assertThat(ExplanationText.withoutSimulation("거래처가 바뀌는데 모의 조건이라 실제 매장과 다를 수 있어요."))
-				.isEqualTo("거래처가 바뀌는데 모의 조건이라 실제 매장과 다를 수 있어요.");
+		assertThat((List<String>) explanation.get("caveats")).containsExactly("최소 주문은 지켰어요.");
 	}
 }
