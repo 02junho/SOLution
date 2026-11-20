@@ -374,6 +374,7 @@ export default function Workspace({
   onNew,
   onHistory,
   onSaved,
+  onGuide,
 }: {
   workspace: WorkspaceController
   feature: FeatureType
@@ -381,6 +382,8 @@ export default function Workspace({
   onNew: () => void
   onHistory: () => void
   onSaved: (id: number) => void
+  /** 사용법 카드 열기. 처음 쓰는 사장님이 '새 업무' 옆에서 바로 찾게 둔다. */
+  onGuide?: () => void
 }) {
   const { context, busy, messages } = workspace
   const [formOpen, setFormOpen] = useState(
@@ -423,6 +426,12 @@ export default function Workspace({
           <p>조건을 정리하고, 비교하고, 사장님이 결정하세요.</p>
         </div>
         <div className="workspace-actions">
+          {onGuide && (
+            <button className="button secondary" onClick={onGuide}>
+              <Icon name="book" size={17} />
+              사용법
+            </button>
+          )}
           <button
             className="button secondary"
             disabled={!!busy}

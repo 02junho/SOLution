@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 
 export function Icon({
   name,
@@ -52,14 +52,28 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  closeOnBackdrop = false,
 }: {
   title: string
   description?: string
   children: ReactNode
   onClose: () => void
   wide?: boolean
+  // 읽기만 하는 창에서만 켠다. 입력 창은 실수로 눌러 적은 값이 사라지지 않게 끈 채로 둔다.
+  closeOnBackdrop?: boolean
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  // 창 안에서 누르고 밖에서 뗀 경우(글자 드래그 등)는 닫지 않는다.
+  const pressedOutside = useRef(false)
+  function outside(event: MouseEvent<HTMLDialogElement>) {
+    const box = event.currentTarget.getBoundingClientRect()
+    return (
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom
+    )
+  }
   useLayoutEffect(() => {
     const dialog = ref.current
     dialog?.showModal()
@@ -73,6 +87,13 @@ export function Modal({
       onCancel={(event) => {
         event.preventDefault()
         onClose()
+      }}
+      onMouseDown={(event) => {
+        pressedOutside.current = closeOnBackdrop && event.target === event.currentTarget && outside(event)
+      }}
+      onClick={(event) => {
+        if (pressedOutside.current && event.target === event.currentTarget && outside(event)) onClose()
+        pressedOutside.current = false
       }}
     >
       <header className="modal-header">
