@@ -184,8 +184,10 @@ def test_매입_설명은_모의_조건_주의를_남기지_않는다(monkeypatc
     out = _model_output(monkeypatch, {"headline": "결과입니다", "per_choice": [
         {"choice_key": "purchase_1", "text": "배송 2회 120,400원입니다."}],
         "caveats": ["모의 조건이라 실제 매장과 다를 수 있어요.", "시뮬레이션 결과예요.",
-                    "구매 규모의 변화에 따라 할인 조건이 달라질 수 있어요."]})
-    assert out["explanation"]["caveats"] == ["구매 규모의 변화에 따라 할인 조건이 달라질 수 있어요."]
+                    "구매 규모의 변화에 따라 할인 조건이 달라질 수 있어요.",
+                    "모의 조건이에요. 거래처 조건은 견적 그대로예요."]})
+    assert out["explanation"]["caveats"] == ["구매 규모의 변화에 따라 할인 조건이 달라질 수 있어요.",
+                                             "거래처 조건은 견적 그대로예요."]
 
 
 def test_숫자가_없는_요약은_없는_값을_만들지_않는다():

@@ -24,6 +24,7 @@ _SPELLED = re.compile(r"[일이삼사오육칠팔구십백천만억조]+\s*(?:�
 _SIMULATION = "모의 조건에 따른 시뮬레이션 결과이며 실제 효과를 보장하지 않습니다."
 # 매입은 견적으로 푼 최적화라 모의 조건·시뮬레이션 안내가 맞지 않는다.
 _SIMULATION_WORDS = re.compile(r"모의\s*조건|시뮬레이션")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 class Explainer(Protocol):
@@ -108,9 +109,13 @@ class LlmExplainer:
             return None
         verified_caveats = []
         for caveat in caveats:
+            if req.feature_type != "operation":
+                # 모의 조건·시뮬레이션이 들어간 문장만 빼고, 같은 주의의 다른 문장은 남긴다.
+                caveat = " ".join(s for s in _SENTENCE_END.split(caveat.strip()) if not _SIMULATION_WORDS.search(s))
+                if not caveat:
+                    continue
             if (not _safe_text(caveat, allowed)
-                    or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)
-                    or (req.feature_type != "operation" and _SIMULATION_WORDS.search(caveat))):
+                    or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)):
                 continue
             money = _unit_numbers(caveat, "원")
             if money:
