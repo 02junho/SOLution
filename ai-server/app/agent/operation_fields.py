@@ -152,13 +152,23 @@ def _legacy_values(current: dict) -> dict:
     return {key: value for key, value in values.items() if value is not None}
 
 
-def pending_question(values: dict) -> dict | None:
-    """처음 입력 중 지금 묻고 있는 칸(LLM이 짧은 답을 그 질문의 답으로 읽게 요약에 넣는다). 다 채웠으면 None."""
-    missing = next_missing(values)
-    if missing is None:
-        return None
-    _, key, text, choices, label = missing
-    question = {"target": key, "질문": text, "칸 설명": label}
+def pending_question(values: dict, asked: str | None = None, asked_text: str | None = None) -> dict | None:
+    """지금 묻고 있는 칸(LLM이 짧은 답을 그 질문의 답으로 읽게 요약에 넣는다).
+
+    실제로 발급한 질문의 칸(asked)이 있으면 그 칸을 쓰고, 없으면 처음 입력 순서의 다음 빈 칸. 둘 다 없으면 None.
+    """
+    guided = next((g for g in GUIDED if g[0] == asked), None) if asked in FIELDS else None
+    if guided is not None:
+        key, text, choices, label = guided
+        choices = guided_choices(key, choices)
+    elif asked in FIELDS:
+        key, text, choices, label = asked, None, [], FIELDS[asked]
+    else:
+        missing = next_missing(values)
+        if missing is None:
+            return None
+        _, key, text, choices, label = missing
+    question = {"target": key, "질문": asked_text or text, "칸 설명": label}
     if choices:
         question["예시 답"] = choices
     if key == "hourly_wage_krw":

@@ -400,6 +400,61 @@ def test_바꿀_수_없는_칸이면_바꿀_수_있는_값을_안내하고_고�
     assert "바쁜 시간" not in text
 
 
+def _wage_question_reply(content="11000", **overrides):
+    """첫 말 '하루 150건, 시급 9000원' 뒤 시급을 다시 묻는 질문에 답하는 요청(아직 저장한 값 없음)."""
+    base = dict(
+        current_input=None,
+        event_type="question_reply",
+        content=content,
+        question_id="q-wage",
+        answer=content,
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": {"daily_orders": 150}},
+            "question": {"question_key": "hourly_wage_krw", "text": "직원 시급은 최저시급 이상이어야 해요. 얼마인가요?"},
+        },
+    )
+    base.update(overrides)
+    return _req(**base)
+
+
+def test_방금_물은_칸은_실제로_발급한_질문의_칸을_쓴다():
+    from app.agent import operation_flow
+
+    # 다음 빈 칸 순서로는 사장님 근무지만, 실제로 물은 건 시급이다.
+    summary = json.loads(operation_flow.prompt_summary(_wage_question_reply()))
+    assert summary["방금 물은 칸"]["target"] == "hourly_wage_krw"
+    assert summary["방금 물은 칸"]["질문"] == "직원 시급은 최저시급 이상이어야 해요. 얼마인가요?"
+    # 발급한 질문이 폼 칸이 아니면 다음 빈 칸.
+    other = _wage_question_reply(
+        question={
+            "base_version_id": 200101,
+            "draft_input": {"operation_form": {"daily_orders": 150}},
+            "question": {"question_key": "content"},
+        }
+    )
+    assert json.loads(operation_flow.prompt_summary(other))["방금 물은 칸"]["target"] == "is_owner_working"
+    # 다 채운 뒤 값을 바꾸다 다시 물은 경우에도 그 칸.
+    done = _req(
+        current_input=deepcopy(SNAPSHOT),
+        event_type="question_reply",
+        content="11000",
+        question={"base_version_id": 200101, "question": {"question_key": "hourly_wage_krw"}},
+    )
+    assert json.loads(operation_flow.prompt_summary(done))["방금 물은 칸"]["target"] == "hourly_wage_krw"
+
+
+def test_저장한_값이_없을_때_잡담하면_질문에_담아_둔_값_다음_칸을_묻는다():
+    class Chat:
+        def interpret(self, req):
+            return InterpretDraft(intent="smalltalk", reply="네, 천천히 알려 주세요.")
+
+    response = run(_wage_question_reply(content="잠깐만요"), Chat())
+    assert response.data["detail_status"] == "NO_CHANGE"
+    assert "하루에 주문이" not in response.message  # 이미 받은 하루 주문을 다시 묻지 않는다
+    assert "(2/3)" in response.message
+
+
 def test_처음에_질문하면_AI_설명_뒤에_첫_값을_묻는다():
     class Ask:
         def interpret(self, req):

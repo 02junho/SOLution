@@ -73,17 +73,39 @@ def prompt_summary(req: InterpretRequest) -> str | None:
         # 첫 말에서 틀린 값이 나와 아직 저장한 게 없으면, 질문에 담아 둔 폼 값을 기준으로 본다(_apply와 같은 방식).
         values = _carried_form(req) or {}
     labels = {"화면 표기": operation_fields.VALUE_LABELS}
+    asked, asked_text = _asked(req)
     if operation_fields.is_complete(values):
         # 다 채웠으면 화면이 안내한 다음 단계를 알려 짧은 말('해 봐' 등)을 그 단계로 읽게 한다.
+        extra = {"지금 상태": READY_STATE}
+        if asked is not None:
+            # 값을 바꾸다 틀린 값을 다시 물은 경우: 그 질문의 칸.
+            extra["방금 물은 칸"] = operation_fields.pending_question(values, asked, asked_text)
         return json.dumps(
-            {**operation_fields.summary({operation_fields.DRAFT_KEY: values}), **labels, "지금 상태": READY_STATE},
+            {**operation_fields.summary({operation_fields.DRAFT_KEY: values}), **labels, **extra},
             ensure_ascii=False,
         )
-    # 채우는 중: 채운 값과 방금 물은 칸(짧은 답을 그 질문의 답으로 읽게).
+    # 채우는 중: 채운 값과 방금 물은 칸(실제로 발급한 질문의 칸 우선, 없으면 다음 빈 칸).
     return json.dumps(
-        {"작성 중": values, "방금 물은 칸": operation_fields.pending_question(values), **labels},
+        {
+            "작성 중": values,
+            "방금 물은 칸": operation_fields.pending_question(values, asked, asked_text),
+            **labels,
+        },
         ensure_ascii=False,
     )
+
+
+def _asked(req: InterpretRequest) -> tuple[str | None, str | None]:
+    """질문에 답하는 경우, 서버가 실제로 발급한 질문의 칸과 문장. 폼 칸이 아니거나 질문 뒤 입력이 바뀌었으면 (None, None)."""
+    if req.event_type != "question_reply" or not isinstance(req.question, dict):
+        return None, None
+    if req.question.get("base_version_id") != req.current_version_id:
+        return None, None
+    issued = req.question.get("question")
+    if not isinstance(issued, dict) or issued.get("question_key") not in operation_fields.FIELDS:
+        return None, None
+    text = issued.get("text")
+    return issued["question_key"], text if isinstance(text, str) else None
 
 
 def _is_one(value: object) -> bool:
@@ -106,7 +128,7 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
         if complete:
             return None
         # 채우는 중 잡담: AI 답 뒤에 묻던 값을 다시 묻는다.
-        missing = operation_fields.next_missing(values)
+        missing = operation_fields.next_missing(values or _carried_form(req) or {})
         ask = f"{missing[2]} ({missing[0]}/{len(operation_fields.GUIDED)})" if missing else ""
         return ApiResponse(
             status=ResponseStatus.OK,
@@ -118,7 +140,7 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
         )
     if changes or not complete:
         if wants_run and not complete:
-            missing = operation_fields.next_missing(values)
+            missing = operation_fields.next_missing(values or _carried_form(req) or {})
             if missing is not None:
                 return ApiResponse(
                     status=ResponseStatus.OK,
