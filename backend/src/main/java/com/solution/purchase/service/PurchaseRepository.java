@@ -43,7 +43,7 @@ public class PurchaseRepository {
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.input_version_id = ?
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionVersion(
 				rs.getLong("session_id"),
 				rs.getLong("store_id"),
@@ -56,6 +56,11 @@ public class PurchaseRepository {
 				rs.getObject("input_confirmed_at", OffsetDateTime.class)),
 				inputVersionId, sessionId);
 		return rows.stream().findFirst();
+	}
+
+	/** 결과 저장 전에 삭제와 같은 세션 행 잠금을 획득한다. */
+	public void lockSession(long sessionId) {
+		jdbcTemplate.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE", rs -> { }, sessionId);
 	}
 
 	/** 같은 입력 버전·같은 요청 키로 이미 저장한 결과 (재전송이면 다시 계산하지 않는다). */

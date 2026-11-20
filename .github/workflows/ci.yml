@@ -100,12 +100,12 @@ jobs:
           echo "연결 확인 실패. 마지막 응답: ${body:-없음}"
           exit 1
 
-      - name: Flyway가 만든 테이블 확인 (9개)
+      - name: Flyway가 만든 테이블 확인 (11개)
         run: |
           count=$(docker compose exec -T db psql -U solution -d solution -Atc \
             "select count(*) from information_schema.tables where table_schema = 'public' and table_name <> 'flyway_schema_history'")
           echo "테이블 수: $count"
-          test "$count" = "9"
+          test "$count" = "11"
 
       # 시연용 기본 데이터(위에서 켠 DEMO_SEED=true)로 화면이 부르는 주소부터
       # Spring → FastAPI 계산 → DB 저장 → 다시 조회까지 끝까지 확인한다. (정상 1 · 예산 부족 1 · 재고 빈칸 1 · 거래처 4곳 1 · 거래처 12곳 1)

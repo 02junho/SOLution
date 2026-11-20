@@ -10,7 +10,7 @@ import type {
   PurchaseResult,
   SessionContext,
 } from '../../types/workflow'
-import { confirmationKey, currentInput, RequestKeys } from './model.ts'
+import { confirmationKey, invalidateConfirmationKeys, currentInput, RequestKeys } from './model.ts'
 
 // 운영 결과 API (api/operationApi.ts와 같은 주소). node 테스트가 확장자 있는 경로만 읽어서 여기서 직접 부른다.
 const loadOperationResult = (resultId: number, view: 'summary' | 'detail') =>
@@ -89,6 +89,7 @@ export function useWorkspace() {
   const scope = useRef(0)
   const locked = useRef(false)
   const queuedOpen = useRef<number | null>(null)
+  const activeSession = useRef<number | null>(null)
   const pendingEvents = useRef(
     new Map<number, { signature: string; payload: JsonObject; key: string }>(),
   )
@@ -96,7 +97,26 @@ export function useWorkspace() {
   const keys = useRef(new RequestKeys())
   // 운영 대화에서 "비교 시작해줘"라고 하면 대화 응답에 계산 시작 표시(action: run_operation)가 온다.
   const runAfterEvent = useRef(false)
+  const eventFlows = useRef(0)
+  const queuedRefresh = useRef(false)
+  const reads = useRef(0)
+  async function refresh() {
+    if (locked.current || eventFlows.current > 0) { queuedRefresh.current = true; return }
+    queuedRefresh.current = false
+    const id = activeSession.current
+    if (id === null) return
+    const generation = scope.current
+    const read = ++reads.current
+    try {
+      const next = await load(id)
+      if (generation === scope.current && read === reads.current && !locked.current) setWorkspace(next)
+    } catch (cause) {
+      if (generation === scope.current && read === reads.current)
+        setError(cause instanceof Error ? cause.message : '업무를 불러오지 못했어요.')
+    }
+  }
   const open = useCallback(async (id: number) => {
+    activeSession.current = id
     if (locked.current) {
       queuedOpen.current = id
       scope.current++
@@ -128,7 +148,10 @@ export function useWorkspace() {
     const next = queuedOpen.current
     queuedOpen.current = null
     if (next !== null) void open(next)
-    else if (scope.current === generation) setBusy('')
+    else if (scope.current === generation) {
+      setBusy('')
+      if (queuedRefresh.current && eventFlows.current === 0) void refresh()
+    }
   }
   function clearPending(id: number) {
     pendingEvents.current.delete(id)
@@ -136,12 +159,26 @@ export function useWorkspace() {
   }
   function reset() {
     if (!locked.current) {
+      activeSession.current = null
       scope.current++
       setWorkspace(empty)
       setError('')
       setNotice('')
       setBusy('')
     }
+  }
+  // 삭제 완료 시점의 표시/조회 대상을 확인한다. 다른 업무의 진행 중인 open은 건드리지 않는다.
+  function invalidate(id: number) {
+    clearPending(id)
+    if (queuedOpen.current === id) queuedOpen.current = null
+    if (activeSession.current !== id) return false
+    activeSession.current = null
+    scope.current++
+    setWorkspace(empty)
+    setError('')
+    setNotice('')
+    setBusy('')
+    return true
   }
   async function create(
     feature: FeatureType,
@@ -181,6 +218,7 @@ export function useWorkspace() {
       return false
     }
     locked.current = true
+    reads.current++
     const generation = scope.current
     setBusy(label)
     setError('')
@@ -217,13 +255,19 @@ export function useWorkspace() {
   }
   async function event(body: JsonObject) {
     const generation = scope.current
-    const ok = await sendEvent(body)
-    if (ok && runAfterEvent.current) {
-      runAfterEvent.current = false
-      // 기다리는 동안 다른 업무를 열었으면 계산하지 않는다. 계산 실패는 따로 보이고, 보낸 말은 저장된 것으로 둔다.
-      if (scope.current === generation) await calculateOperation()
+    eventFlows.current++
+    try {
+      const ok = await sendEvent(body)
+      if (ok && runAfterEvent.current) {
+        runAfterEvent.current = false
+        // 기다리는 동안 다른 업무를 열었으면 계산하지 않는다. 계산 실패는 따로 보이고, 보낸 말은 저장된 것으로 둔다.
+        if (scope.current === generation) await calculateOperation()
+      }
+      return ok
+    } finally {
+      eventFlows.current--
+      if (queuedRefresh.current && eventFlows.current === 0) void refresh()
     }
-    return ok
   }
   async function sendEvent(body: JsonObject) {
     return act(
@@ -382,13 +426,19 @@ export function useWorkspace() {
         /* 메모리 키로 재시도한다. */
       }
       const key = confirmationKey(signature, storage)
-      const response = await workflowApi.confirm(
-        result.result_id,
-        context.current_version_id,
-        choice,
-        warnings,
-        key,
-      )
+      let response
+      try {
+        response = await workflowApi.confirm(
+          result.result_id,
+          context.current_version_id,
+          choice,
+          warnings,
+          key,
+        )
+      } catch (cause) {
+        if (cause instanceof WorkflowError && cause.code === 'CONFIRMATION_DELETED') invalidateConfirmationKeys(result.result_id, storage)
+        throw cause
+      }
       return response.is_new
         ? `${operation ? '운영' : '구매'} 계획을 저장했어요. 저장한 계획에서 다시 볼 수 있어요.`
         : '이미 저장된 계획을 불러왔어요.'
@@ -401,6 +451,8 @@ export function useWorkspace() {
     notice,
     open,
     reset,
+    invalidate,
+    refresh,
     create,
     event,
     pendingEvent:

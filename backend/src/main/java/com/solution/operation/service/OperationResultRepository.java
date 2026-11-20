@@ -39,7 +39,7 @@ public class OperationResultRepository {
 				       v.input_version_id, v.version_no, v.input_json::text, v.input_confirmed_at
 				FROM work_session s JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.input_version_id = ?
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionVersion(rs.getLong("session_id"), rs.getLong("store_id"),
 				rs.getString("feature_type"), rs.getInt("current_version"), rs.getString("owner_key"),
 				(Long) rs.getObject("input_version_id"), (Integer) rs.getObject("version_no"),
@@ -82,7 +82,7 @@ public class OperationResultRepository {
 				rs.getInt("current_version"), rs.getString("owner_key"), rs.getString("selected_choice_key"));
 	}
 
-	/** 저장 시에만 잠근다. 같은 키를 다른 입력 버전에 재사용하는 동시 요청도 직렬화한다. */
+	/** 계산 시작·종료·저장을 삭제와 같은 세션 행 잠금으로 직렬화한다. */
 	public void lockSession(long sessionId) {
 		jdbc.query("SELECT session_id FROM work_session WHERE session_id = ? FOR UPDATE", rs -> { }, sessionId);
 	}

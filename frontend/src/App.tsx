@@ -37,6 +37,12 @@ function WorkflowApp() {
   const [newOpen, setNewOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmation, setConfirmation] = useState<number | null>(null)
+  const [deletedPlanIds, setDeletedPlanIds] = useState<number[]>([])
+  function planDeleted(id: number) {
+    setConfirmation((current) => current === id ? null : current)
+    setDeletedPlanIds((ids) => ids.includes(id) ? ids : [...ids, id])
+    workspace.refresh()
+  }
   const feature = workspace.context?.feature_type ?? chosenFeature
   const openSession = workspace.open
 
@@ -139,7 +145,7 @@ function WorkflowApp() {
 
       <main id="main-content" tabIndex={-1}>
         {savedPage ? (
-          <ConfirmationHistory onOpen={setConfirmation} />
+          <ConfirmationHistory deletedIds={deletedPlanIds} onOpen={setConfirmation} onDeleted={planDeleted} />
         ) : systemPage ? (
           <section className="system-page">
             <p className="eyebrow">CONNECTION STATUS</p>
@@ -181,6 +187,11 @@ function WorkflowApp() {
         <SessionHistory
           onClose={() => setHistoryOpen(false)}
           onSelect={selectSession}
+          onDeleted={(id) => {
+            if (workspace.invalidate(id)) {
+              window.location.hash = '/work'
+            }
+          }}
         />
       )}
 
@@ -188,7 +199,8 @@ function WorkflowApp() {
         <ConfirmationModal
           key={confirmation}
           id={confirmation}
-          onClose={() => setConfirmation(null)}
+          onDeleted={planDeleted}
+          onClose={() => setConfirmation((current) => current === confirmation ? null : current)}
         />
       )}
     </div>

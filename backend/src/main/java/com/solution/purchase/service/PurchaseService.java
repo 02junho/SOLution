@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.solution.common.auth.CurrentOwner;
+import com.solution.session.service.CalculationRuns;
 import com.solution.common.client.AiServerClient;
 import com.solution.common.client.AiServerException;
 import com.solution.common.exception.ApiException;
@@ -50,6 +51,7 @@ public class PurchaseService {
 	private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {
 	};
 
+	private final CalculationRuns runs;
 	private final PurchaseRepository repository;
 	private final AiServerClient aiServerClient;
 	private final CurrentOwner currentOwner;
@@ -60,7 +62,8 @@ public class PurchaseService {
 
 	public PurchaseService(PurchaseRepository repository, AiServerClient aiServerClient, CurrentOwner currentOwner,
 			IdGenerator idGenerator, RequestKeyLock requestKeyLock, ObjectMapper objectMapper,
-			TransactionTemplate transactionTemplate) {
+			TransactionTemplate transactionTemplate, CalculationRuns runs) {
+		this.runs = runs;
 		this.repository = repository;
 		this.aiServerClient = aiServerClient;
 		this.currentOwner = currentOwner;
@@ -96,49 +99,63 @@ public class PurchaseService {
 		body.put("session_id", source.sessionId());
 		body.put("input_version_id", source.inputVersionId());
 
-		ApiResponse<Map<String, Object>> tool = aiServerClient.post(TOOL_PATH, body, requestKey, MAP_RESPONSE);
-		if (tool == null || tool.status() == null || tool.status() == ResponseStatus.ERROR || tool.data() == null) {
-			throw new AiServerException("AI 서버가 계산 결과를 돌려주지 않았습니다: " + TOOL_PATH);
-		}
-
-		Map<String, Object> data = tool.data();
-		boolean ok = tool.status() == ResponseStatus.OK;
-		Map<String, Object> summary;
-		Object detail;
-		if (ok) {
-			summary = asMap(data.get("summary"));
-			detail = data.get("detail");
-		}
-		else {
-			// needs_input·infeasible은 data 전체를 요약으로 저장한다. 재전송 때 같은 문구를 돌려주려고 message도 함께 둔다.
-			summary = new LinkedHashMap<>(data);
-			summary.put("message", tool.message());
-			detail = null;
-		}
-
-		long resultId = idGenerator.next();
-		OffsetDateTime createdAt = OffsetDateTime.now();
-		String detailStatus = data.get("detail_status") == null ? null : String.valueOf(data.get("detail_status"));
-		String summaryJson = writeJson(summary);
-		String detailJson = detail == null ? null : writeJson(detail);
-		// 같은 요청 키가 동시에 두 번 오면 둘 다 계산까지는 갈 수 있다(같은 입력이면 결과도 같다).
-		// work_result.request_key에는 UQ가 없으므로(ERD) 저장 직전에 잠그고 다시 확인해 결과를 하나만 남긴다 (RequestKeyLock).
-		StoredResult saved = transactionTemplate.execute(status -> {
-			requestKeyLock.lock("purchase", source.inputVersionId(), requestKey);
-			var stored = repository.findByRequestKey(source.inputVersionId(), requestKey);
-			if (stored.isPresent()) {
-				return stored.get();
+		try (var run = runs.start(sessionId, "purchase", () -> {
+			repository.lockSession(sessionId);
+			var latest = repository.findSessionVersion(sessionId, inputVersionId)
+				.filter(row -> "purchase".equals(row.featureType()) && currentOwner.key().equals(row.ownerKey()))
+				.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, SESSION_NOT_FOUND));
+			if (!Objects.equals(latest.versionNo(), latest.currentVersion())) throw ApiException.badRequest(CODE_STALE_VERSION, NOT_LATEST);
+			if (latest.inputConfirmedAt() == null) throw ApiException.badRequest(CODE_INPUT_NOT_CONFIRMED, NOT_CONFIRMED);
+		})) {
+			ApiResponse<Map<String, Object>> tool = aiServerClient.post(TOOL_PATH, body, requestKey, MAP_RESPONSE);
+			if (tool == null || tool.status() == null || tool.status() == ResponseStatus.ERROR || tool.data() == null) {
+				throw new AiServerException("AI 서버가 계산 결과를 돌려주지 않았습니다: " + TOOL_PATH);
 			}
-			repository.insertResult(resultId, source, requestKey, tool.status().getValue(), detailStatus,
-					summaryJson, detailJson, createdAt);
+
+			Map<String, Object> data = tool.data();
+			boolean ok = tool.status() == ResponseStatus.OK;
+			Map<String, Object> summary;
+			Object detail;
 			if (ok) {
-				repository.markSessionResult(source.sessionId());
+				summary = asMap(data.get("summary"));
+				detail = data.get("detail");
 			}
-			return new StoredResult(resultId, source.inputVersionId(), source.sessionId(), source.versionNo(),
-					"purchase", tool.status().getValue(), detailStatus, summaryJson, detailJson, createdAt,
-					source.currentVersion(), source.ownerKey(), null);
-		});
-		return runResponse(saved);
+			else {
+				// needs_input·infeasible은 data 전체를 요약으로 저장한다. 재전송 때 같은 문구를 돌려주려고 message도 함께 둔다.
+				summary = new LinkedHashMap<>(data);
+				summary.put("message", tool.message());
+				detail = null;
+			}
+
+			long resultId = idGenerator.next();
+			OffsetDateTime createdAt = OffsetDateTime.now();
+			String detailStatus = data.get("detail_status") == null ? null : String.valueOf(data.get("detail_status"));
+			String summaryJson = writeJson(summary);
+			String detailJson = detail == null ? null : writeJson(detail);
+			// 같은 요청 키가 동시에 두 번 오면 둘 다 계산까지는 갈 수 있다(같은 입력이면 결과도 같다).
+			// work_result.request_key에는 UQ가 없으므로(ERD) 저장 직전에 잠그고 다시 확인해 결과를 하나만 남긴다 (RequestKeyLock).
+			StoredResult saved = transactionTemplate.execute(status -> {
+				requestKeyLock.lock("purchase", source.inputVersionId(), requestKey);
+				repository.lockSession(sessionId);
+				run.requireActive();
+				repository.findSessionVersion(sessionId, inputVersionId)
+						.filter(row -> currentOwner.key().equals(row.ownerKey()))
+						.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, SESSION_NOT_FOUND));
+				var stored = repository.findByRequestKey(source.inputVersionId(), requestKey);
+				if (stored.isPresent()) {
+					return stored.get();
+				}
+				repository.insertResult(resultId, source, requestKey, tool.status().getValue(), detailStatus,
+						summaryJson, detailJson, createdAt);
+				if (ok) {
+					repository.markSessionResult(source.sessionId());
+				}
+				return new StoredResult(resultId, source.inputVersionId(), source.sessionId(), source.versionNo(),
+						"purchase", tool.status().getValue(), detailStatus, summaryJson, detailJson, createdAt,
+						source.currentVersion(), source.ownerKey(), null);
+			});
+			return runResponse(saved);
+		}
 	}
 
 	public ApiResponse<Map<String, Object>> detail(long resultId) {

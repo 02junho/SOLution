@@ -41,6 +41,12 @@ export const sendsOnEnter = (key: {
   key.keyCode !== 229
 export const featureName = (feature: string) =>
   feature === 'purchase' ? '매입·재고' : '운영 실험'
+// 이전 버전에서 삭제 표시한 기록은 원문 복구 없이 계속 숨긴다.
+export function visibleMessages(messages: Message[]) {
+  return messages.filter((message) =>
+    (message.role === 'user' || message.role === 'assistant') && !message.metadata_json?.deleted,
+  )
+}
 export function currentInput(
   messages: Message[],
   version: number | null,
@@ -99,9 +105,9 @@ export function fieldName(path: string, label: string) {
     budget_krw: '예산',
     planning_days: '계획 기간',
     max_delivery_count: '배송 횟수 상한',
-    usable_inventory: '사용 가능한 재고',
+    usable_inventory: '현재 사용 가능한 재고',
     gross_need: '필요 총량',
-    safety_stock: '안전재고',
+    safety_stock: '남겨 둘 안전재고',
     storage_capacity: '보관 한도',
     max_end_inventory: '기간 끝 재고 한도',
     minimum_order_krw: '거래처 최소 주문 금액',
@@ -160,10 +166,25 @@ export class RequestKeys {
   }
 }
 const confirmationKeys = new RequestKeys()
+const confirmationGenerations = new Map<number, string>()
+export function invalidateConfirmationKeys(resultId: number, storage?: Pick<Storage, 'getItem' | 'setItem'>) {
+  const generation = crypto.randomUUID()
+  confirmationGenerations.set(resultId, generation)
+  try { storage?.setItem(`solution:confirm-generation:${resultId}`, generation) } catch { /* Memory fallback. */ }
+}
 export function confirmationKey(
   signature: string,
   storage: Pick<Storage, 'getItem' | 'setItem'> | undefined,
 ): string {
+  try {
+    const [resultId] = JSON.parse(signature)
+    let generation = confirmationGenerations.get(resultId)
+    try { generation ??= storage?.getItem(`solution:confirm-generation:${resultId}`) ?? undefined } catch { /* Memory fallback. */ }
+    if (generation) {
+      confirmationGenerations.set(resultId, generation)
+      signature = `${signature}:${generation}`
+    }
+  } catch { /* Non-JSON signatures and unavailable storage retain memory retries. */ }
   const name = `solution:confirm:${signature}`
   const fallback = confirmationKeys.for(signature)
   try {

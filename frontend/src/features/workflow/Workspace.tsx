@@ -11,6 +11,7 @@ import {
   dateTime,
   featureName,
   object,
+  visibleMessages,
   sendsOnEnter,
 } from './model'
 import type { WorkspaceController } from './useWorkspace'
@@ -558,11 +559,10 @@ export default function Workspace({
                 </div>
               )}
             </div>
-            {messages
-              .filter(
-                (message) =>
-                  message.role === 'user' || message.role === 'assistant',
-              )
+            {visibleMessages(messages)
+              .filter((message) => !(question && message.role === 'assistant' &&
+                message.metadata_json?.question_id === question.question_id &&
+                message.content.trim() === question.question?.text?.trim()))
               .map((message) => (
                 <div
                   className={`message ${message.role}`}
@@ -588,7 +588,9 @@ export default function Workspace({
               <div className="question-card">
                 <p className="eyebrow">한 가지만 더 확인할게요</p>
                 <h3>{question.question?.text ?? '빠진 입력을 알려 주세요.'}</h3>
-                {question.missing_fields?.map((field) => (
+                {question.missing_fields?.filter((field) =>
+                  fieldName(field.path, field.label).trim() !== question.question?.text?.trim(),
+                ).map((field) => (
                   <p className="muted" key={field.path}>
                     {fieldName(field.path, field.label)}
                   </p>
@@ -601,7 +603,7 @@ export default function Workspace({
                       disabled={!!busy}
                       onClick={(e) => send(e, answer)}
                     >
-                      {answer}
+                      {fieldName(answer, answer)}
                     </button>
                   ))}
                 </div>

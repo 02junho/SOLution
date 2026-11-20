@@ -1,6 +1,9 @@
 package com.solution.purchase;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
+import com.solution.common.exception.ApiException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,6 +32,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.solution.common.client.AiServerClient;
 import com.solution.common.response.ApiResponse;
 import com.solution.purchase.service.PurchaseService;
+import com.solution.session.service.WorkDeletionService;
 
 /**
  * 구매안 계산 실행을 실제 DB로 확인한다. FastAPI 호출만 가짜로 두고, 저장·잠금은 진짜 PostgreSQL에서 돈다.
@@ -45,6 +49,8 @@ class PurchaseRunIntegrationTest {
 
 	@Autowired
 	private PurchaseService purchaseService;
+	@Autowired
+	private WorkDeletionService deletion;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -73,6 +79,39 @@ class PurchaseRunIntegrationTest {
 				VALUES (1001, 100, 1, 'purchase-v1', '{"budget_krw": 200000}'::jsonb, 'demo-owner', now())
 				""");
 	}
+
+	@Test
+	void 삭제된_업무는_계산을_시작하지_않는다() {
+		jdbcTemplate.update("UPDATE work_session SET deleted_at=now() WHERE session_id=100");
+		assertThatThrownBy(() -> purchaseService.run(100, 1001, "deleted"))
+				.isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getDetailCode()).isEqualTo("SESSION_NOT_FOUND"));
+		verifyNoInteractions(aiServerClient);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isZero();
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 계산_중_삭제는_차단하고_완료_후에는_삭제할_수_있다() {
+		given(aiServerClient.post(eq("/tools/purchase"), any(), anyString(), any(ParameterizedTypeReference.class)))
+				.willAnswer(call -> {
+					assertThatThrownBy(() -> deletion.deleteSession(100)).hasFieldOrPropertyWithValue("detailCode", "SESSION_RUNNING");
+					return ApiResponse.ok(Map.of("detail_status", "OPTIMAL", "summary", Map.of(), "detail", Map.of()));
+				});
+        purchaseService.run(100, 1001, "deleted-during-tool");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM work_result", Integer.class)).isEqualTo(1);
+        deletion.deleteSession(100);
+
+	}
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 계산_실패에도_활성_실행을_해제한다() {
+        given(aiServerClient.post(eq("/tools/purchase"), any(), anyString(), any(ParameterizedTypeReference.class)))
+            .willThrow(new RuntimeException("tool unavailable"));
+        assertThatThrownBy(() -> purchaseService.run(100, 1001, "failure")).hasMessage("tool unavailable");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM calculation_run", Integer.class)).isZero();
+        deletion.deleteSession(100);
+    }
 
 	@Test
 	@SuppressWarnings("unchecked")

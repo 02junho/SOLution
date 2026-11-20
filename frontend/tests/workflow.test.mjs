@@ -4,7 +4,10 @@ import { request } from '../src/api/client.ts'
 import { workflowApi } from '../src/api/workflowApi.ts'
 import {
   applicableWarnings,
+  fieldName,
+  visibleMessages,
   confirmationKey,
+  invalidateConfirmationKeys,
   currentInput,
   currentQuestion,
   questionDraft,
@@ -260,6 +263,38 @@ test('폼 초안은 같은 버전의 후속 해석 실패에도 보존하고 다
   assert.equal(questionDraft(messages, { current_version_id: 11 }), null)
 })
 
+
+test('질문 선택지는 한국어로 표시하며 모르는 선택지는 그대로 유지한다', () => {
+  assert.equal(fieldName('gross_need', 'gross_need'), '필요 총량')
+  assert.equal(fieldName('usable_inventory', 'usable_inventory'), '현재 사용 가능한 재고')
+  assert.equal(fieldName('safety_stock', 'safety_stock'), '남겨 둘 안전재고')
+  assert.equal(fieldName('storage_capacity', 'storage_capacity'), '보관 한도')
+  assert.equal(fieldName('max_end_inventory', 'max_end_inventory'), '기간 끝 재고 한도')
+  assert.equal(fieldName('네, 같이 일해요', '네, 같이 일해요'), '네, 같이 일해요')
+})
+
+test('삭제된 메시지 표시를 숨겨도 진행 중 질문은 유지한다', () => {
+  const messages = [{ message_id: 1, role: 'assistant', metadata_json: {
+    deleted: true, response: { status: 'needs_input', data: { question_id: 'q1', base_version_id: 10 } },
+  } }]
+  assert.deepEqual(visibleMessages(messages), [])
+  assert.equal(currentQuestion(messages, { current_version_id: 10 }).question_id, 'q1')
+})
+
+test('업무 삭제 API는 올바른 경로로 요청하고 실패를 전달한다', async () => {
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push([url, init.method])
+    return json({ status: 'ok', data: {} })
+  }
+  await workflowApi.deleteSession(500)
+  assert.deepEqual(calls, [
+    ['/api/v1/work-sessions/500', 'DELETE'],
+  ])
+  globalThis.fetch = async () => json({ status: 'error', data: { detail_code: 'SESSION_NOT_FOUND' }, message: '업무를 찾을 수 없습니다.' }, 404)
+  await assert.rejects(() => workflowApi.deleteSession(600), { code: 'SESSION_NOT_FOUND' })
+})
+
 test('대화창은 Enter로 보내고 Shift+Enter·한글 조합 중 Enter는 보내지 않는다', () => {
   const key = (over) => ({ key: 'Enter', shiftKey: false, isComposing: false, keyCode: 13, ...over })
   assert.equal(sendsOnEnter(key({})), true)
@@ -267,4 +302,51 @@ test('대화창은 Enter로 보내고 Shift+Enter·한글 조합 중 Enter는 �
   assert.equal(sendsOnEnter(key({ isComposing: true })), false)
   assert.equal(sendsOnEnter(key({ keyCode: 229 })), false)
   assert.equal(sendsOnEnter(key({ key: 'a', keyCode: 65 })), false)
+})
+
+
+test('삭제 뒤 같은 계획 서명의 저장 키는 교체되고 새 키의 재시도는 유지된다', () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) }
+  const signature = JSON.stringify([2002, 1002, 'purchase_1', []])
+  const before = confirmationKey(signature, storage)
+  invalidateConfirmationKeys(2002, storage)
+  const after = confirmationKey(signature, storage)
+  assert.notEqual(after, before)
+  assert.equal(confirmationKey(signature, storage), after)
+  const unrelated = JSON.stringify([2003, 1002, 'purchase_1', []])
+  const other = confirmationKey(unrelated, storage)
+  invalidateConfirmationKeys(2002, storage)
+  assert.equal(confirmationKey(unrelated, storage), other)
+})
+
+
+test('복원한 확정 세대는 저장소 장애에도 유지하고 명시적 삭제 후에만 교체한다', () => {
+  const resultId = 990002
+  const signature = JSON.stringify([resultId, 1002, 'purchase_1', []])
+  const generation = 'restored-generation'
+  const savedKey = 'restored-request-key'
+  const values = new Map([
+    [`solution:confirm-generation:${resultId}`, generation],
+    [`solution:confirm:${signature}:${generation}`, savedKey],
+  ])
+  let unavailable = false
+  const storage = {
+    getItem(name) {
+      if (unavailable) throw new Error('storage unavailable')
+      return values.get(name) ?? null
+    },
+    setItem(name, value) {
+      if (unavailable) throw new Error('storage unavailable')
+      values.set(name, value)
+    },
+  }
+  assert.equal(confirmationKey(signature, storage), savedKey)
+  unavailable = true
+  assert.equal(confirmationKey(signature, storage), savedKey)
+  assert.equal(confirmationKey(signature, undefined), savedKey)
+  invalidateConfirmationKeys(resultId, storage)
+  const next = confirmationKey(signature, storage)
+  assert.notEqual(next, savedKey)
+  assert.equal(confirmationKey(signature, storage), next)
 })

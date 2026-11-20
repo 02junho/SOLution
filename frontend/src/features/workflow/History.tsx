@@ -6,6 +6,7 @@ import type { Confirmation, Page, SessionSummary } from '../../types/workflow'
 import { dateTime, featureName } from './model'
 // 운영: 저장한 계획 카드에 고른 운영안 이름 표시
 import { CHOICE_TITLE } from '../operation/workspace/format'
+import DeleteConfirmation from './DeleteConfirmation'
 
 type Filter = FeatureType | 'all'
 function Filters({
@@ -44,6 +45,7 @@ function useHistory<T>(
   const [error, setError] = useState('')
   const generation = useRef(0)
   const busy = useRef(false)
+  const removed = useRef<((item: T) => boolean)[]>([])
   const read = useCallback(
     async (cursor: string | null, token: number) => {
       busy.current = true
@@ -54,7 +56,8 @@ function useHistory<T>(
         )
         if (token === generation.current) {
           setItems((previous) =>
-            cursor ? [...previous, ...page.items] : page.items,
+            (cursor ? [...previous, ...page.items] : page.items)
+              .filter((item) => !removed.current.some((matches) => matches(item))),
           )
           setNext(page.next_cursor)
         }
@@ -80,7 +83,7 @@ function useHistory<T>(
     fetcher(filter === 'all' ? undefined : filter, null)
       .then((page) => {
         if (token === generation.current) {
-          setItems(page.items)
+          setItems(page.items.filter((item) => !removed.current.some((matches) => matches(item))))
           setNext(page.next_cursor)
         }
       })
@@ -102,6 +105,10 @@ function useHistory<T>(
       generation.current = token + 1
     }
   }, [fetcher, filter])
+  const remove = useCallback((matches: (item: T) => boolean) => {
+    removed.current.push(matches)
+    setItems((previous) => previous.filter((item) => !matches(item)))
+  }, [])
   return {
     items,
     next,
@@ -123,6 +130,7 @@ function useHistory<T>(
         void read(next, generation.current)
       }
     },
+    remove,
     retry: () => {
       if (!busy.current) {
         setLoading(true)
@@ -135,16 +143,39 @@ function useHistory<T>(
 export function SessionHistory({
   onClose,
   onSelect,
+  onDeleted,
 }: {
   onClose: () => void
   onSelect: (id: number) => void
+  onDeleted?: (id: number) => void
 }) {
   const history = useHistory<SessionSummary>(workflowApi.sessions)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [target, setTarget] = useState<SessionSummary | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const deletionLock = useRef(false)
+  async function remove() {
+    if (!target || deletionLock.current) return
+    deletionLock.current = true
+    setDeleting(target.session_id)
+    setDeleteError('')
+    try {
+      await workflowApi.deleteSession(target.session_id)
+      history.remove((item) => item.session_id === target.session_id)
+      onDeleted?.(target.session_id)
+      setTarget(null)
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : '업무를 삭제하지 못했어요.')
+    } finally {
+      deletionLock.current = false
+      setDeleting(null)
+    }
+  }
   return (
     <Modal
       title="하던 업무 이어하기"
       description="대화와 조건은 업무별로 저장돼 있어요."
-      onClose={onClose}
+      onClose={() => { if (deleting === null) onClose() }}
       wide
     >
       <Filters value={history.filter} onChange={history.setFilter} />
@@ -161,38 +192,55 @@ export function SessionHistory({
           <p>새 업무를 시작하면 이곳에서 이어 할 수 있어요.</p>
         </Empty>
       )}
+      {target && (
+        <section className="delete-confirm" aria-label="업무 삭제 확인">
+          <strong>‘{target.title}’의 대화 기록을 삭제할까요?</strong>
+          <p>이 업무가 이어하기 목록에서 사라지고, 대화를 다시 열 수 없어요. 저장한 계획은 별도로 남아요. 계획도 지우려면 ‘저장한 계획’에서 삭제해 주세요.</p>
+          {deleteError && <Alert error>{deleteError}</Alert>}
+          <button className="button secondary" disabled={deleting !== null} onClick={() => setTarget(null)}>취소</button>
+          <button className="button primary" disabled={deleting !== null} onClick={() => void remove()}>
+            {deleting !== null ? '삭제 중…' : '대화 기록 삭제'}
+          </button>
+        </section>
+      )}
       <div className="history-list">
         {history.items.map((session) => (
-          <button
-            className="history-row"
-            key={session.session_id}
-            onClick={() => onSelect(session.session_id)}
-          >
-            <span className="history-icon">
-              <Icon
-                name={session.feature_type === 'purchase' ? 'box' : 'clock'}
-              />
-            </span>
-            <span>
-              <strong>{session.title}</strong>
-              <small>
-                {featureName(session.feature_type)} · 입력{' '}
-                {session.current_version} · {dateTime(session.updated_at)}
-              </small>
-            </span>
-            <span className="status-pill">
-              {(
-                {
-                  input: '입력 중',
-                  review: '검토 중',
-                  result: '결과 확인',
-                  saved: '저장 완료',
-                  running: '계산 중',
-                } as Record<string, string>
-              )[session.step] ?? '진행 중'}
-            </span>
-            <Icon name="chevron" size={16} />
-          </button>
+          <div className="history-entry" key={session.session_id}>
+            <button
+              className="history-row"
+              disabled={deleting !== null}
+              onClick={() => onSelect(session.session_id)}
+            >
+              <span className="history-icon">
+                <Icon
+                  name={session.feature_type === 'purchase' ? 'box' : 'clock'}
+                />
+              </span>
+              <span>
+                <strong>{session.title}</strong>
+                <small>
+                  {featureName(session.feature_type)} · 입력{' '}
+                  {session.current_version} · {dateTime(session.updated_at)}
+                </small>
+              </span>
+              <span className="status-pill">
+                {(
+                  {
+                    input: '입력 중',
+                    review: '검토 중',
+                    result: '결과 확인',
+                    saved: '저장 완료',
+                    running: '계산 중',
+                  } as Record<string, string>
+                )[session.step] ?? '진행 중'}
+              </span>
+              <Icon name="chevron" size={16} />
+            </button>
+            <button type="button" className="text-button delete-action" disabled={deleting !== null}
+              aria-label={`${session.title} 대화 기록 삭제`} onClick={() => { setTarget(session); setDeleteError('') }}>
+              대화 기록 삭제
+            </button>
+          </div>
         ))}
       </div>
       {history.loading && (
@@ -214,10 +262,18 @@ export function SessionHistory({
 }
 export function ConfirmationHistory({
   onOpen,
+  onDeleted,
+  deletedIds,
 }: {
   onOpen: (id: number) => void
+  onDeleted?: (id: number) => void
+  deletedIds?: readonly number[]
 }) {
   const history = useHistory<Confirmation>(workflowApi.confirmations)
+  const remove = history.remove
+  useEffect(() => {
+    if (deletedIds?.length) remove((item) => deletedIds.includes(item.confirmation_id))
+  }, [deletedIds, remove])
   return (
     <section className="history-page">
       <div className="page-title">
@@ -249,35 +305,40 @@ export function ConfirmationHistory({
       )}
       <div className="confirmation-grid">
         {history.items.map((confirmation) => (
-          <button
-            className="confirmation-card"
-            key={confirmation.confirmation_id}
-            onClick={() => onOpen(confirmation.confirmation_id)}
-          >
-            <div className="choice-top">
-              <span className="eyebrow">
-                {featureName(confirmation.feature_type)}
-              </span>
-              <span
-                className={`status-pill ${confirmation.is_current_version ? 'green' : ''}`}
-              >
-                {confirmation.is_current_version ? '현재 조건' : '과거 기록'}
-              </span>
-            </div>
-            <h2>
-              {confirmation.feature_type === 'purchase'
-                ? '저장한 구매 계획'
-                : `운영 계획 · ${CHOICE_TITLE[confirmation.selected_choice_key] ?? '저장한 안'}`}
-            </h2>
-            <p>
-              입력 {confirmation.version_no} ·{' '}
-              {dateTime(confirmation.confirmed_at)}
-            </p>
-            <div className="confirmation-card-footer">
-              <span>보존된 내용 확인</span>
-              <Icon name="arrow" size={18} />
-            </div>
-          </button>
+          <div className="confirmation-entry" key={confirmation.confirmation_id}>
+            <button
+              className="confirmation-card"
+              onClick={() => onOpen(confirmation.confirmation_id)}
+            >
+              <div className="choice-top">
+                <span className="eyebrow">
+                  {featureName(confirmation.feature_type)}
+                </span>
+                <span
+                  className={`status-pill ${confirmation.is_current_version ? 'green' : ''}`}
+                >
+                  {confirmation.is_current_version ? '현재 조건' : '과거 기록'}
+                </span>
+              </div>
+              <h2>
+                {confirmation.feature_type === 'purchase'
+                  ? '저장한 구매 계획'
+                  : `운영 계획 · ${CHOICE_TITLE[confirmation.selected_choice_key] ?? '저장한 안'}`}
+              </h2>
+              <p>
+                입력 {confirmation.version_no} ·{' '}
+                {dateTime(confirmation.confirmed_at)}
+              </p>
+              <div className="confirmation-card-footer">
+                <span>보존된 내용 확인</span>
+                <Icon name="arrow" size={18} />
+              </div>
+            </button>
+            <DeleteConfirmation id={confirmation.confirmation_id} onDeleted={(id) => {
+              history.remove((item) => item.confirmation_id === id)
+              onDeleted?.(id)
+            }} />
+          </div>
         ))}
       </div>
       {history.loading && (

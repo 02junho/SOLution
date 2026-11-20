@@ -67,8 +67,12 @@ class OperationResultServiceTest {
 		IdGenerator ids = mock(IdGenerator.class);
 		when(ids.next()).thenReturn(RESULT);
 		requestKeyLock = mock(RequestKeyLock.class);
+        var runs = mock(com.solution.session.service.CalculationRuns.class);
+        var run = mock(com.solution.session.service.CalculationRuns.Run.class);
+        org.mockito.Mockito.lenient().when(runs.start(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(call -> { ((Runnable) call.getArgument(2)).run(); return run; });
 		service = new OperationResultService(repository, simulationService, new LaborService(client), new CurrentOwner("demo-owner"), ids, mapper,
-				new TransactionTemplate(mock(PlatformTransactionManager.class)), requestKeyLock);
+				new TransactionTemplate(mock(PlatformTransactionManager.class)), requestKeyLock, runs);
 		saved = new HashMap<>();
 		currentVersion = new AtomicInteger(1);
 		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(source("demo-owner", "operation", 1, true)));
@@ -108,6 +112,45 @@ class OperationResultServiceTest {
 			return;
 		}
 		when(client.post(eq(path), any(), anyString(), any(ParameterizedTypeReference.class))).thenReturn(result);
+	}
+
+	@Test
+	void 필수_입력_누락_결과도_저장_잠금_후_삭제와_소유권을_확인한다() throws IOException {
+		var incomplete = new SessionVersion(SESSION, 510001, "operation", 1, "demo-owner", VERSION, 1, "{}",
+				OffsetDateTime.parse("2026-11-13T09:00:00+09:00"));
+		for (var changed : List.of(Optional.<SessionVersion>empty(), Optional.of(source("another-owner", "operation", 1, true)))) {
+			when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(incomplete), changed);
+			assertThatThrownBy(() -> service.run(SESSION, VERSION, "missing-deleted"))
+					.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND");
+		}
+		verify(repository, never()).insertResult(any(), any(), anyString());
+		verify(repository, never()).markStep(anyLong(), anyInt(), anyString());
+		verifyNoInteractions(simulationService, client);
+	}
+
+	@Test
+	void 삭제되지_않은_업무의_필수_입력_누락_결과는_저장한다() {
+		var incomplete = new SessionVersion(SESSION, 510001, "operation", 1, "demo-owner", VERSION, 1, "{}",
+				OffsetDateTime.parse("2026-11-13T09:00:00+09:00"));
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(Optional.of(incomplete));
+		assertThat(service.run(SESSION, VERSION, "missing-valid").status()).isEqualTo(com.solution.common.response.ResponseStatus.NEEDS_INPUT);
+		verify(repository).insertResult(any(), eq(incomplete), eq("missing-valid"));
+		verify(repository).markStep(SESSION, 1, "review");
+		verifyNoInteractions(simulationService, client);
+	}
+
+	@Test
+	void 계산_시작_잠금_후_삭제_소유권을_재검사한다() throws IOException {
+		when(repository.findSessionVersion(SESSION, VERSION)).thenReturn(
+				Optional.of(source("demo-owner", "operation", 1, true)), Optional.empty());
+		assertThatThrownBy(() -> service.run(SESSION, VERSION, "deleted-before-running"))
+				.hasFieldOrPropertyWithValue("detailCode", "SESSION_NOT_FOUND");
+		var order = inOrder(repository);
+		order.verify(repository).findSessionVersion(SESSION, VERSION);
+		order.verify(repository).lockSession(SESSION);
+		order.verify(repository).findSessionVersion(SESSION, VERSION);
+		verify(repository, never()).markStep(anyLong(), anyInt(), eq("running"));
+		verifyNoInteractions(simulationService, client);
 	}
 
 	@Test

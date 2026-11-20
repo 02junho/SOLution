@@ -3,6 +3,7 @@ package com.solution.session;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -168,6 +169,87 @@ class WorkConfirmationDetailApiIntegrationTest {
 				.andExpect(jsonPath("$.data.selected_snapshot_json.choice.total_krw").value(120400))
 				.andReturn().getResponse().getContentAsString();
 		assertThat(detail).doesNotContain("owner@example.test").contains("[이메일]");
+	}
+
+	@Test
+	void 업무를_삭제해도_확정_계획의_목록과_상세_스냅샷은_보존한다() throws Exception {
+		var before = jdbc.queryForMap("SELECT * FROM work_confirmation WHERE confirmation_id=3002");
+		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
+		mvc.perform(post("/api/v1/purchase/sessions/500/results")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"input_version_id\":1002}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.data.detail_code").value("SESSION_NOT_FOUND"));
+		mvc.perform(get("/api/v1/purchase/results/2002")).andExpect(status().isOk());
+		mvc.perform(delete("/api/v1/work-sessions/700")).andExpect(status().isOk());
+		mvc.perform(post("/api/v1/operation/sessions/700/results").header("Idempotency-Key", "deleted-operation")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"input_version_id\":1003}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.data.detail_code").value("SESSION_NOT_FOUND"));
+		mvc.perform(get("/api/v1/work-confirmations").param("session_id", "500"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(2));
+		mvc.perform(get("/api/v1/work-confirmations/3002"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.selected_snapshot_json.choice.total_krw").value(120400));
+		assertThat(jdbc.queryForMap("SELECT * FROM work_confirmation WHERE confirmation_id=3002")).isEqualTo(before);
+	}
+
+	@Test
+	void 저장한_계획을_삭제해도_대화와_계산_결과는_남고_현재_조건은_다시_저장할_수_있다() throws Exception {
+		jdbc.update("INSERT INTO session_message (message_id, session_id, role, content) VALUES (4001, 500, 'user', '내 대화')");
+		mvc.perform(delete("/api/v1/work-confirmations/3002")).andExpect(status().isOk());
+		mvc.perform(get("/api/v1/work-confirmations/3002")).andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/work-confirmations").param("session_id", "500"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(1))
+				.andExpect(jsonPath("$.data.items[0].confirmation_id").value(3001));
+		mvc.perform(get("/api/v1/work-sessions/500/messages"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].content").value("내 대화"));
+		mvc.perform(get("/api/v1/purchase/results/2002"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.confirmed_choice_key").value(nullValue()));
+		assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=500", String.class)).isEqualTo("result");
+		jdbc.update("UPDATE work_result SET summary_json='{\"choices\":[{\"choice_key\":\"purchase_1\",\"total_krw\":120400}],\"warnings\":[]}' WHERE result_id=2002");
+        String oldKey = jdbc.queryForObject("SELECT request_key FROM retired_confirmation_key WHERE result_id=2002", String.class);
+        mvc.perform(post("/api/v1/work-results/2002/confirm").header("Idempotency-Key", oldKey)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"expected_input_version_id\":1002,\"selected_choice_key\":\"purchase_1\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.data.detail_code").value("CONFIRMATION_DELETED"));
+		mvc.perform(post("/api/v1/work-results/2002/confirm").header("Idempotency-Key", "save-again-after-delete")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"expected_input_version_id\":1002,\"selected_choice_key\":\"purchase_1\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.is_new").value(true));
+	}
+
+	@Test
+	void 과거_계획_삭제는_현재_계획과_업무_단계를_바꾸지_않는다() throws Exception {
+		mvc.perform(delete("/api/v1/work-confirmations/3001")).andExpect(status().isOk());
+		mvc.perform(get("/api/v1/work-confirmations/3002")).andExpect(status().isOk());
+		assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=500", String.class)).isEqualTo("saved");
+	}
+
+	@Test
+	void 이어하기에서_업무를_지운_뒤에도_저장한_계획을_별도로_삭제할_수_있다() throws Exception {
+		mvc.perform(delete("/api/v1/work-sessions/500")).andExpect(status().isOk());
+		mvc.perform(delete("/api/v1/work-confirmations/3002")).andExpect(status().isOk());
+		mvc.perform(get("/api/v1/work-confirmations/3002")).andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/work-sessions/500")).andExpect(status().isNotFound());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM work_result WHERE result_id=2002", Integer.class)).isEqualTo(1);
+	}
+
+	@Test
+	void 남의_계획과_없는_계획은_삭제할_수_없다() throws Exception {
+		mvc.perform(delete("/api/v1/work-confirmations/3999"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.data.detail_code").value("CONFIRMATION_NOT_FOUND"));
+		mvc.perform(delete("/api/v1/work-confirmations/99999")).andExpect(status().isNotFound());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM work_confirmation WHERE confirmation_id=3999", Integer.class)).isEqualTo(1);
+	}
+
+	@Test
+	void 계획_삭제는_남은_운영_계산_수를_바꾸지_않는다() throws Exception {
+		jdbc.update("UPDATE work_session SET active_operation_runs=1, step='saved' WHERE session_id=700");
+		mvc.perform(delete("/api/v1/work-confirmations/3003")).andExpect(status().isOk());
+		assertThat(jdbc.queryForObject("SELECT active_operation_runs FROM work_session WHERE session_id=700", Integer.class)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT step FROM work_session WHERE session_id=700", String.class)).isEqualTo("running");
+		mvc.perform(delete("/api/v1/work-sessions/700")).andExpect(status().isBadRequest());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"abc", "0", "-1", "999999999999999999999999"})
+	void 잘못된_계획_삭제_번호는_400이다(String id) throws Exception {
+		mvc.perform(delete("/api/v1/work-confirmations/" + id)).andExpect(status().isBadRequest());
 	}
 
 	private void insert(long confirmation, long result, long version, long session, long store, int no, String feature) {

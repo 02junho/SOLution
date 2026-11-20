@@ -55,6 +55,10 @@ const write = async <T>(
     }),
   )
 export const workflowApi = {
+  deleteConfirmation: (id: number) =>
+    request<JsonObject>(`/v1/work-confirmations/${id}`, { method: 'DELETE' }).then(unwrap),
+  deleteSession: (id: number) =>
+    request<JsonObject>(`/v1/work-sessions/${id}`, { method: 'DELETE' }).then(unwrap),
   sessions: (feature?: FeatureType, cursor?: string | null) =>
     read<Page<SessionSummary>>(
       `/v1/work-sessions${query({ feature_type: feature, cursor, size: 20 })}`,

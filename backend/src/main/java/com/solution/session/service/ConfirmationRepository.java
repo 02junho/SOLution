@@ -11,6 +11,10 @@ public class ConfirmationRepository {
 
 	private final JdbcTemplate jdbc;
 
+    public boolean retiredKey(String key) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM retired_confirmation_key WHERE request_key=?)", Boolean.class, key));
+    }
+
 	public ConfirmationRepository(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
 	}

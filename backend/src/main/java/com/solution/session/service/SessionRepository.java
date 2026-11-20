@@ -75,7 +75,7 @@ public class SessionRepository {
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
 				LEFT JOIN work_version v ON v.session_id = s.session_id AND v.version_no = s.current_version
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new SessionContextRow(
 				rs.getLong("session_id"),
 				rs.getLong("store_id"),
@@ -106,7 +106,7 @@ public class SessionRepository {
 				SELECT s.session_id, s.feature_type, s.title, s.step, s.current_version, s.updated_at
 				FROM work_session s
 				JOIN store st ON st.store_id = s.store_id
-				WHERE st.owner_key = ?
+				WHERE st.owner_key = ? AND s.deleted_at IS NULL
 				""");
 		List<Object> args = new ArrayList<>();
 		args.add(ownerKey);
@@ -131,6 +131,17 @@ public class SessionRepository {
 				rs.getInt("current_version"),
 				rs.getObject("updated_at", OffsetDateTime.class)),
 				args.toArray());
+	}
+
+	/** 호출자는 세션 행 잠금을 보유해야 한다. 화면 단계가 바뀌어도 남은 운영 계산을 확인한다. */
+	public boolean hasActiveOperationRuns(long sessionId) {
+		return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+				"SELECT active_operation_runs > 0 FROM work_session WHERE session_id = ?", Boolean.class, sessionId));
+	}
+
+	/** 확정 기록과 참조 관계는 남기고 업무를 이어하기에서 삭제한다. */
+	public void deleteSession(long sessionId) {
+		jdbcTemplate.update("UPDATE work_session SET deleted_at = now() WHERE session_id = ?", sessionId);
 	}
 
 	// ===== events(대화·폼·질문답변) 처리용 =====
@@ -217,7 +228,7 @@ public class SessionRepository {
 				FROM work_version v
 				JOIN work_session s ON s.session_id = v.session_id
 				JOIN store st ON st.store_id = s.store_id
-				WHERE v.input_version_id = ?
+				WHERE v.input_version_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> new ConfirmationVersionRow(rs.getLong("session_id"), rs.getInt("version_no"),
 					rs.getInt("current_version"), rs.getString("owner_key"), rs.getString("input_confirmed_by"),
 					rs.getObject("input_confirmed_at", OffsetDateTime.class), rs.getString("step")), versionId)
@@ -241,7 +252,7 @@ public class SessionRepository {
 	public Optional<String> findSessionOwnerKey(long sessionId) {
 		return jdbcTemplate.query("""
 				SELECT st.owner_key FROM work_session s JOIN store st ON st.store_id = s.store_id
-				WHERE s.session_id = ?
+				WHERE s.session_id = ? AND s.deleted_at IS NULL
 				""", (rs, i) -> rs.getString("owner_key"), sessionId).stream().findFirst();
 	}
 
@@ -252,7 +263,7 @@ public class SessionRepository {
 				FROM session_message m
 				JOIN work_session s ON s.session_id = m.session_id
 				JOIN store st ON st.store_id = s.store_id
-				WHERE m.session_id = ? AND st.owner_key = ?
+				WHERE m.session_id = ? AND st.owner_key = ? AND s.deleted_at IS NULL
 				""";
 		List<Object> args = new ArrayList<>();
 		args.add(sessionId);

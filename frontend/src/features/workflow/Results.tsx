@@ -1,3 +1,4 @@
+import DeleteConfirmation from './DeleteConfirmation'
 import { useEffect, useState } from 'react'
 import { workflowApi } from '../../api/workflowApi'
 import { Alert, Icon, Modal } from '../../components/common/Ui'
@@ -469,9 +470,11 @@ export default function Results({
 export function ConfirmationModal({
   id,
   onClose,
+  onDeleted,
 }: {
   id: number
   onClose: () => void
+  onDeleted?: (id: number) => void
 }) {
   const [detail, setDetail] = useState<ConfirmationDetail | null>(null)
   const [error, setError] = useState('')
@@ -521,6 +524,7 @@ export function ConfirmationModal({
         </p>
       ) : (
         <div className="confirmation-detail">
+          <DeleteConfirmation id={id} onDeleted={(deleted) => { onDeleted?.(deleted); onClose() }} />
           <div className="detail-badges">
             <span className="status-pill">
               {featureName(detail.feature_type)}
