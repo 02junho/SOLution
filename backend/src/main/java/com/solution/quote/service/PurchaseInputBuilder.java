@@ -17,7 +17,7 @@ import com.solution.common.exception.ApiException;
  * 견적 정리 결과(필요량 미리보기·품목 사전·견적 배치)를 구매 최적화 입력(purchase.v1) 한 덩어리로 묶는다.
  * 작성: 신준호 (구매 최적화)
  *
- * <p>값을 지어내지 않는다. 견적에 없는 기간·예산·배송 횟수·최소 주문 금액은 null로 두고,
+ * <p>값을 지어내지 않는다. 견적에 없는 기간·예산·배송 횟수와 (견적에 적히지 않은) 최소 주문 금액은 null로 두고,
  * 업무 입력 저장 단계(collectUnknown)가 사장님께 질문하게 한다. 재고 차감과 팩 단위 올림은 최적화가 맡는다.
  * 비교할 수 없는 견적 줄은 빼고 excluded_lines에 이유를 남긴다. 필요한 품목에 쓸 견적이 하나도 없으면 400.
  */
@@ -174,7 +174,7 @@ public final class PurchaseInputBuilder {
 		Map<String, Object> supplier = new LinkedHashMap<>();
 		supplier.put("supplier_id", id);
 		supplier.put("supplier_name", name);
-		// 견적 문자에는 최소 주문 금액이 거의 없다. 0으로 채우지 않고 사장님께 묻는다.
+		// 견적에 최소 주문 금액이 없으면 0으로 채우지 않고 사장님께 묻는다. 있으면 배송 조건과 함께 붙인다.
 		supplier.put("minimum_order_krw", null);
 		supplier.put("delivery_fee_krw", null);
 		supplier.put("free_delivery_min_krw", null);
@@ -182,7 +182,7 @@ public final class PurchaseInputBuilder {
 	}
 
 	/**
-	 * 배송 조건(배송비·무료배송 기준)은 배치 하나에서 한 묶음으로 가져온다. 같은 배치 안의 여러 줄은 합치지만,
+	 * 배송 조건(배송비·무료배송 기준·최소 주문 금액)은 배치 하나에서 한 묶음으로 가져온다. 같은 배치 안의 여러 줄은 합치지만,
 	 * 서로 다른 배치의 값을 섞지 않는다. 같은 거래처의 조건이 배치마다 다르면 요청 순서상 뒤 배치(최근 견적)의
 	 * 묶음 전체를 쓰고, 바뀐 내용을 delivery_conflicts에 남긴다.
 	 */
@@ -198,32 +198,37 @@ public final class PurchaseInputBuilder {
 			if (id == null || !suppliers.containsKey(id)) {
 				continue;
 			}
-			Long[] pair = pairs.computeIfAbsent(id, key -> new Long[2]);
+			Long[] pair = pairs.computeIfAbsent(id, key -> new Long[3]);
 			if (pair[0] == null) {
 				pair[0] = integer(row.get("fee_amount"));
 			}
 			if (pair[1] == null) {
 				pair[1] = integer(row.get("free_shipping_minimum"));
 			}
+			if (pair[2] == null) {
+				pair[2] = integer(row.get("minimum_order_amount"));
+			}
 		}
 		pairs.forEach((id, pair) -> {
-			if (pair[0] == null && pair[1] == null) {
+			if (pair[0] == null && pair[1] == null && pair[2] == null) {
 				return;
 			}
 			Map<String, Object> supplier = suppliers.get(id);
 			Object fee = supplier.get("delivery_fee_krw");
 			Object free = supplier.get("free_delivery_min_krw");
+			Object minimum = supplier.get("minimum_order_krw");
 			if (deliveryBatch.containsKey(id) && !(java.util.Objects.equals(fee, pair[0])
-					&& java.util.Objects.equals(free, pair[1]))) {
+					&& java.util.Objects.equals(free, pair[1]) && java.util.Objects.equals(minimum, pair[2]))) {
 				Map<String, Object> conflict = new LinkedHashMap<>();
 				conflict.put("supplier_id", id);
 				conflict.put("replaced_batch_id", deliveryBatch.get(id));
-				conflict.put("replaced", java.util.Arrays.asList(fee, free));
+				conflict.put("replaced", java.util.Arrays.asList(fee, free, minimum));
 				conflict.put("used_batch_id", batch.batchId());
 				conflicts.add(conflict);
 			}
 			supplier.put("delivery_fee_krw", pair[0]);
 			supplier.put("free_delivery_min_krw", pair[1]);
+			supplier.put("minimum_order_krw", pair[2]);
 			deliveryBatch.put(id, batch.batchId());
 		});
 	}
