@@ -33,6 +33,10 @@ export default function GuideCards({
       closeOnBackdrop
     >
       <div className="guide">
+        {/* 카드가 바뀔 때 화면 낭독기에 번호와 제목을 알린다. 교체되는 카드 밖에 두어 늘 같은 영역으로 남긴다. */}
+        <p className="sr-only" aria-live="polite">
+          {`${index + 1} / ${GUIDE_SLIDES.length} ${slide.eyebrow}: ${slide.title.replace(/\n/g, ' ')}`}
+        </p>
         <section
           className="guide-slide"
           key={slide.key}
@@ -70,19 +74,14 @@ export default function GuideCards({
           >
             {index === 0 ? '건너뛰기' : '이전'}
           </button>
-          {index < last ? (
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => setIndex(index + 1)}
-            >
-              다음 <Icon name="arrow" size={18} />
-            </button>
-          ) : (
-            <button type="button" className="button primary" onClick={onStart}>
-              첫 업무 시작하기 <Icon name="arrow" size={18} />
-            </button>
-          )}
+          {/* 한 버튼을 계속 쓴다. 마지막 장에서 글자만 바뀌어 누른 뒤에도 포커스가 버튼에 남는다. */}
+          <button
+            type="button"
+            className="button primary"
+            onClick={() => (index < last ? setIndex(index + 1) : onStart())}
+          >
+            {index < last ? '다음' : '첫 업무 시작하기'} <Icon name="arrow" size={18} />
+          </button>
         </div>
       </div>
     </Modal>

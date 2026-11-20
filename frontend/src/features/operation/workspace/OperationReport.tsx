@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadOperationTrace } from '../../../api/operationApi'
 import { Alert, Icon, Modal } from '../../../components/common/Ui'
@@ -561,21 +561,6 @@ export default function OperationReport({
   const engines = detail?.simulation_choices ?? []
   const plan = plans.find((p) => p.choice_key === selected) ?? plans[0]
   const notes = (summary.warnings ?? []).filter((w) => !w.requires_ack)
-  // 창 바깥(어두운 배경)을 누르면 닫는다. 공통 Modal은 건드리지 않고 이 창의 dialog에만 붙인다.
-  const bodyRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const dialog = bodyRef.current?.closest('dialog')
-    if (!dialog) return
-    const onClick = (event: MouseEvent) => {
-      if (event.target !== dialog) return
-      const box = dialog.getBoundingClientRect()
-      const inside =
-        event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom
-      if (!inside) onClose()
-    }
-    dialog.addEventListener('click', onClick)
-    return () => dialog.removeEventListener('click', onClick)
-  }, [onClose])
   return (
     <Modal
       title="세 운영안 자세히 비교"
@@ -584,7 +569,7 @@ export default function OperationReport({
       closeOnBackdrop
       onClose={onClose}
     >
-      <div className="opw-wide" ref={bodyRef}>
+      <div className="opw-wide">
         <div className="opw-report-head">
           <span className="status-pill opw-sim">모의 조건</span>
           <p>

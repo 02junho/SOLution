@@ -54,6 +54,27 @@ test('카드 4장을 다음으로 넘기고 마지막에서 첫 업무 시작하
   assert.deepEqual(calls, ['start'])
 })
 
+test('카드가 바뀌면 낭독 영역에 번호와 제목을 알리고, 넘겨도 같은 버튼에 포커스가 남는다', async () => {
+  const c = await mount([])
+  const live = c.querySelector('[aria-live="polite"]')
+  assert.ok(live)
+  assert.match(live.textContent, /^1 \/ 4 /)
+  const next = c.querySelector('.guide-footer .primary')
+  const back = c.querySelector('.guide-footer .secondary')
+  next.focus()
+  for (let i = 1; i < GUIDE_SLIDES.length; i++) {
+    await click(next)
+    assert.equal(c.querySelector('.guide-footer .primary'), next, '마지막 장에서도 같은 버튼')
+    assert.equal(document.activeElement, next)
+    assert.ok(live.isConnected && c.querySelector('[aria-live="polite"]') === live, '낭독 영역은 교체되지 않는다')
+    assert.ok(live.textContent.startsWith(`${i + 1} / 4 ${GUIDE_SLIDES[i].eyebrow}`))
+  }
+  assert.match(next.textContent, /첫 업무 시작하기/)
+  back.focus()
+  await click(back)
+  assert.equal(document.activeElement, back)
+})
+
 test('첫 장의 건너뛰기는 닫고, 이전·점으로 원하는 장에 간다', async () => {
   const calls = []
   const c = await mount(calls)
