@@ -53,6 +53,7 @@ export function MaterialsTable({ data, refresh, busy }: {
 }
 
 function shipping(r: Snapshot['quotes']['suppliers'][number]['shipping_rules'][number]) {
+  if (r.condition === 'MIN_ORDER') return Number(r.threshold_amount) === 0 ? '최소 주문 없음' : `최소 주문 ${qty(r.threshold_amount, '원')}`
   const amount = r.fee_amount != null && Number(r.fee_amount) === 0 ? '무료' : qty(r.fee_amount, '원')
   const suffix = r.condition === 'BELOW' ? '미만' : r.condition === 'AT_LEAST' ? '이상' : ''
   if (suffix) return `${qty(r.threshold_amount, '원')} ${suffix} ${amount}`
