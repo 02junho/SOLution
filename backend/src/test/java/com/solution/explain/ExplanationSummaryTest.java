@@ -49,6 +49,26 @@ class ExplanationSummaryTest {
 	}
 
 	@Test
+	void 같은_조합인_안은_가리키는_안의_금액과_배송과_거래처를_채운다() {
+		Map<String, Object> stored = read("""
+				{'choices': [
+				  {'choice_key': 'purchase_1', 'label': '총비용 최소', 'available': true, 'total_krw': 120400,
+				   'delivery_count': 1, 'warning_ids': ['VAT_UNKNOWN'],
+				   'supplier_totals': [{'supplier_name': '카페 도매몰'}]},
+				  {'choice_key': 'purchase_2', 'label': '배송 1회', 'available': true, 'same_as': 'purchase_1'},
+				  {'choice_key': 'purchase_3', 'label': '고리', 'available': true, 'same_as': 'purchase_3'}],
+				 'warnings': [], 'assumptions': []}""");
+
+		List<Map<String, Object>> choices = (List<Map<String, Object>>) ExplanationSummary.purchase(stored).get("choices");
+
+		assertThat(choices.get(1)).containsEntry("label", "배송 1회").containsEntry("total_krw", 120400)
+				.containsEntry("delivery_count", 1).containsEntry("same_as", "purchase_1")
+				.containsEntry("warning_ids", List.of("VAT_UNKNOWN")).containsEntry("suppliers", List.of("카페 도매몰"));
+		// 자기 자신을 가리키는 잘못된 값은 따라가지 않고 원래 안 그대로 둔다.
+		assertThat(choices.get(2)).containsEntry("total_krw", null);
+	}
+
+	@Test
 	void 운영은_하루_인건비와_대기_지표와_추천을_넘긴다() {
 		Map<String, Object> stored = read("""
 				{'choices': [

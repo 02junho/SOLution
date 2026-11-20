@@ -25,6 +25,8 @@ final class ExplanationText {
 	private static final Pattern CHEAPEST = Pattern.compile("으로 가장 쌉니다\\(다음 안보다 (\\S+원) 적음\\)\\.");
 	private static final Pattern NOUN_ENDING = Pattern.compile("(\\S)입니다(?=[.!,)]|$)");
 	private static final String SIMILAR_TO_WARNING = "실제 매장과 다를 수";
+	private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
+	private static final Pattern SIMULATION_WORDS = Pattern.compile("모의\\s*조건|시뮬레이션");
 
 	@SuppressWarnings("unchecked")
 	static Map<String, Object> polish(Map<String, Object> data, String featureType, Map<String, Object> summary) {
@@ -61,12 +63,19 @@ final class ExplanationText {
 				if (!(item instanceof String caveat)) {
 					continue;
 				}
-				String polished = text(caveat, operation);
-				boolean repeatsWarning = polished.contains(SIMILAR_TO_WARNING)
-						&& warningMessages.stream().anyMatch(m -> m.contains(SIMILAR_TO_WARNING));
-				// 매입은 시뮬레이션이 아니라 견적으로 푼 최적화다. AI가 붙인 "모의 조건" 주의는 맞지 않아 뺀다.
-				boolean wrongForPurchase = !operation && polished.contains("모의");
-				if (!repeatsWarning && !wrongForPurchase && !caveats.contains(polished)) {
+				// 주의 하나에 여러 문장이 있을 수 있어, 겹치거나 맞지 않는 문장만 빼고 나머지 정보는 남긴다.
+				List<String> kept = new ArrayList<>();
+				for (String sentence : SENTENCE_END.split(text(caveat, operation).trim())) {
+					boolean repeatsWarning = sentence.contains(SIMILAR_TO_WARNING)
+							&& warningMessages.stream().anyMatch(m -> m.contains(SIMILAR_TO_WARNING));
+					// 매입은 시뮬레이션이 아니라 견적으로 푼 최적화다. AI가 붙인 모의 조건·시뮬레이션 문장은 맞지 않아 뺀다.
+					boolean wrongForPurchase = !operation && SIMULATION_WORDS.matcher(sentence).find();
+					if (!sentence.isBlank() && !repeatsWarning && !wrongForPurchase) {
+						kept.add(sentence.trim());
+					}
+				}
+				String polished = String.join(" ", kept);
+				if (!polished.isEmpty() && !caveats.contains(polished)) {
 					caveats.add(polished);
 				}
 			}

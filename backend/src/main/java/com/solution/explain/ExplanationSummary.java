@@ -28,19 +28,29 @@ final class ExplanationSummary {
 	static final int WAIT_THRESHOLD_MINUTES = 5;
 
 	static Map<String, Object> purchase(Map<String, Object> stored) {
+		Map<Object, Map<String, Object>> byKey = new LinkedHashMap<>();
+		for (Map<String, Object> choice : maps(stored.get("choices"))) {
+			byKey.put(choice.get("choice_key"), choice);
+		}
 		List<Map<String, Object>> choices = new ArrayList<>();
 		for (Map<String, Object> choice : maps(stored.get("choices"))) {
 			if (Boolean.FALSE.equals(choice.get("available"))) {
 				continue;
 			}
+			// "same_as"인 안(예: 배송 1회 안이 총비용 최소 안과 같은 조합)은 금액·배송·거래처가 비어 있다.
+			// 확정할 때(WorkResultConfirmService)처럼 가리키는 안으로 따라가 값을 채운다. 이름은 원래 안 이름을 쓴다.
+			Map<String, Object> resolved = resolve(choice, byKey);
 			Map<String, Object> row = new LinkedHashMap<>();
 			row.put("choice_key", choice.get("choice_key"));
 			row.put("label", choice.get("label"));
-			row.put("total_krw", choice.get("total_krw"));
-			row.put("delivery_count", choice.get("delivery_count"));
-			row.put("warning_ids", choice.getOrDefault("warning_ids", List.of()));
+			row.put("total_krw", resolved.get("total_krw"));
+			row.put("delivery_count", resolved.get("delivery_count"));
+			row.put("warning_ids", resolved.getOrDefault("warning_ids", List.of()));
+			if (resolved != choice) {
+				row.put("same_as", choice.get("same_as"));
+			}
 			List<String> suppliers = new ArrayList<>();
-			for (Map<String, Object> supplier : maps(choice.get("supplier_totals"))) {
+			for (Map<String, Object> supplier : maps(resolved.get("supplier_totals"))) {
 				if (supplier.get("supplier_name") instanceof String name) {
 					suppliers.add(name);
 				}
@@ -95,6 +105,20 @@ final class ExplanationSummary {
 		summary.put("warnings", warnings(stored.get("warnings")));
 		summary.put("assumptions", strings(stored.get("assumptions")));
 		return summary;
+	}
+
+	/** same_as를 따라가 실제 값을 가진 안을 찾는다. 고리가 있거나 대상이 없으면 원래 안을 그대로 쓴다. */
+	private static Map<String, Object> resolve(Map<String, Object> choice, Map<Object, Map<String, Object>> byKey) {
+		Map<String, Object> current = choice;
+		java.util.Set<Object> visited = new java.util.HashSet<>();
+		while (current.get("same_as") != null && visited.add(current.get("choice_key"))) {
+			Map<String, Object> next = byKey.get(current.get("same_as"));
+			if (next == null) {
+				return choice;
+			}
+			current = next;
+		}
+		return current.get("same_as") == null ? current : choice;
 	}
 
 	private static List<Map<String, Object>> warnings(Object value) {

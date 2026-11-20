@@ -87,4 +87,32 @@ class ExplanationTextTest {
 
 		assertThat((List<String>) explanation.get("caveats")).containsExactly("거래처 1곳을 배송 1회로 보는 가정이 적용됐어요.");
 	}
+
+	@Test
+	void 겹치는_문장만_빼고_같은_주의의_다른_정보는_남긴다() {
+		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
+				"per_choice", List.of(),
+				"warnings_echo", List.of(Map.of("warning_id", "SIMULATED_CONDITIONS",
+						"message", "모의 조건: 가정에 근거한 값이며 실제 매장과 다를 수 있어요.")),
+				"caveats", List.of("실제 매장과 다를 수 있어요. 휴게 시간은 반영하지 않았어요.")));
+
+		Map<String, Object> explanation = (Map<String, Object>) ExplanationText.polish(data, "operation",
+				Map.of("recommended_choice_key", "ALT_A")).get("explanation");
+
+		assertThat((List<String>) explanation.get("caveats")).containsExactly("휴게 시간은 반영하지 않았어요.");
+	}
+
+	@Test
+	void 매입에서_규모의처럼_모의가_들어간_정상_문장은_남긴다() {
+		Map<String, Object> data = Map.of("source", "llm", "explanation", Map.of("headline", "x",
+				"per_choice", List.of(), "warnings_echo", List.of(),
+				"caveats", List.of("구매 규모의 변화에 따라 할인 조건이 달라질 수 있습니다.",
+						"이 결과는 모의 조건으로 계산한 것이에요. 거래처 조건은 견적 그대로예요.")));
+
+		Map<String, Object> explanation = (Map<String, Object>) ExplanationText.polish(data, "purchase", Map.of())
+				.get("explanation");
+
+		assertThat((List<String>) explanation.get("caveats")).containsExactly(
+				"구매 규모의 변화에 따라 할인 조건이 달라질 수 있어요.", "거래처 조건은 견적 그대로예요.");
+	}
 }
