@@ -71,11 +71,12 @@ step1() {
 }
 
 step2() {
-  title 2 "DB 혼자 (PostgreSQL 응답 · Flyway가 만든 테이블 9개)"
+  title 2 "DB 혼자 (PostgreSQL 응답 · Flyway가 만든 테이블 11개)"
   if "$DOCKER" compose exec -T db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then ok "DB가 접속을 받음"; else no "DB가 응답하지 않음" "docker compose logs db"; return; fi
   local n
   n=$(psql_q "select count(*) from information_schema.tables where table_schema = 'public' and table_name <> 'flyway_schema_history'")
-  [ "$n" = "9" ] && ok "테이블 9개" || no "테이블 ${n:-0}개 (9개여야 함)" "Spring이 뜰 때 Flyway가 만듭니다. docker compose logs backend"
+  # V6까지: Spring 9개(store·work_*·session_message·quote_demo_resource·calculation_run·retired_confirmation_key) + FastAPI 2개(execution_log·rag_chunk). CI(ci.yml)와 같은 수.
+  [ "$n" = "11" ] && ok "테이블 11개" || no "테이블 ${n:-0}개 (11개여야 함)" "Spring이 뜰 때 Flyway가 만듭니다. docker compose logs backend"
 }
 
 step3() {
