@@ -1,0 +1,253 @@
+/* 사용법 카드. 처음 쓰는 시니어 사장님 기준으로 글씨와 버튼을 크게 둔다. */
+.guide {
+  padding: 20px 24px 20px;
+}
+/* 카드 창은 다른 넓은 창(790px)보다 좁게 */
+.modal.wide:has(.guide) {
+  max-width: 660px;
+}
+.guide-slide {
+  min-height: 340px;
+  animation: guide-in 0.2s ease-out;
+}
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.guide-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+.guide-eyebrow span {
+  background: #eef3ff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+.guide-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 6px 0 16px;
+  white-space: pre-line;
+}
+
+/* 1장: 두 기능 */
+.guide-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.guide-tile {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: #fbfcfe;
+}
+.guide-tile strong {
+  display: block;
+  font-size: 17px;
+  color: var(--ink);
+  margin: 10px 0 4px;
+}
+.guide-tile p {
+  font-size: 15px;
+  color: #3d4250;
+  line-height: 1.65;
+}
+.guide-tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #eef3ff;
+  color: var(--green);
+}
+
+/* 2장: 다섯 단계 */
+.guide-steps {
+  list-style: none;
+  counter-reset: guide-step;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.guide-steps li {
+  counter-increment: guide-step;
+  display: grid;
+  grid-template-columns: 32px 110px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 15px;
+}
+.guide-steps li::before {
+  content: counter(guide-step);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-weight: 700;
+}
+.guide-steps strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+.guide-steps span {
+  color: #3d4250;
+}
+
+/* 3장: 말 예시 */
+.guide-quotes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.guide-quotes li {
+  display: grid;
+  grid-template-columns: 64px 22px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px 12px 12px 2px;
+  background: #f3f6fd;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+.guide-quotes small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+.guide-quotes svg {
+  color: var(--green);
+}
+.guide-note {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #3d4250;
+}
+
+/* 4장: 알아 둘 것 */
+.guide-checks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.guide-checks li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #2c3140;
+}
+.guide-checks svg {
+  color: var(--green);
+  margin-top: 3px;
+}
+
+/* 넘기기 */
+.guide-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 16px 0 2px;
+}
+.guide-dots button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
+  background: #cfd4df;
+  transition: width 0.15s;
+}
+.guide-dots button.active {
+  width: 30px;
+  background: var(--green);
+}
+.guide-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.guide-footer .button {
+  min-height: 44px;
+  min-width: 110px;
+  font-size: 15px;
+  padding: 9px 18px;
+}
+
+@media (max-width: 690px) {
+  .guide {
+    padding: 18px 16px 18px;
+  }
+  .guide-slide {
+    min-height: 0;
+  }
+  .guide-title {
+    font-size: 21px;
+  }
+  .guide-tiles {
+    grid-template-columns: 1fr;
+  }
+  .guide-steps li {
+    grid-template-columns: 34px 1fr;
+  }
+  .guide-steps li span {
+    grid-column: 2;
+  }
+  .guide-quotes li {
+    grid-template-columns: 22px 1fr;
+  }
+  .guide-quotes small {
+    grid-column: 1 / -1;
+  }
+  .guide-footer {
+    position: sticky;
+    bottom: 0;
+    margin: 12px -16px -18px;
+    padding: 12px 16px 16px;
+    background: #fff;
+  }
+  .guide-footer .button {
+    flex: 1;
+    min-width: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-slide {
+    animation: none;
+  }
+  .guide-dots button {
+    transition: none;
+  }
+}

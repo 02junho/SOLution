@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import GuideCards from './features/guide/GuideCards'
+import { guideAutoOpen, markGuideSeen } from './features/guide/guideSlides'
 import OperationResultsPage from './features/operation/OperationResultsPage'
 import { demoApi } from './features/purchase-preparation/demo'
 import {
@@ -37,6 +39,8 @@ function WorkflowApp() {
   const [newOpen, setNewOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmation, setConfirmation] = useState<number | null>(null)
+  // 사용법 카드: 처음 방문이면 업무 첫 화면에서만 한 번 자동으로 연다(guideAutoOpen).
+  const [guideOpen, setGuideOpen] = useState(() => guideAutoOpen(window.location.hash))
   const [deletedPlanIds, setDeletedPlanIds] = useState<number[]>([])
   function planDeleted(id: number) {
     setConfirmation((current) => current === id ? null : current)
@@ -86,6 +90,11 @@ function WorkflowApp() {
       setFeature(type)
       window.location.hash = `/work/${id}`
     }
+  }
+
+  function closeGuide() {
+    markGuideSeen()
+    setGuideOpen(false)
   }
 
   if (operationPage) return <OperationResultsPage />
@@ -164,6 +173,7 @@ function WorkflowApp() {
             onNew={() => setNewOpen(true)}
             onHistory={() => setHistoryOpen(true)}
             onSaved={setConfirmation}
+            onGuide={() => setGuideOpen(true)}
           />
         )}
       </main>
@@ -191,6 +201,16 @@ function WorkflowApp() {
             if (workspace.invalidate(id)) {
               window.location.hash = '/work'
             }
+          }}
+        />
+      )}
+
+      {guideOpen && (
+        <GuideCards
+          onClose={closeGuide}
+          onStart={() => {
+            closeGuide()
+            setNewOpen(true)
           }}
         />
       )}

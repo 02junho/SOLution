@@ -581,6 +581,7 @@ export default function OperationReport({
       title="세 운영안 자세히 비교"
       description={`07~19시 · 같은 손님 조건으로 ${summary.completed_repetitions ?? 30}번 돌린 결과예요. 고른 안의 배치표와 대기열을 아래에서 봐요.`}
       wide
+      closeOnBackdrop
       onClose={onClose}
     >
       <div className="opw-wide" ref={bodyRef}>
