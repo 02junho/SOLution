@@ -78,7 +78,7 @@ SOLution/
 
 - 기능 코드는 `features/`(화면), `purchase/`·`operation/`(Spring), `tools/`(FastAPI) 아래 **기능별 폴더**에 둡니다.
 - 여러 기능이 같이 쓰는 코드는 `common/`(화면·Spring), `core/`(FastAPI)에만 둡니다.
-- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`, FastAPI는 `execution_log`·`rag_chunk`를 씁니다. 예외로 최종 확정 기록은 확정을 처리하는 Spring이 `execution_log`에 남깁니다(`log_type='tool'`, `name='confirm'`, 가드레일 명세 GR-19). 이 기록은 확정과 다른 트랜잭션에서 최선 시도로 남기므로, 기록이 실패해도 확정은 그대로 성공합니다. 확정의 원본은 `work_confirmation`이고, `execution_log`의 확정 기록은 빠질 수 있는 참고용입니다.
+- DB는 테이블마다 쓰는 서버가 정해져 있습니다. Spring은 `store`·`work_session`·`work_version`·`work_result`·`work_confirmation`·`session_message`·`calculation_run`·`retired_confirmation_key`·`quote_demo_resource`, FastAPI는 `execution_log`·`rag_chunk`를 씁니다. 예외로 최종 확정 기록은 확정을 처리하는 Spring이 `execution_log`에 남깁니다(`log_type='tool'`, `name='confirm'`, 가드레일 명세 GR-19). 이 기록은 확정과 다른 트랜잭션에서 최선 시도로 남기므로, 기록이 실패해도 확정은 그대로 성공합니다. 확정의 원본은 `work_confirmation`이고, `execution_log`의 확정 기록은 빠질 수 있는 참고용입니다.
 
 ---
 
@@ -197,7 +197,7 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | --- | --- |
 | 0 | `.env` 필수 칸, `DEMO_SEED=true` |
 | 1 | 컨테이너 세 개(db · ai-server · backend) |
-| 2 | DB 혼자, Flyway 테이블 9개 |
+| 2 | DB 혼자, Flyway 테이블 11개 |
 | 3 | FastAPI 혼자, FastAPI → DB (`/health`) |
 | 4 | Spring 혼자, Spring → DB, Spring → FastAPI (`/api/v1/system/health`) |
 | 5 | API 문서(`/docs`) |
