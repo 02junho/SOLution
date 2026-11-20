@@ -3,7 +3,7 @@ import type {FormEvent} from 'react'
 import {quoteIntegrationApi, QuoteRequestError} from '../api/quoteIntegrationApi'
 import type {Trace} from '../api/quoteIntegrationApi'
 import {MaterialsTable, QuotesTable, SalesTable} from '../features/purchase-preparation/Tables'
-import {dictionary, inventory, manualQuote, materialsTable, mergeBatches, presentIssues, quotesTable, recipes, sales as sampleSales, sampleQuotes, sampleText, tableWithActuals, upsertBatch} from '../features/purchase-preparation/quoteTestData'
+import {dictionary, inventory, manualQuote, materialsTable, presentIssues, quotesTable, recipes, sales as sampleSales, sampleText, tableWithActuals} from '../features/purchase-preparation/quoteTestData'
 import type {Batch, Dictionary, ManualQuote, Preview, Sales} from '../types/quoteIntegration'
 import '../features/purchase-preparation/styles.css'
 import '../features/purchase-preparation/integration.css'
@@ -26,18 +26,16 @@ export default function QuoteIntegrationPage() {
   const [dict, setDict] = useState<Dictionary | null>(null)
   const [sales, setSales] = useState<Sales | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
-  // 거래처마다 따로 분석한 견적 묶음. 구매안을 만들 때 모두 함께 넘긴다.
-  const [batches, setBatches] = useState<Batch[]>([])
-  const batch = mergeBatches(batches)
+  const [batch, setBatch] = useState<Batch | null>(null)
   const [source, setSource] = useState(sampleText)
-  const [supplier, setSupplier] = useState(sampleQuotes[0].supplier_name)
+  const [supplier, setSupplier] = useState('A식자재')
   const [useRag, setUseRag] = useState(false)
   const [manualJson, setManualJson] = useState(json(manualQuote))
   const api = quoteIntegrationApi(store.trim(), id.trim(), entry => setLog(list => [entry, ...list].slice(0, 24)))
   const valid = !!store.trim() && uuid.test(id.trim())
 
   function clearContext() {
-    setDict(null); setSales(null); setPreview(null); setBatches([]); setBatchId('')
+    setDict(null); setSales(null); setPreview(null); setBatch(null); setBatchId('')
     setChat([]); setLog([]); setError('')
   }
   function add(role: Chat['role'], text: string) { setChat(list => [...list, {role, text}]) }
@@ -65,24 +63,8 @@ export default function QuoteIntegrationPage() {
     setSales(await api.sales())
   }
   function showBatch(data: Batch) {
-    setBatches(list => upsertBatch(list, data)); setBatchId(data.quote_batch_id)
+    setBatch(data); setBatchId(data.quote_batch_id)
     add('assistant', `견적 ${data.normalization.items.length}행을 정리했습니다. 분석 묶음 ID: ${data.quote_batch_id}`)
-  }
-  // 샘플 거래처 12곳의 견적 문자를 한 곳씩 차례로 분석한다. 이미 분석한 거래처는 건너뛴다.
-  function analyzeSamples() {
-    void run('샘플 견적 12곳 분석', async () => {
-      const done = new Set(batches.flatMap(b => b.normalization.items.map(r => r.supplier_name)))
-      for (const [i, q] of sampleQuotes.entries()) {
-        if (done.has(q.supplier_name)) continue
-        setBusy(`샘플 견적 분석 ${i + 1}/${sampleQuotes.length} · ${q.supplier_name}`)
-        add('user', `[${q.supplier_name}] ${q.text}`)
-        showBatch(await api.analyze(q.text, q.supplier_name, useRag))
-      }
-    })
-  }
-  function pickSample(name: string) {
-    const q = sampleQuotes.find(x => x.supplier_name === name)
-    if (q) { setSupplier(q.supplier_name); setSource(q.text) }
   }
   function send(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -95,7 +77,7 @@ export default function QuoteIntegrationPage() {
   function makePurchase() {
     if (!batch) return
     void run('구매안 만들기', async () => {
-      const result = await api.purchaseInput(Number(import.meta.env.VITE_STORE_ID ?? 1), batches.map(b => b.quote_batch_id))
+      const result = await api.purchaseInput(Number(import.meta.env.VITE_STORE_ID ?? 1), [batch.quote_batch_id])
       // 빈 값이 있으면 업무 화면이 질문 카드와 조건 폼으로 이어서 받는다.
       window.location.assign(`${window.location.pathname}#/work/${result.data.session_id}`)
     })
@@ -125,16 +107,14 @@ export default function QuoteIntegrationPage() {
       <section className="pp-card pp-chat">
         <div className="pp-chat-head"><h2>견적 입력</h2><span className="pp-chip">실서버 요청</span></div>
         <div className="pp-messages" role="log" aria-label="견적 처리 내역">
-          {!chat.length && <p>샘플 데이터를 등록한 다음, 거래처 견적 문자를 붙여 넣거나 "샘플 견적 12곳 분석"을 눌러 보세요.</p>}
+          {!chat.length && <p>샘플 데이터를 등록한 다음, 직접 입력으로 견적을 시험해 보세요.</p>}
           {chat.map((m, i) => <div key={i} className={`pp-bubble ${m.role}`}>{m.text}</div>)}
           {batch && <div className="pp-bubble assistant">
             <p>거래처 확인 상태를 바꿀 수 있습니다. 부가세 답변과는 별개입니다.</p>
             {suppliers.map(s => <div key={s.supplier_id} className="pp-options">
               <span>{s.supplier_name} · {batch.confirmations[s.supplier_id] ? '확인 완료' : '미확인'}</span>
               <button className="pp-plain" disabled={disabled} onClick={() => void run('거래처 확인', async () => {
-                const owner = batches.find(b => b.normalization.items.some(r => r.supplier_name === s.supplier_id)) ?? batches[batches.length - 1]
-                const updated = await api.confirm(owner.quote_batch_id, s.supplier_id, !batch.confirmations[s.supplier_id])
-                setBatches(list => upsertBatch(list, updated))
+                setBatch(await api.confirm(batch.quote_batch_id, s.supplier_id, !batch.confirmations[s.supplier_id]))
               })}>{batch.confirmations[s.supplier_id] ? '확인 취소' : '거래처 확인'}</button>
             </div>)}
           </div>}
@@ -149,18 +129,10 @@ export default function QuoteIntegrationPage() {
             showBatch(await api.manual(body))
           })}>직접 입력 전송</button>
         </details>
-        <div className="qi-actions">
-          <label>샘플 거래처<select disabled={!!busy} value={sampleQuotes.some(q => q.supplier_name === supplier) ? supplier : ''}
-            onChange={e => pickSample(e.target.value)}>
-            <option value="">직접 입력</option>
-            {sampleQuotes.map(q => <option key={q.supplier_name} value={q.supplier_name}>{q.supplier_name}</option>)}
-          </select></label>
-          <button className="pp-plain" disabled={disabled || !dict} onClick={analyzeSamples}>샘플 견적 12곳 분석</button>
-        </div>
         <form className="qi-input" onSubmit={send}>
           <label>거래처<input disabled={!!busy} value={supplier} onChange={e => setSupplier(e.target.value)} /></label>
           <label className="qi-check"><input disabled={!!busy} type="checkbox" checked={useRag} onChange={e => setUseRag(e.target.checked)} />품목 사전 검색 사용</label>
-          <label>견적 원문<textarea rows={6} maxLength={15000} value={source} onChange={e => setSource(e.target.value)} disabled={!!busy} /></label>
+          <label>견적 원문<textarea rows={3} maxLength={15000} value={source} onChange={e => setSource(e.target.value)} disabled={!!busy} /></label>
           <button className="pp-primary" disabled={disabled || !source.trim()}>AI 분석 보내기</button>
         </form>
       </section>
@@ -180,8 +152,7 @@ export default function QuoteIntegrationPage() {
         <section className="pp-card qi-controls">
           <label>견적 분석 묶음 UUID<input disabled={!!busy} value={batchId} onChange={e => setBatchId(e.target.value)} /></label>
           <button className="pp-plain" disabled={disabled || !uuid.test(batchId.trim())} onClick={() => void run('저장 견적 조회', async () => {
-            const found = await api.getBatch(batchId.trim())
-            setBatches(list => upsertBatch(list, found))
+            setBatch(await api.getBatch(batchId.trim()))
           })}>저장 견적 조회</button>
           <details><summary>Spring 요청 기록 ({log.length}건)</summary>
             {log.map((t, i) => <details key={i}><summary>{t.method} {t.path} → {t.status ?? '연결 실패'}</summary>

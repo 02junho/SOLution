@@ -48,17 +48,6 @@ class ToolsTest(unittest.TestCase):
             })
         self.assertEqual(response.json(), {"status": "no_evidence", "hits": []})
 
-    def test_parse_keeps_minimum_order(self):
-        raw = ('{"items": [], "sales": [], "delivery": [{"source_text": "최소 주문 76,000원", '
-               '"supplier_name": "R1", "fee_amount": 2900, "free_shipping_minimum": 78800, '
-               '"minimum_order_amount": 76000}]}')
-        with patch("app.tools.quote.parse.claude_json", return_value=raw), \
-                patch.dict("os.environ", {"ANTHROPIC_MODEL": "m", "ANTHROPIC_API_KEY": "k"}):
-            response = self.client.post("/tools/quote/parse",
-                                        json={"text": "배송비 2,900원 · 최소 주문 76,000원"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["delivery"][0]["minimum_order_amount"], 76000)
-
     def test_blank_parse_rejected(self):
         self.assertEqual(self.client.post("/tools/quote/parse", json={"text": "  "}).status_code, 400)
 

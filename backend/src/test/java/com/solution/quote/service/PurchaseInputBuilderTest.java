@@ -137,29 +137,7 @@ class PurchaseInputBuilderTest {
 				.get("delivery_conflicts");
 		assertThat(conflicts).singleElement().satisfies(conflict -> assertThat(conflict)
 				.containsEntry("replaced_batch_id", "b1").containsEntry("used_batch_id", "b2")
-				.containsEntry("replaced", java.util.Arrays.asList(3000L, null, null)));
-	}
-
-	@Test
-	void 견적에_적힌_최소_주문_금액은_붙이고_없으면_비워_둔다() throws Exception {
-		// 거래처마다 견적을 따로 분석해 배치가 여러 개여도 최소 주문 금액은 그 거래처에 붙는다.
-		var first = batch("b1", "{'supplier_name': 'A식자재', 'fee_amount': 2900, 'free_shipping_minimum': 78800,"
-				+ " 'minimum_order_amount': 76000}",
-				row("quote-line-001", "'A식자재'", "'bean'", "1000", "'g'", "18000", "included", true, null));
-		var second = batch("b2", "{'supplier_name': 'B마트', 'fee_amount': 0, 'free_shipping_minimum': null,"
-				+ " 'minimum_order_amount': 0}",
-				row("quote-line-001", "'B마트'", "'cup'", "50", "'개'", "5000", "included", true, null));
-		var third = batch("b3", "{'supplier_name': 'C몰', 'fee_amount': 3000, 'free_shipping_minimum': null}",
-				row("quote-line-001", "'C몰'", "'cup'", "100", "'개'", "9000", "included", true, null));
-
-		var built = PurchaseInputBuilder.build(node(preview), node(dictionary), List.of(first, second, third),
-				conditions(null, null, null), Map.of());
-
-		var suppliers = (List<Map<String, Object>>) built.input().get("suppliers");
-		assertThat(suppliers).extracting("supplier_name", "minimum_order_krw", "delivery_fee_krw")
-				.containsExactly(org.assertj.core.groups.Tuple.tuple("A식자재", 76000L, 2900L),
-						org.assertj.core.groups.Tuple.tuple("B마트", 0L, 0L),
-						org.assertj.core.groups.Tuple.tuple("C몰", null, 3000L));
+				.containsEntry("replaced", java.util.Arrays.asList(3000L, null)));
 	}
 
 	@Test
