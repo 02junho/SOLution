@@ -21,6 +21,8 @@ class Delivery(DTO):
     supplier_name: Text | None = None
     fee_amount: StrictInt | None = None
     free_shipping_minimum: StrictInt | None = None
+    # 거래처 최소 주문 금액. 구매 최적화의 minimum_order_krw로 이어진다. 원문에 없으면 null.
+    minimum_order_amount: StrictInt | None = None
 
 
 class Quote(DTO):
