@@ -56,15 +56,18 @@ export const sampleQuotes: {supplier_name: string; text: string}[] = [
 export const sampleText = sampleQuotes[0].text
 const menuName = (id: string) => ({iced_americano: '아이스 아메리카노', hot_americano: '핫 아메리카노', iced_latte: '아이스 카페라떼'})[id] ?? id
 // 거래처마다 따로 분석한 견적 묶음들을 표 하나로 합친다. 줄 번호는 묶음마다 1부터라 앞에 묶음 순서를 붙인다.
+// 같은 거래처의 배송 조건이 여러 묶음에 있으면 구매 입력 연결(PurchaseInputBuilder)과 같이 뒤 묶음 것만 쓴다.
 export function mergeBatches(list: Batch[]): Batch | null {
   if (!list.length) return null
   const prefix = (i: number, id: string) => list.length > 1 ? `${i + 1}-${id}` : id
+  const lastDelivery = new Map<string, number>()
+  list.forEach((b, i) => b.delivery.forEach(d => { if (d.supplier_name) lastDelivery.set(d.supplier_name, i) }))
   return {
     quote_batch_id: list[list.length - 1].quote_batch_id,
     normalization: {items: list.flatMap((b, i) => b.normalization.items.map(r => ({...r, line_id: prefix(i, r.line_id),
       issues: r.issues.map(x => ({...x, target_id: x.target_id ? prefix(i, x.target_id) : x.target_id}))})))},
     confirmations: Object.assign({}, ...list.map(b => b.confirmations)),
-    delivery: list.flatMap(b => b.delivery),
+    delivery: list.flatMap((b, i) => b.delivery.filter(d => !d.supplier_name || lastDelivery.get(d.supplier_name) === i)),
     sales_candidates: list.flatMap(b => b.sales_candidates),
   }
 }

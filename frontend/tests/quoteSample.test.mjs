@@ -70,3 +70,10 @@ test('거래처마다 따로 분석한 견적 묶음을 표 하나로 합치고 
   assert.deepEqual(table.suppliers[1].shipping_rules.find(r => r.condition === 'MIN_ORDER'),
     {condition: 'MIN_ORDER', threshold_amount: 76000, fee_amount: null})
 })
+
+test('같은 거래처의 배송 조건이 여러 묶음에 있으면 뒤 묶음 것만 보여 준다', () => {
+  const merged = mergeBatches([batch('b1', 'A', {minimum_order_amount: 76000}), batch('b2', 'A', {minimum_order_amount: 0}), batch('b3', 'B')])
+  assert.deepEqual(merged.delivery.map(d => [d.supplier_name, d.minimum_order_amount]), [['A', 0], ['B', 0]])
+  const rules = quotesTable(merged).suppliers.find(s => s.supplier_name === 'A').shipping_rules
+  assert.deepEqual(rules.filter(r => r.condition === 'MIN_ORDER').map(r => r.threshold_amount), [0])
+})

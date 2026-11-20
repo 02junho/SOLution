@@ -132,9 +132,13 @@ export default function QuoteIntegrationPage() {
             {suppliers.map(s => <div key={s.supplier_id} className="pp-options">
               <span>{s.supplier_name} · {batch.confirmations[s.supplier_id] ? '확인 완료' : '미확인'}</span>
               <button className="pp-plain" disabled={disabled} onClick={() => void run('거래처 확인', async () => {
-                const owner = batches.find(b => b.normalization.items.some(r => r.supplier_name === s.supplier_id)) ?? batches[batches.length - 1]
-                const updated = await api.confirm(owner.quote_batch_id, s.supplier_id, !batch.confirmations[s.supplier_id])
-                setBatches(list => upsertBatch(list, updated))
+                // 같은 거래처가 여러 묶음에 있으면 모든 묶음에 같은 확인 값을 넣는다.
+                const next = !batch.confirmations[s.supplier_id]
+                const owners = batches.filter(b => b.normalization.items.some(r => r.supplier_name === s.supplier_id))
+                for (const owner of owners.length ? owners : batches.slice(-1)) {
+                  const updated = await api.confirm(owner.quote_batch_id, s.supplier_id, next)
+                  setBatches(list => upsertBatch(list, updated))
+                }
               })}>{batch.confirmations[s.supplier_id] ? '확인 취소' : '거래처 확인'}</button>
             </div>)}
           </div>}
