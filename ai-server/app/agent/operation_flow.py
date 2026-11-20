@@ -95,6 +95,20 @@ def prompt_summary(req: InterpretRequest) -> str | None:
     )
 
 
+def _ask_again(req: InterpretRequest, values: dict) -> str:
+    """다시 물을 문장. 실제로 발급한 질문이 있으면 그 질문(prompt_summary의 '방금 물은 칸'과 같음),
+    없으면 처음 입력 순서의 다음 빈 칸. 저장한 값이 없으면 질문에 담아 둔 폼 값 기준. 물을 게 없으면 빈 문자열."""
+    asked, asked_text = _asked(req)
+    pending = operation_fields.pending_question(values or _carried_form(req) or {}, asked, asked_text)
+    if pending is None:
+        return ""
+    keys = [key for key, *_ in operation_fields.GUIDED]
+    text = pending["질문"] or pending["칸 설명"]
+    if pending["target"] in keys:
+        return f"{text} ({keys.index(pending['target']) + 1}/{len(keys)})"
+    return text
+
+
 def _asked(req: InterpretRequest) -> tuple[str | None, str | None]:
     """질문에 답하는 경우, 서버가 실제로 발급한 질문의 칸과 문장. 폼 칸이 아니거나 질문 뒤 입력이 바뀌었으면 (None, None)."""
     if req.event_type != "question_reply" or not isinstance(req.question, dict):
@@ -128,8 +142,7 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
         if complete:
             return None
         # 채우는 중 잡담: AI 답 뒤에 묻던 값을 다시 묻는다.
-        missing = operation_fields.next_missing(values or _carried_form(req) or {})
-        ask = f"{missing[2]} ({missing[0]}/{len(operation_fields.GUIDED)})" if missing else ""
+        ask = _ask_again(req, values)
         return ApiResponse(
             status=ResponseStatus.OK,
             data={
@@ -140,15 +153,15 @@ def handle(req: InterpretRequest, draft: InterpretDraft) -> ApiResponse[dict] | 
         )
     if changes or not complete:
         if wants_run and not complete:
-            missing = operation_fields.next_missing(values or _carried_form(req) or {})
-            if missing is not None:
+            ask = _ask_again(req, values)
+            if ask:
                 return ApiResponse(
                     status=ResponseStatus.OK,
                     data={
                         "detail_status": "NO_CHANGE",
                         "interpretation": {"intent": draft.intent, "changes": []},
                     },
-                    message=f"비교하려면 값이 하나 더 필요해요. {missing[2]} ({missing[0]}/{len(operation_fields.GUIDED)})",
+                    message=f"비교하려면 값이 하나 더 필요해요. {ask}",
                 )
         return _fill(req, draft, current)
     if wants_run:

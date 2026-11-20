@@ -444,7 +444,7 @@ def test_방금_물은_칸은_실제로_발급한_질문의_칸을_쓴다():
     assert json.loads(operation_flow.prompt_summary(done))["방금 물은 칸"]["target"] == "hourly_wage_krw"
 
 
-def test_저장한_값이_없을_때_잡담하면_질문에_담아_둔_값_다음_칸을_묻는다():
+def test_다시_묻는_중_잡담하면_실제로_물은_질문을_다시_묻는다():
     class Chat:
         def interpret(self, req):
             return InterpretDraft(intent="smalltalk", reply="네, 천천히 알려 주세요.")
@@ -452,7 +452,8 @@ def test_저장한_값이_없을_때_잡담하면_질문에_담아_둔_값_다�
     response = run(_wage_question_reply(content="잠깐만요"), Chat())
     assert response.data["detail_status"] == "NO_CHANGE"
     assert "하루에 주문이" not in response.message  # 이미 받은 하루 주문을 다시 묻지 않는다
-    assert "(2/3)" in response.message
+    # 순서상 다음 빈 칸(사장님 근무)이 아니라 실제로 물은 시급 질문을 다시 묻는다.
+    assert "직원 시급은 최저시급 이상이어야 해요. 얼마인가요? (3/3)" in response.message
 
 
 def test_처음에_질문하면_AI_설명_뒤에_첫_값을_묻는다():
