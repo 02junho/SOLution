@@ -10,6 +10,7 @@ import {
 import { ConfirmationModal } from './features/workflow/Results'
 import Workspace, { NewSession } from './features/workflow/Workspace'
 import { useWorkspace } from './features/workflow/useWorkspace'
+import EasyPage from './pages/EasyPage'
 import PurchasePreparationPage from './pages/PurchasePreparationPage'
 import QuoteIntegrationPage from './pages/QuoteIntegrationPage'
 import SystemCheckPage from './pages/SystemCheckPage'
@@ -20,6 +21,9 @@ export default function App() {
   const mode = params.get('mode')
   const preparationId = params.get('preparationId')
 
+  // 기본 화면은 시니어용 쉬운 화면(EasyPage). 예전 업무 화면은 ?mode=classic으로 연다.
+  // ?mode=easy는 이미 공유된 주소를 위해 남겨 둔다(기본 화면과 같음).
+  if (mode === 'classic') return <WorkflowApp />
   if (mode === 'quote') return <QuoteIntegrationPage />
   if (mode === 'system') return <SystemCheckPage />
   if (mode === 'demo') {
@@ -29,7 +33,7 @@ export default function App() {
     return <PurchasePreparationPage preparationId={preparationId} />
   }
 
-  return <WorkflowApp />
+  return <EasyPage />
 }
 
 function WorkflowApp() {
