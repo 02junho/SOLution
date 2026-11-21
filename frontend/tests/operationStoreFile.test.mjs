@@ -9,10 +9,6 @@ const f = await server.ssrLoadModule('/src/features/operation/workspace/storeFil
 after(async () => {
   await server.close()
 })
-const sample = (name) => {
-  const buf = readFileSync(new URL(`../public/samples/${name}`, import.meta.url))
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
-}
 const fileOf = (name) => {
   const buf = readFileSync(new URL(`../public/samples/${name}`, import.meta.url))
   return new File([buf], name)
