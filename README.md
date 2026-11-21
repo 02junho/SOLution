@@ -224,22 +224,19 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | `SWAGGER_ENABLED` | `false` (API 문서 닫기) |
 | `POSTGRES_PASSWORD` | 로컬과 다른 긴 값 |
 
-```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-```
+**자동 배포**: dev에 병합되면 CI(`ci.yml`)가 검사 네 개를 통과한 뒤 `이미지 게시`(이미지 세 개를 GHCR에 `:latest`·커밋 SHA로 올림) → `서버 배포`(SSH로 서버에 들어가 저장소와 이미지를 그 실행이 검사한 커밋으로 맞추고 `pull`·`up -d`, 밖에서 `/api/v1/system/health` 확인)를 차례로 돕니다. 배포는 서버 `.env`의 `IMAGE_TAG`를 그 커밋 SHA로 적어 두므로, 손으로 `down`·`up -d` 해도 같은 버전으로 뜨고, 옛 실행을 다시 돌리면(Re-run) 그 버전으로 되돌아갑니다. PR에서는 돌지 않습니다. 발표 전에 main 기준으로 옮길 때는 두 작업의 `if`에 있는 브랜치만 바꿉니다.
 
-**이미지 게시**: GHCR에 이미지를 올리는 GitHub Actions 작업은 아직 없습니다. 서버를 만든 뒤 `ci.yml`에 "dev 병합 → 이미지 세 개 빌드·게시 → 서버 갱신" 작업으로 추가합니다(당분간 dev 기준, 마지막에 main 기준). 그 전에 서버에서 써야 하면 로컬에서 직접 올립니다. 토큰은 GitHub 설정의 Personal access token(classic)에서 `write:packages`로 만들고, 처음 올린 패키지는 비공개라 GitHub → Packages에서 세 개 모두 Public으로 바꿔야 서버가 로그인 없이 받습니다.
+| 준비 | 내용 |
+| --- | --- |
+| 서버 | EC2 t3.small(2GB) 한 대, Ubuntu 24.04 x86, 스왑 2GB, Docker, 보안 그룹은 22·80만. 저장소를 `~/SOLution`에 dev로 clone하고 그 안에 `.env` |
+| GitHub Secret | `EC2_HOST`(서버 주소), `EC2_USER`(`ubuntu`), `EC2_SSH_KEY`(접속 키 내용), `EC2_KNOWN_HOSTS`(서버 호스트 공개키 `known_hosts` 줄. 배포가 접속하는 서버가 진짜인지 확인. 서버를 새로 만들면 다시 넣기) |
 
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u 깃허브아이디 --password-stdin
-for app in backend ai-server frontend; do
-  # 빌드나 push가 하나라도 실패하면 멈춘다 (예전 :latest가 대신 올라가지 않게)
-  docker build --platform linux/amd64 -t ghcr.io/02junho/solution-${app}:latest ./${app} \
-    && docker push ghcr.io/02junho/solution-${app}:latest \
-    || { echo "${app} 실패: 여기서 멈춤"; break; }
-done
-```
+GHCR 패키지는 비공개로 둡니다. 서버는 배포할 때만 그 작업의 토큰으로 잠깐 로그인해 받고 바로 로그아웃합니다. 그래서 서버에서 손으로 `pull`하려면 먼저 `docker login ghcr.io`가 필요합니다(이미 받은 이미지로 `down`·`up -d` 하는 것은 로그인 없이 됩니다).
+
+**배포가 실패하거나 되돌릴 때**: 서버에서 손으로 이미지를 올리거나 바꾸지 않고 Actions에서 다시 돌립니다. 손으로 바꾸면 서버의 설정 파일(저장소)과 이미지 버전이 어긋날 수 있어서입니다.
+
+- 실패한 배포: 그 CI 실행에서 **Re-run failed jobs**. Re-run은 그 실행의 원래 커밋으로 돌기 때문에, **그 뒤에 성공한 배포가 있으면 옛 실패 실행은 다시 돌리지 않습니다**(돌리면 서버가 옛 버전으로 되돌아감). 먼저 Actions에서 dev의 가장 최근 실행을 확인하고, 그 실행을 다시 돌립니다.
+- 예전 버전으로 되돌리기: 되돌릴 커밋이 dev에 병합됐던 CI 실행을 열어 **Re-run all jobs**(GitHub는 30일 안의 실행만 다시 돌릴 수 있음). 그 커밋의 설정과 이미지(SHA 태그)로 서버가 맞춰집니다. 다만 자동 배포가 들어오기(#130) 전의 실행에는 배포 작업이 없어서 Re-run으로는 서버가 바뀌지 않습니다. 그보다 옛 상태로 돌아가려면 되돌리는 커밋(`git revert`)을 PR로 dev에 병합하고, 그 병합의 자동 배포로 맞춥니다.
 
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다.
 
