@@ -1,4 +1,6 @@
-# 배포용 (서버 1대). 서버에서는 빌드하지 않고 GitHub Actions가 올린 GHCR 이미지를 받아 띄운다.
+# 배포용 (서버 1대). 서버에서는 빌드하지 않고 GHCR 이미지를 받아 띄운다.
+# 이미지를 GHCR에 올리는 GitHub Actions 작업은 다음 단계(서버를 만든 뒤 ci.yml에 배포 작업과 함께)에서 추가한다.
+# 그 전에 서버에서 쓰려면 README "7. 배포용 구성"의 수동 게시 순서대로 올린다.
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
 # 밖에는 화면(nginx) 80번만 연다. DB(5432)·Spring(8080)·FastAPI(8000)는 컨테이너끼리만 쓴다.

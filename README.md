@@ -229,6 +229,16 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+**이미지 게시**: GHCR에 이미지를 올리는 GitHub Actions 작업은 아직 없습니다. 서버를 만든 뒤 `ci.yml`에 "dev 병합 → 이미지 세 개 빌드·게시 → 서버 갱신" 작업으로 추가합니다(당분간 dev 기준, 마지막에 main 기준). 그 전에 서버에서 써야 하면 로컬에서 직접 올립니다. 토큰은 GitHub 설정의 Personal access token(classic)에서 `write:packages`로 만들고, 처음 올린 패키지는 비공개라 GitHub → Packages에서 세 개 모두 Public으로 바꿔야 서버가 로그인 없이 받습니다.
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u 깃허브아이디 --password-stdin
+for app in backend ai-server frontend; do
+  docker build --platform linux/amd64 -t ghcr.io/02junho/solution-$app:latest ./$app
+  docker push ghcr.io/02junho/solution-$app:latest
+done
+```
+
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다.
 
 ---
