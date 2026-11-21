@@ -234,8 +234,10 @@ docker compose -f docker-compose.prod.yml up -d
 ```bash
 echo "$GHCR_TOKEN" | docker login ghcr.io -u 깃허브아이디 --password-stdin
 for app in backend ai-server frontend; do
-  docker build --platform linux/amd64 -t ghcr.io/02junho/solution-$app:latest ./$app
-  docker push ghcr.io/02junho/solution-$app:latest
+  # 빌드나 push가 하나라도 실패하면 멈춘다 (예전 :latest가 대신 올라가지 않게)
+  docker build --platform linux/amd64 -t ghcr.io/02junho/solution-${app}:latest ./${app} \
+    && docker push ghcr.io/02junho/solution-${app}:latest \
+    || { echo "${app} 실패: 여기서 멈춤"; break; }
 done
 ```
 
