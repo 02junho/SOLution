@@ -390,7 +390,11 @@ export default function EasyPage() {
     try {
       // 앞선 준비 요청(그만두기로 결과만 버린 것 포함)이 끝난 뒤에 이어서 준비한다. 앞 요청이 실패해도 이번 요청은 진행한다.
       const screen = screenRef.current
-      const job = prepRef.current.catch(() => undefined).then(() => ready(feature, screen))
+      const job = prepRef.current.catch(() => undefined).then(() => {
+        // 줄에서 기다리는 사이 다른 업무를 열었으면(화면이 바뀌면) 실행하지 않는다. 열린 업무에 이전 화면 조건이 저장되지 않게.
+        if (screen !== screenRef.current) throw new Error('다른 화면으로 옮겨 계산을 멈췄어요.')
+        return ready(feature, screen)
+      })
       prepRef.current = job
       const done = await job
       if (token !== tokenRef.current) return
