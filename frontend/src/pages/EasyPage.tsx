@@ -116,11 +116,15 @@ export default function EasyPage() {
   const [purchase, setPurchase] = useState<PurchaseResult | null>(null)
   const [operation, setOperation] = useState<OperationResult | null>(null)
   const [saved, setSaved] = useState('')
+  // 이 화면에서 방금 저장한 안(choice_key). 다른 안으로 바꿔 보면 "저장했어요"를 숨기고 그 안도 따로 저장할 수 있게 한다.
+  const [savedFor, setSavedFor] = useState<string | null>(null)
   const [savedChoice, setSavedChoice] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
   // 화면을 옮긴 뒤 늦게 도착한 응답이 새 화면을 덮지 않게 한다.
   const tokenRef = useRef(0)
+  // 지금 보이는 결과의 result_id. 늦게 끝난 저장 응답이 다른 결과에 "저장했어요"를 붙이지 않게 비교한다.
+  const shownResultRef = useRef<number | null>(null)
 
   // 대화 중에는 마지막 말이 보이게, 결과가 나오면 추천 문장부터 보이게(스크롤하지 않아도 결론이 보이도록).
   useEffect(() => {
@@ -174,7 +178,14 @@ export default function EasyPage() {
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
-    setResume(null); setContext(null); setPrepared(null); setPurchase(null); setOperation(null); setSaved(''); setSavedChoice(null)
+    setResume(null); setContext(null); setPrepared(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    shownResultRef.current = null
+  }
+
+  /** 저장이 끝났을 때: 요청을 보낸 결과가 아직 보이고 있을 때만 "저장했어요"로 바꾼다. */
+  function markSaved(resultId: number, text: string, choiceKey: string) {
+    if (shownResultRef.current !== resultId) return
+    setSaved(text); setSavedFor(choiceKey)
   }
 
   function open(next: EasyRoute) {
@@ -228,6 +239,7 @@ export default function EasyPage() {
   }
 
   function showResult(kind: EasyFeature, result: PurchaseResult | OperationResult) {
+    shownResultRef.current = result.result_id
     setPrepared({ sessionId: result.session_id, versionId: result.input_version_id, versionNo: result.version_no })
     if (kind === 'purchase') setPurchase(result as PurchaseResult)
     else setOperation(result as OperationResult)
@@ -327,24 +339,29 @@ export default function EasyPage() {
   }
 
   // 조건을 새 버전으로 저장하고 입력 확인까지 마친다.
-  async function saveInput(sessionId: number, baseVersionId: number | null, kind: EasyFeature) {
+  // 저장(이벤트)은 서버에 먼저 남으므로, 확인이 실패해도 다시 시도할 때 이 새 버전부터 이어 가게 바로 기록해 둔다.
+  // (옛 버전을 base로 다시 보내면 서버가 STALE로 거부한다.) 화면을 옮겼으면(token이 바뀌면) 기록하지 않는다.
+  async function saveInput(sessionId: number, baseVersionId: number | null, kind: EasyFeature, token: number) {
     const response = await workflowApi.event(sessionId, { event_type: 'form', form_input: buildInput(kind), base_version_id: baseVersionId }, crypto.randomUUID())
     const data = response.data as JsonObject | null
     const versionId = Number(data?.input_version_id)
     const versionNo = Number(data?.version_no)
     if (response.status !== 'ok' || !versionId) throw new Error(response.message || '조건을 저장하지 못했어요.')
+    if (token === tokenRef.current) setResume({ sessionId, versionId, versionNo, confirmed: false, values })
     await workflowApi.confirmInput(versionId, versionNo)
     return { versionId, versionNo }
   }
 
   // 새 업무면 만들고, 이어서 하는 업무면 그 업무 안에서. 조건이 그대로면 저장된 버전을 다시 쓴다.
-  async function ready(kind: EasyFeature): Promise<Prepared> {
+  async function ready(kind: EasyFeature, token: number): Promise<Prepared> {
     if (!resume) {
       const created = await workflowApi.create(1, kind, 'form', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
-      return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind)) }
+      // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
+      if (token === tokenRef.current) setResume({ sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' })
+      return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind, token)) }
     }
     if (resume.versionId === null || resume.values !== values) {
-      return { sessionId: resume.sessionId, ...(await saveInput(resume.sessionId, resume.versionId, kind)) }
+      return { sessionId: resume.sessionId, ...(await saveInput(resume.sessionId, resume.versionId, kind, token)) }
     }
     if (!resume.confirmed) await workflowApi.confirmInput(resume.versionId, resume.versionNo)
     return { sessionId: resume.sessionId, versionId: resume.versionId, versionNo: resume.versionNo }
@@ -353,9 +370,12 @@ export default function EasyPage() {
   async function calculate() {
     if (!feature) return
     const token = tokenRef.current
-    setPhase('running'); setError(''); setSaved(''); setSavedChoice(null)
+    setPhase('running'); setError(''); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    // 이전 결과를 지운다. 계산이 실패했을 때 옛 결과와 새 조건(prepared)이 짝지어 보이거나 저장되지 않게.
+    setPurchase(null); setOperation(null)
+    shownResultRef.current = null
     try {
-      const done = await ready(feature)
+      const done = await ready(feature, token)
       if (token !== tokenRef.current) return
       // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
       setResume({ sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values })
@@ -371,6 +391,7 @@ export default function EasyPage() {
         const result = await workflowApi.result(resultId)
         if (token !== tokenRef.current) return
         if (result.response_status !== 'ok') throw new InputError(result.summary.message || '이 조건으로는 살 수 있는 조합이 없어요.')
+        shownResultRef.current = result.result_id
         setPurchase(result); setOperation(null)
       } else {
         const response = await runOperation(done.sessionId, done.versionId, crypto.randomUUID())
@@ -378,6 +399,7 @@ export default function EasyPage() {
         const detail = await loadOperationResult(response.data.result_id, 'detail')
         if (detail.status === 'error' || !detail.data) throw new Error(detail.message || '결과를 불러오지 못했어요.')
         if (token !== tokenRef.current) return
+        shownResultRef.current = detail.data.result_id
         setOperation(detail.data); setPurchase(null)
       }
       setTourResultIndex(0)
@@ -644,10 +666,10 @@ export default function EasyPage() {
 
         <div ref={resultRef} className="easy-anchor" />
         {phase === 'result' && purchase && prepared && (
-          <PurchaseView result={purchase} prepared={prepared} saved={saved} onSaved={setSaved} savedChoice={savedChoice} maxDeliveries={context?.kind === 'plan' ? null : deliveries} />
+          <PurchaseView result={purchase} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(purchase.result_id, text, choiceKey)} savedChoice={savedChoice} maxDeliveries={context?.kind === 'plan' ? null : deliveries} />
         )}
         {phase === 'result' && operation && prepared && (
-          <OperationView result={operation} prepared={prepared} saved={saved} onSaved={setSaved} savedChoice={savedChoice as OperationPlan | null} />
+          <OperationView result={operation} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(operation.result_id, text, choiceKey)} savedChoice={savedChoice as OperationPlan | null} />
         )}
         {phase === 'result' && route.kind === 'session' && !savedChoice && (
           <p className="easy-again">

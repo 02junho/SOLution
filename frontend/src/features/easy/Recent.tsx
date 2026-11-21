@@ -6,17 +6,37 @@ import type { Confirmation, SessionSummary } from '../../types/workflow'
 import { CHOICE, FEATURE, STEP, cleanTitle, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
 
-export default function Recent() {
-  const [sessions, setSessions] = useState<SessionSummary[] | null>(null)
-  const [plans, setPlans] = useState<Confirmation[] | null>(null)
-  const summaries = useInputSummaries(sessions ?? [])
+type Fetch<T> = () => Promise<{ items: T[] }>
+const fetchSessions: Fetch<SessionSummary> = () => workflowApi.sessions(undefined, null)
+const fetchPlans: Fetch<Confirmation> = () => workflowApi.confirmations(undefined, null)
 
+/** 최근 4개. 불러오지 못하면 "기록 없음"이 아니라 실패로 알리고, 다시 불러올 수 있게 한다. */
+function useRecent<T>(load: Fetch<T>) {
+  const [items, setItems] = useState<T[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let alive = true
-    workflowApi.sessions(undefined, null).then((page) => { if (alive) setSessions(page.items.slice(0, 4)) }).catch(() => { if (alive) setSessions([]) })
-    workflowApi.confirmations(undefined, null).then((page) => { if (alive) setPlans(page.items.slice(0, 4)) }).catch(() => { if (alive) setPlans([]) })
+    load().then((page) => { if (alive) { setItems(page.items.slice(0, 4)); setFailed(false) } })
+      .catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
-  }, [])
+  }, [load, attempt])
+  const retry = () => { setFailed(false); setItems(null); setAttempt((n) => n + 1) }
+  return { items, failed, retry }
+}
+
+function Failed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <p className="easy-empty" role="status">
+      불러오지 못했어요. <button type="button" className="easy-text-button" onClick={onRetry}>다시 불러오기</button>
+    </p>
+  )
+}
+
+export default function Recent() {
+  const { items: sessions, failed: sessionsFailed, retry: retrySessions } = useRecent(fetchSessions)
+  const { items: plans, failed: plansFailed, retry: retryPlans } = useRecent(fetchPlans)
+  const summaries = useInputSummaries(sessions ?? [])
 
   return (
     <div className="easy-recent">
@@ -25,7 +45,8 @@ export default function Recent() {
           <h2>최근 업무</h2>
           <a className="easy-text-button" href="#/work">전체 보기</a>
         </div>
-        {sessions === null ? <p className="easy-empty">불러오는 중이에요</p>
+        {sessionsFailed ? <Failed onRetry={retrySessions} />
+          : sessions === null ? <p className="easy-empty">불러오는 중이에요</p>
           : sessions.length === 0 ? <p className="easy-empty">아직 한 업무가 없어요</p>
             : (
               <ul>
@@ -46,7 +67,8 @@ export default function Recent() {
           <h2>저장한 계획</h2>
           <a className="easy-text-button" href="#/plans">전체 보기</a>
         </div>
-        {plans === null ? <p className="easy-empty">불러오는 중이에요</p>
+        {plansFailed ? <Failed onRetry={retryPlans} />
+          : plans === null ? <p className="easy-empty">불러오는 중이에요</p>
           : plans.length === 0 ? <p className="easy-empty">아직 저장한 계획이 없어요</p>
             : (
               <ul>

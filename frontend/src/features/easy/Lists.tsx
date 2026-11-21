@@ -18,21 +18,27 @@ const fetchPlans: Fetch<Confirmation> = (cursor) => workflowApi.confirmations(un
 function useCursorList<T>(load: Fetch<T>) {
   const [list, setList] = useState<Loaded<T> | null>(null)
   const [busy, setBusy] = useState(false)
+  // 첫 불러오기 실패: 빈 목록과 구분해 알리고 "다시 불러오기"로 처음부터 다시 부른다.
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let alive = true
     load(null)
-      .then((page) => { if (alive) setList({ items: page.items, cursor: page.next_cursor, error: '' }) })
-      .catch(() => { if (alive) setList({ items: [], cursor: null, error: '목록을 불러오지 못했어요.' }) })
+      .then((page) => { if (alive) { setList({ items: page.items, cursor: page.next_cursor, error: '' }); setFailed(false) } })
+      .catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
-  }, [load])
+  }, [load, attempt])
+  const retry = () => { setFailed(false); setList(null); setAttempt((n) => n + 1) }
   async function more() {
     if (!list?.cursor) return
+    const cursor = list.cursor
     setBusy(true)
     try {
-      const page = await load(list.cursor)
-      setList({ items: [...list.items, ...page.items], cursor: page.next_cursor, error: '' })
+      const page = await load(cursor)
+      // 불러오는 사이 지운 줄이 되살아나지 않게 그때그때의 최신 목록(prev)에 붙인다.
+      setList((prev) => (prev ? { items: [...prev.items, ...page.items], cursor: page.next_cursor, error: '' } : prev))
     } catch {
-      setList({ ...list, error: '더 불러오지 못했어요. 다시 눌러 주세요.' })
+      setList((prev) => (prev ? { ...prev, error: '더 불러오지 못했어요. 다시 눌러 주세요.' } : prev))
     } finally {
       setBusy(false)
     }
@@ -41,7 +47,7 @@ function useCursorList<T>(load: Fetch<T>) {
   function remove(keep: (item: T) => boolean) {
     setList((prev) => (prev ? { ...prev, items: prev.items.filter(keep) } : prev))
   }
-  return { list, busy, more, remove }
+  return { list, busy, more, remove, failed, retry }
 }
 
 /** 줄마다 "지우기". 누르면 그 줄 아래에서 한 번 더 묻는다(실수로 지우지 않게). */
@@ -67,6 +73,15 @@ function DeleteRow({ name, warn, onDelete }: { name: string; warn: string; onDel
   )
 }
 
+function LoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="easy-empty" role="status">
+      <p>목록을 불러오지 못했어요.</p>
+      <button type="button" className="easy-secondary" onClick={onRetry}>다시 불러오기</button>
+    </div>
+  )
+}
+
 function Shell({ title, back, children, footer }: { title: string; back?: boolean; children: ReactNode; footer?: ReactNode }) {
   return (
     <section className="easy-card easy-list">
@@ -79,7 +94,7 @@ function Shell({ title, back, children, footer }: { title: string; back?: boolea
 }
 
 export function SessionList() {
-  const { list, busy, more, remove } = useCursorList(fetchSessions)
+  const { list, busy, more, remove, failed, retry } = useCursorList(fetchSessions)
   const items = (list?.items ?? []).filter((s) => EASY_FEATURES.has(s.feature_type))
   const summaries = useInputSummaries(items)
   return (
@@ -88,7 +103,8 @@ export function SessionList() {
       footer={list?.cursor ? <button type="button" className="easy-secondary easy-more" disabled={busy} onClick={() => void more()}>{busy ? '불러오는 중…' : '더 보기'}</button> : null}
     >
       <p className="easy-list-sub">누르면 멈춘 곳부터 이어서 해요. 결과가 나온 일은 결과를 바로 보여 드려요.</p>
-      {list === null ? <p className="easy-empty">불러오는 중이에요</p>
+      {failed ? <LoadFailed onRetry={retry} />
+        : list === null ? <p className="easy-empty">불러오는 중이에요</p>
         : items.length === 0 ? <p className="easy-empty">{list.error || '아직 한 업무가 없어요'}</p>
           : (
             <ul className="easy-list-items">
@@ -117,7 +133,7 @@ export function SessionList() {
 }
 
 export function PlanList() {
-  const { list, busy, more, remove } = useCursorList(fetchPlans)
+  const { list, busy, more, remove, failed, retry } = useCursorList(fetchPlans)
   const items = (list?.items ?? []).filter((p) => EASY_FEATURES.has(p.feature_type))
   return (
     <Shell
@@ -125,7 +141,8 @@ export function PlanList() {
       footer={list?.cursor ? <button type="button" className="easy-secondary easy-more" disabled={busy} onClick={() => void more()}>{busy ? '불러오는 중…' : '더 보기'}</button> : null}
     >
       <p className="easy-list-sub">사장님이 저장한 구매안과 배치표예요. 누르면 그때 결과를 다시 보여 드려요.</p>
-      {list === null ? <p className="easy-empty">불러오는 중이에요</p>
+      {failed ? <LoadFailed onRetry={retry} />
+        : list === null ? <p className="easy-empty">불러오는 중이에요</p>
         : items.length === 0 ? <p className="easy-empty">{list.error || '아직 저장한 계획이 없어요'}</p>
           : (
             <ul className="easy-list-items">

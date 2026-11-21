@@ -41,6 +41,30 @@ const hourOf = (hhmm: string) => Number(hhmm.slice(0, 2)) + Number(hhmm.slice(3,
 const printedOn = () => { const d = new Date(); return `${d.getMonth() + 1}월 ${d.getDate()}일` }
 const workerName = (key: string) => WORKER_LABEL[key] ?? key.replace('STAFF_', '직원 ')
 
+/** 문구 복사. 보안 연결(https·localhost)이면 클립보드 기능을, 아니면(http 배포) 옛 복사 방법을 쓴다. 실제로 복사됐는지 돌려준다. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* 아래 옛 방법으로 한 번 더 */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = text
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export function Card({ title, children, tour }: { title: string; children: ReactNode; tour?: string }) {
   return <section className="easy-card" data-tour={tour}><h2>{title}</h2>{children}</section>
 }
@@ -88,10 +112,11 @@ export function SaveBox({ lines, warnings, onSave, saved }: { lines: string[]; w
   )
 }
 
-export function PurchaseView({ result, prepared, saved, onSaved, savedChoice = null, maxDeliveries = null }: { result: PurchaseResult; prepared: Prepared; saved: string; onSaved: (v: string) => void; savedChoice?: string | null; maxDeliveries?: number | null }) {
+export function PurchaseView({ result, prepared, saved, savedFor = null, onSaved, savedChoice = null, maxDeliveries = null }: { result: PurchaseResult; prepared: Prepared; saved: string; savedFor?: string | null; onSaved: (text: string, choiceKey: string) => void; savedChoice?: string | null; maxDeliveries?: number | null }) {
   const [showOrder, setShowOrder] = useState(false)
   const [showLines, setShowLines] = useState(false)
-  const [copied, setCopied] = useState('')
+  // 복사 결과: 어느 거래처 문구를, 실제로 복사됐는지(http에서는 클립보드 기능이 없을 수 있다)
+  const [copied, setCopied] = useState<{ id: string; ok: boolean } | null>(null)
   // 사장님이 고른 안(없으면 추천). 추천이 아닌 안도 골라 보고 저장할 수 있다.
   const [pick, setPick] = useState<string | null>(null)
   const choices = (result.summary.choices ?? []) as PurchaseChoice[]
@@ -138,9 +163,12 @@ export function PurchaseView({ result, prepared, saved, onSaved, savedChoice = n
               <div key={message.supplier_id} className="easy-message">
                 <h3>{name}</h3>
                 <pre>{message.text}</pre>
-                <button type="button" className="easy-secondary" onClick={() => { void navigator.clipboard?.writeText(message.text); setCopied(message.supplier_id) }}>
-                  {copied === message.supplier_id ? '복사했어요' : '문구 복사하기'}
+                <button type="button" className="easy-secondary" onClick={async () => setCopied({ id: message.supplier_id, ok: await copyText(message.text) })}>
+                  {copied?.id === message.supplier_id && copied.ok ? '복사했어요' : '문구 복사하기'}
                 </button>
+                {copied?.id === message.supplier_id && !copied.ok && (
+                  <p className="easy-note" role="status">복사가 안 됐어요. 위 문구를 길게 눌러(또는 끌어서) 직접 복사해 주세요.</p>
+                )}
               </div>
             )
           })}
@@ -163,12 +191,13 @@ export function PurchaseView({ result, prepared, saved, onSaved, savedChoice = n
       {savedChoice ? <p className="easy-done">{saved || '저장한 계획이에요'}</p> : (
       <section className="easy-card" data-tour="save">
         <SaveBox
-          saved={saved}
+          key={best.choice_key}
+          saved={savedFor === best.choice_key ? saved : ''}
           warnings={warnings.filter((w) => (best.warning_ids ?? []).includes(w.warning_id))}
           lines={[`${CHOICE_NAME[best.choice_key] ?? best.label ?? ''} · ${won(best.total_krw)} · 거래처 ${names.length}곳 · 배송 ${best.delivery_count}번`]}
           onSave={async (acks) => {
             await workflowApi.confirm(result.result_id, prepared.versionId, best.choice_key, acks, crypto.randomUUID())
-            onSaved('저장했어요')
+            onSaved('저장했어요', best.choice_key)
           }}
         />
       </section>
@@ -186,7 +215,7 @@ function WhyCard({ result, best, other, saved, picked, maxDeliveries }: { result
   const rows = compareItems(baseline.lines, chosenLines, detail?.buy_needs ?? [])
   const baseDeliveries = deliveriesOf(baseline.lines)
   const broken = violationLabels(baseline.constraint_violations ?? [], baseDeliveries, maxDeliveries)
-  const sentence = compareSentence(rows, best.delivery_count ?? 0)
+  const sentence = compareSentence(rows, { deliveries: best.delivery_count ?? 0, total: best.total_krw }, { deliveries: baseDeliveries, total: baseline.total_krw ?? null })
   const bars = [
     { key: 'baseline', label: '단가만 보고 고르면', krw: baseline.total_krw, tags: broken.length ? broken : [`배송 ${baseDeliveries}번`], tone: 'bad' },
     ...(other && typeof other.total_krw === 'number'
@@ -232,7 +261,7 @@ function WhyCard({ result, best, other, saved, picked, maxDeliveries }: { result
   )
 }
 
-export function OperationView({ result, saved, onSaved, savedChoice = null }: { result: OperationResult; prepared: Prepared; saved: string; onSaved: (v: string) => void; savedChoice?: OperationPlan | null }) {
+export function OperationView({ result, saved, savedFor = null, onSaved, savedChoice = null }: { result: OperationResult; prepared: Prepared; saved: string; savedFor?: string | null; onSaved: (text: string, choiceKey: string) => void; savedChoice?: OperationPlan | null }) {
   const summary = result.summary
   const choices = summary.choices ?? []
   const [pick, setPick] = useState<OperationPlan | null>(null)
@@ -314,13 +343,14 @@ export function OperationView({ result, saved, onSaved, savedChoice = null }: { 
       {recommended && (savedChoice ? <p className="easy-done">{saved || '저장한 계획이에요'}</p> : (
         <section className="easy-card" data-tour="save">
           <SaveBox
-            saved={saved}
+            key={recommended}
+            saved={savedFor === recommended ? saved : ''}
             warnings={warnings}
             lines={[`${PLAN_TITLE[recommended]} · 하루 인건비 ${won(plan?.cash_cost_krw)}`]}
             onSave={async (acks) => {
               const response = await confirmOperation(result, recommended, acks, crypto.randomUUID())
               if (response.status === 'error') throw new Error(response.message || '저장하지 못했어요.')
-              onSaved('저장했어요')
+              onSaved('저장했어요', recommended)
             }}
           />
         </section>

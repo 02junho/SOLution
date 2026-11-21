@@ -19,10 +19,19 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
   const [box, setBox] = useState<Box | null>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [bubbleH, setBubbleH] = useState(240)
+  // 화면 크기도 상태로 둔다. 비춘 곳 위치가 그대로여도 창 높이만 바뀌면 말풍선 자리를 다시 잡아야 한다.
+  const [view, setView] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }))
   // 말풍선 실제 높이로 자리를 잡는다(어림값으로 잡으면 비춘 곳 제목을 가린다).
+  // 같은 단계에서도 창 폭이 줄면 글이 여러 줄로 늘어나므로 말풍선 크기 변화를 지켜본다.
   useLayoutEffect(() => {
-    const h = bubbleRef.current?.offsetHeight
-    if (h) setBubbleH(h)
+    const el = bubbleRef.current
+    if (!el) return
+    const read = () => { const h = el.offsetHeight; if (h) setBubbleH((prev) => (prev === h ? prev : h)) }
+    read()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(read)
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [step.key, number])
 
   // 단계가 바뀌면 비출 곳을 화면 가운데로 가져온다.
@@ -37,6 +46,9 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
     const update = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
+        const w = window.innerWidth
+        const h = window.innerHeight
+        setView((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
         const next = measure(step.target)
         // 같은 위치면 그대로 둔다(다시 그리기를 멈춰 관찰기와 서로 부르지 않게).
         setBox((prev) => prev && next && prev.top === next.top && prev.left === next.left && prev.width === next.width && prev.height === next.height ? prev : next)
@@ -61,8 +73,8 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const viewW = window.innerWidth
-  const viewH = window.innerHeight
+  const viewW = view.w
+  const viewH = view.h
   const width = Math.min(BUBBLE_WIDTH, viewW - 32)
   // 말풍선 자리: 비춘 곳 아래 → 위 → 오른쪽 → 왼쪽 → (다 안 되면) 화면 아래. 비춘 곳을 가리지 않는 쪽을 먼저 고른다.
   const gap = 12

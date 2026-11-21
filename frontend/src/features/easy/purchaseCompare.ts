@@ -104,12 +104,26 @@ export function deliveriesOf(lines: CompareLine[]) {
   return new Set(lines.map((l) => l.supplier_id)).size
 }
 
-/** 한 줄 결론. 단가만 보면 상자째 사게 되는 품목이 있으면 그걸 먼저 말한다. */
-export function compareSentence(rows: ItemRow[], chosenDeliveries: number) {
+/** 비교하는 두 안(단가만 보고 고른 안, 이 안)의 배송 횟수와 총액 */
+export type CompareSide = { deliveries: number; total: number | null }
+
+/**
+ * 한 줄 결론. 단가만 보면 상자째 사게 되는 품목이 있으면 그걸 먼저 말한다.
+ * "배송을 줄였다", "전체가 싸진다"는 두 안을 실제로 비교해서 맞을 때만 말한다(고른 안이 더 비싸거나 배송이 같을 수 있다).
+ */
+export function compareSentence(rows: ItemRow[], chosen: CompareSide, baseline: CompareSide) {
   const over = rows.filter((r) => r.overbuy).map((r) => r.item)
   const pricier = rows.filter((r) => r.pricierNote).map((r) => r.item)
   const parts: string[] = []
   if (over.length) parts.push(`단가만 보면 ${josa(over.join('·'), '을', '를')} 큰 상자째 사게 돼요. 필요한 만큼만 샀어요.`)
-  if (pricier.length) parts.push(`${josa(pricier.join('·'), '은', '는')} 조금 비싸게 사는 대신 거래처 조건을 지키고 배송을 ${chosenDeliveries}번으로 줄여서 전체가 싸져요.`)
+  if (pricier.length) {
+    const fewer = chosen.deliveries < baseline.deliveries
+    const cheaper = chosen.total !== null && baseline.total !== null && chosen.total < baseline.total
+    const tail = fewer && cheaper ? `거래처 조건을 지키고 배송을 ${chosen.deliveries}번으로 줄여서 전체가 싸져요.`
+      : cheaper ? '거래처 조건을 지키면서 전체는 싸져요.'
+        : fewer ? `거래처 조건을 지키고 배송을 ${chosen.deliveries}번으로 줄였어요.`
+          : '거래처 조건을 지켜요.'
+    parts.push(`${josa(pricier.join('·'), '은', '는')} 조금 비싸게 사는 대신 ${tail}`)
+  }
   return parts.join(' ')
 }
