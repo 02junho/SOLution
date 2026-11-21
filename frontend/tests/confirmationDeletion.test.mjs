@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import React, { act } from 'react'
 import { Window } from 'happy-dom'
 import { createServer } from 'vite'
-const testWindow = new Window({ url: 'http://localhost:5173/#/confirmations' })
+const testWindow = new Window({ url: 'http://localhost:5173/?mode=classic#/confirmations' }) // 예전 업무 화면(?mode=classic)의 계획 목록
 globalThis.window = testWindow
 globalThis.document = testWindow.document
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
