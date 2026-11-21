@@ -96,7 +96,7 @@ export default function OperationResultsPage({ previewOnly = false }: { previewO
     else setMessage(response.message ?? '운영 계산을 완료하지 못했습니다.')
   }
   return <div className="operation-page">
-    <header className="op-site-header"><a className="op-wordmark" href="/">SOL루션<span>사장님의 다음 결정</span></a><nav><a href="#/system">연결 확인</a><span>운영 실험</span></nav></header>
+    <header className="op-site-header"><a className="op-wordmark" href="/?mode=classic">SOL루션<span>사장님의 다음 결정</span></a><nav><a href="#/system">연결 확인</a><span>운영 실험</span></nav></header>
     <main className="op-main">
       {preview && <div className="op-preview-banner" role="status">화면 미리보기 · 합성 예제입니다. 서버에 저장하지 않으며 애니메이션은 일부 고객의 재생 예시입니다.</div>}
       {message && <p className="op-notice" role="alert">{message}</p>}
