@@ -11,7 +11,7 @@
 | 서버 | Spring Boot 4.1 (Java 21, Gradle) — 세션·대화 기록·확정 저장 |
 | AI·계산 | FastAPI (Python 3.13), LangChain/LangGraph, Claude Sonnet 5.5, PuLP 4, SimPy |
 | DB | PostgreSQL 16 + pgvector, 테이블은 Flyway로 관리 |
-| 실행 | Docker Compose (DB·Spring·FastAPI) |
+| 실행 | Docker Compose (DB·Spring·FastAPI), 배포는 화면 nginx를 더한 `docker-compose.prod.yml` |
 
 ---
 
@@ -20,6 +20,7 @@
 ```text
 SOLution/
 ├── frontend/                     # React + TypeScript
+│   ├── Dockerfile, nginx.conf    # 배포용 화면 이미지 (빌드 결과 + /api를 Spring으로)
 │   └── src/
 │       ├── api/                  # 서버 호출 함수
 │       ├── components/
@@ -71,7 +72,8 @@ SOLution/
 │   └── demo/                     # 시연용 합성 데이터
 │
 ├── docs/                         # 설계 문서 (C4, ERD 등)
-├── docker-compose.yml
+├── docker-compose.yml            # 로컬·CI (DB·FastAPI·Spring)
+├── docker-compose.prod.yml       # 배포 (GHCR 이미지 + 화면 nginx, 80번만 공개)
 ├── .env.example
 └── README.md
 ```
@@ -162,7 +164,7 @@ http://localhost:5173 에 `Spring / Spring → DB / Spring → FastAPI / FastAPI
 
 ### 5. 시연용 기본 데이터 (`DEMO_SEED=true`)
 
-`.env`에서 `DEMO_SEED=true`로 바꾸면 Spring이 뜰 때 시연 데이터를 넣습니다(`.env.example`의 기본값은 `false`, 배포에서는 끕니다). 이미 있으면 건너뜁니다. CI는 compose 단계에서 켜고 확인합니다. 내용은 `backend/src/main/resources/db/demo/demo_seed.sql`입니다.
+`.env`에서 `DEMO_SEED=true`로 바꾸면 Spring이 뜰 때 시연 데이터를 넣습니다(`.env.example`의 기본값은 `false`. 실제 매장 데이터를 쓰는 배포에서는 끄고, 시연용 서버에서는 켭니다). 이미 있으면 건너뜁니다. CI는 compose 단계에서 켜고 확인합니다. 내용은 `backend/src/main/resources/db/demo/demo_seed.sql`입니다.
 
 | 데이터 | 값 | 계산 실행 결과 |
 | --- | --- | --- |
@@ -208,6 +210,26 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | 10 | FastAPI 실행 기록(`execution_log`) |
 
 실패한 단계는 무엇을 볼지(`docker compose logs backend` 등)를 같이 알려 줍니다. 끝낼 때는 `docker compose down`(데이터 유지) 또는 `docker compose down -v`(로컬 DB까지 삭제).
+
+### 7. 배포용 구성 (`docker-compose.prod.yml`)
+
+서버 한 대에 DB·FastAPI·Spring·화면(nginx) 네 개를 띄웁니다. 서버에서는 빌드하지 않고 GHCR(`ghcr.io/02junho/solution-*`) 이미지를 받아 씁니다. 밖에는 80번만 열리고, 화면과 `/api`가 같은 주소라 개발 때 Vite가 하던 `/api` 전달은 nginx(`frontend/nginx.conf`)가 합니다.
+
+서버 `.env`는 `.env.example`을 복사해 채우고, 아래 값을 배포에 맞게 바꿉니다.
+
+| 항목 | 값 |
+| --- | --- |
+| `FRONTEND_ORIGIN` | `http://서버주소` (브라우저로 여는 주소) |
+| `DEMO_SEED` | 시연 서버는 `true` |
+| `SWAGGER_ENABLED` | `false` (API 문서 닫기) |
+| `POSTGRES_PASSWORD` | 로컬과 다른 긴 값 |
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+`http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다.
 
 ---
 
