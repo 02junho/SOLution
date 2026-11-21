@@ -198,7 +198,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       # GHCR 패키지는 비공개라 서버가 받을 때만 잠깐 로그인하고 바로 로그아웃한다(토큰은 표준 입력으로 넘기고, 작업이 끝나면 만료).
-      # IMAGE_TAG는 서버 .env에 적어 두어, 나중에 손으로 down·up 해도 같은 버전으로 뜬다.
+      # IMAGE_TAG는 서버 .env에 적어 두어, 나중에 손으로 down·up 해도 같은 버전으로 뜬다. 새로 덧붙일 때는 앞에 줄바꿈을 넣어 마지막 줄 값에 붙지 않게 한다.
       - name: 서버 갱신
         env:
           HOST: ${{ secrets.EC2_HOST }}
@@ -213,7 +213,7 @@ jobs:
             git fetch -q origin '$BRANCH'
             git checkout -q '$BRANCH'
             git reset -q --hard '$SHA'
-            if grep -q '^IMAGE_TAG=' .env; then sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$SHA|' .env; else echo 'IMAGE_TAG=$SHA' >> .env; fi
+            if grep -q '^IMAGE_TAG=' .env; then sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$SHA|' .env; else printf '\nIMAGE_TAG=%s\n' '$SHA' >> .env; fi
             echo \"서버 저장소: \$(git rev-parse --short HEAD), IMAGE_TAG=\$(grep '^IMAGE_TAG=' .env | cut -d= -f2 | cut -c1-7)\""
           printf '%s\n' "$GHCR_TOKEN" | srv "docker login ghcr.io -u '$GHCR_USER' --password-stdin > /dev/null && cd ~/SOLution
             docker compose -f docker-compose.prod.yml pull; rc=\$?

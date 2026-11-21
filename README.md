@@ -250,6 +250,16 @@ for app in backend ai-server frontend; do
 done
 ```
 
+그다음 서버에 SSH로 들어가 적용합니다. 자동 배포가 한 번이라도 돌았다면 서버 `.env`에 `IMAGE_TAG=<커밋 SHA>`가 남아 있어 `latest`를 받지 않으므로, 먼저 `latest`로 바꿉니다. `docker login`은 비밀번호(토큰)를 물어보면 붙여 넣습니다(화면과 기록에 남지 않음). 다음 자동 배포가 돌면 `IMAGE_TAG`는 다시 그 커밋 SHA로 바뀝니다.
+
+```bash
+cd ~/SOLution
+sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=latest|' .env
+docker login ghcr.io -u 깃허브아이디
+docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+docker logout ghcr.io
+```
+
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다.
 
 ---
