@@ -229,7 +229,16 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-**이미지 게시**: GHCR에 이미지를 올리는 GitHub Actions 작업은 아직 없습니다. 서버를 만든 뒤 `ci.yml`에 "dev 병합 → 이미지 세 개 빌드·게시 → 서버 갱신" 작업으로 추가합니다(당분간 dev 기준, 마지막에 main 기준). 그 전에 서버에서 써야 하면 로컬에서 직접 올립니다. 토큰은 GitHub 설정의 Personal access token(classic)에서 `write:packages`로 만들고, 처음 올린 패키지는 비공개라 GitHub → Packages에서 세 개 모두 Public으로 바꿔야 서버가 로그인 없이 받습니다.
+**자동 배포**: dev에 병합되면 CI(`ci.yml`)가 검사 네 개를 통과한 뒤 `이미지 게시`(이미지 세 개를 GHCR에 `:latest`·커밋 SHA로 올림) → `서버 배포`(SSH로 서버에 들어가 저장소를 dev로 맞추고 `pull`·`up -d`, 밖에서 `/api/v1/system/health` 확인)를 차례로 돕니다. PR에서는 돌지 않습니다. 발표 전에 main 기준으로 옮길 때는 두 작업의 `if`에 있는 브랜치만 바꿉니다.
+
+| 준비 | 내용 |
+| --- | --- |
+| 서버 | EC2 t3.small(2GB) 한 대, Ubuntu 24.04 x86, 스왑 2GB, Docker, 보안 그룹은 22·80만. 저장소를 `~/SOLution`에 dev로 clone하고 그 안에 `.env` |
+| GitHub Secret | `EC2_HOST`(서버 주소), `EC2_USER`(`ubuntu`), `EC2_SSH_KEY`(접속 키 내용) |
+
+GHCR 패키지는 비공개로 둡니다. 서버는 배포할 때만 그 작업의 토큰으로 잠깐 로그인해 받고 바로 로그아웃합니다. 그래서 서버에서 손으로 `pull`하려면 먼저 `docker login ghcr.io`가 필요합니다(이미 받은 이미지로 `down`·`up -d` 하는 것은 로그인 없이 됩니다).
+
+**수동 게시** (자동 배포를 쓸 수 없을 때만): 로컬에서 직접 올립니다. 토큰은 GitHub 설정의 Personal access token(classic)에서 `write:packages`로 만듭니다.
 
 ```bash
 echo "$GHCR_TOKEN" | docker login ghcr.io -u 깃허브아이디 --password-stdin
