@@ -43,6 +43,11 @@ test('한 줄 결론과 못 지킨 조건을 사장님 말로 만든다', () => 
   assert.doesNotMatch(pricey, /줄여서|싸져요/)
   // 총액만 싸면 배송 이야기는 빼고
   assert.match(compareSentence(rows, { deliveries: 2, total: 40000 }, { deliveries: 2, total: 50000 }), /거래처 조건을 지키면서 전체는 싸져요/)
+  // 배송 횟수를 모르면 줄었다고 하지 않는다(총액만 비교)
+  const unknown = compareSentence(rows, { deliveries: null, total: 40000 }, { deliveries: 2, total: 50000 })
+  assert.match(unknown, /거래처 조건을 지키면서 전체는 싸져요/)
+  assert.doesNotMatch(unknown, /배송을/)
+  assert.match(compareSentence(rows, { deliveries: null, total: 60000 }, { deliveries: 2, total: 50000 }), /거래처 조건을 지켜요\./)
   // 배송만 줄면 싸졌다고 하지 않는다
   assert.match(compareSentence(rows, { deliveries: 1, total: 60000 }, { deliveries: 2, total: 50000 }), /배송을 1번으로 줄였어요\.$/)
   assert.deepEqual(violationLabels(['delivery_count', 'minimum_order'], 4, 2), ['배송 4번(정한 건 2번까지)', '최소 주문 금액을 못 채워요'])

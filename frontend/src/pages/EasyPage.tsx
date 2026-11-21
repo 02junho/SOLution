@@ -110,7 +110,12 @@ export default function EasyPage() {
   const [lastOrder, setLastOrder] = useState(DEFAULT_LAST_ORDER)
   // 이 화면에서 새로 시작한 업무인지(메뉴 밑줄을 "홈"에 두려고). 목록에서 연 업무면 false.
   const [startedHere, setStartedHere] = useState(false)
-  const [resume, setResume] = useState<Resume | null>(null)
+  // 이어서 계산할 업무·입력 버전. 화면에 그리지 않고, 앞선 준비 요청이 끝난 직후의 최신 값을 읽어야 해서 ref로 둔다.
+  const resumeRef = useRef<Resume | null>(null)
+  // 같은 화면 안의 "업무 만들기·조건 저장" 준비 요청을 한 줄로 세운다. 다시 계산하면 앞 요청이 끝난 뒤 그 결과를 이어받는다.
+  const prepRef = useRef<Promise<unknown>>(Promise.resolve())
+  // 화면 번호(그리기용). 저장 버튼을 누른 화면과 저장이 끝났을 때의 화면이 같은지 비교한다.
+  const [screenNo, setScreenNo] = useState(0)
   const [context, setContext] = useState<Context | null>(null)
   const [prepared, setPrepared] = useState<Prepared | null>(null)
   const [purchase, setPurchase] = useState<PurchaseResult | null>(null)
@@ -181,19 +186,22 @@ export default function EasyPage() {
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
-    setResume(null); setContext(null); setPrepared(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    resumeRef.current = null; setContext(null); setPrepared(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
     shownResultRef.current = null
   }
 
-  /** 저장이 끝났을 때: 요청을 보낸 결과가 아직 보이고 있을 때만 "저장했어요"로 바꾼다. */
-  function markSaved(resultId: number, text: string, choiceKey: string) {
-    if (shownResultRef.current !== resultId) return
+  /** 저장이 끝났을 때: 저장을 누른 화면(screen)에서 같은 결과가 아직 보이고 있을 때만 "저장했어요"로 바꾼다.
+   *  같은 결과를 목록에서 다시 열었으면 화면 번호가 달라 늦은 응답을 반영하지 않는다. */
+  function markSaved(resultId: number, text: string, choiceKey: string, screen: number) {
+    if (screen !== screenRef.current || shownResultRef.current !== resultId) return
     setSaved(text); setSavedFor(choiceKey)
   }
 
   function open(next: EasyRoute) {
     tokenRef.current += 1
     screenRef.current += 1
+    setScreenNo(screenRef.current)
+    prepRef.current = Promise.resolve()
     const token = tokenRef.current
     reset()
     setRoute(next)
@@ -259,7 +267,7 @@ export default function EasyPage() {
       const values = fill(kind, session.current_input ?? null)
       setFeature(kind)
       setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
-      setResume({ sessionId: id, versionId: session.current_version_id, versionNo: session.current_version, confirmed: session.input_confirmed, values })
+      resumeRef.current = { sessionId: id, versionId: session.current_version_id, versionNo: session.current_version, confirmed: session.input_confirmed, values }
       if (session.latest_result_id) {
         const result = await loadResult(kind, session.latest_result_id)
         if (token !== tokenRef.current) return
@@ -351,17 +359,18 @@ export default function EasyPage() {
     const versionId = Number(data?.input_version_id)
     const versionNo = Number(data?.version_no)
     if (response.status !== 'ok' || !versionId) throw new Error(response.message || '조건을 저장하지 못했어요.')
-    if (screen === screenRef.current) setResume({ sessionId, versionId, versionNo, confirmed: false, values })
+    if (screen === screenRef.current) resumeRef.current = { sessionId, versionId, versionNo, confirmed: false, values }
     await workflowApi.confirmInput(versionId, versionNo)
     return { versionId, versionNo }
   }
 
   // 새 업무면 만들고, 이어서 하는 업무면 그 업무 안에서. 조건이 그대로면 저장된 버전을 다시 쓴다.
   async function ready(kind: EasyFeature, screen: number): Promise<Prepared> {
+    const resume = resumeRef.current
     if (!resume) {
       const created = await workflowApi.create(1, kind, 'form', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
       // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
-      if (screen === screenRef.current) setResume({ sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' })
+      if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
       return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind, screen)) }
     }
     if (resume.versionId === null || resume.values !== values) {
@@ -379,10 +388,14 @@ export default function EasyPage() {
     setPurchase(null); setOperation(null)
     shownResultRef.current = null
     try {
-      const done = await ready(feature, screenRef.current)
+      // 앞선 준비 요청(그만두기로 결과만 버린 것 포함)이 끝난 뒤에 이어서 준비한다. 앞 요청이 실패해도 이번 요청은 진행한다.
+      const screen = screenRef.current
+      const job = prepRef.current.catch(() => undefined).then(() => ready(feature, screen))
+      prepRef.current = job
+      const done = await job
       if (token !== tokenRef.current) return
       // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
-      setResume({ sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values })
+      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values }
       setPrepared(done)
       if (route.kind !== 'session') {
         window.history.replaceState(null, '', routeHash({ kind: 'session', id: done.sessionId }))
@@ -670,10 +683,10 @@ export default function EasyPage() {
 
         <div ref={resultRef} className="easy-anchor" />
         {phase === 'result' && purchase && prepared && (
-          <PurchaseView result={purchase} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(purchase.result_id, text, choiceKey)} savedChoice={savedChoice} maxDeliveries={context?.kind === 'plan' ? null : deliveries} />
+          <PurchaseView result={purchase} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(purchase.result_id, text, choiceKey, screenNo)} savedChoice={savedChoice} maxDeliveries={context?.kind === 'plan' ? null : deliveries} />
         )}
         {phase === 'result' && operation && prepared && (
-          <OperationView result={operation} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(operation.result_id, text, choiceKey)} savedChoice={savedChoice as OperationPlan | null} />
+          <OperationView result={operation} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(operation.result_id, text, choiceKey, screenNo)} savedChoice={savedChoice as OperationPlan | null} />
         )}
         {phase === 'result' && route.kind === 'session' && !savedChoice && (
           <p className="easy-again">

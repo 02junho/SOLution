@@ -215,7 +215,7 @@ function WhyCard({ result, best, other, saved, picked, maxDeliveries }: { result
   const rows = compareItems(baseline.lines, chosenLines, detail?.buy_needs ?? [])
   const baseDeliveries = deliveriesOf(baseline.lines)
   const broken = violationLabels(baseline.constraint_violations ?? [], baseDeliveries, maxDeliveries)
-  const sentence = compareSentence(rows, { deliveries: best.delivery_count ?? 0, total: best.total_krw }, { deliveries: baseDeliveries, total: baseline.total_krw ?? null })
+  const sentence = compareSentence(rows, { deliveries: best.delivery_count ?? null, total: best.total_krw }, { deliveries: baseDeliveries, total: baseline.total_krw ?? null })
   const bars = [
     { key: 'baseline', label: '단가만 보고 고르면', krw: baseline.total_krw, tags: broken.length ? broken : [`배송 ${baseDeliveries}번`], tone: 'bad' },
     ...(other && typeof other.total_krw === 'number'

@@ -105,7 +105,7 @@ export function deliveriesOf(lines: CompareLine[]) {
 }
 
 /** 비교하는 두 안(단가만 보고 고른 안, 이 안)의 배송 횟수와 총액 */
-export type CompareSide = { deliveries: number; total: number | null }
+export type CompareSide = { deliveries: number | null; total: number | null }
 
 /**
  * 한 줄 결론. 단가만 보면 상자째 사게 되는 품목이 있으면 그걸 먼저 말한다.
@@ -117,7 +117,8 @@ export function compareSentence(rows: ItemRow[], chosen: CompareSide, baseline: 
   const parts: string[] = []
   if (over.length) parts.push(`단가만 보면 ${josa(over.join('·'), '을', '를')} 큰 상자째 사게 돼요. 필요한 만큼만 샀어요.`)
   if (pricier.length) {
-    const fewer = chosen.deliveries < baseline.deliveries
+    // 어느 한쪽 배송 횟수를 모르면 줄었다고 단정하지 않는다.
+    const fewer = chosen.deliveries !== null && baseline.deliveries !== null && chosen.deliveries < baseline.deliveries
     const cheaper = chosen.total !== null && baseline.total !== null && chosen.total < baseline.total
     const tail = fewer && cheaper ? `거래처 조건을 지키고 배송을 ${chosen.deliveries}번으로 줄여서 전체가 싸져요.`
       : cheaper ? '거래처 조건을 지키면서 전체는 싸져요.'
