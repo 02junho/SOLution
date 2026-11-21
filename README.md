@@ -229,12 +229,12 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-**자동 배포**: dev에 병합되면 CI(`ci.yml`)가 검사 네 개를 통과한 뒤 `이미지 게시`(이미지 세 개를 GHCR에 `:latest`·커밋 SHA로 올림) → `서버 배포`(SSH로 서버에 들어가 저장소를 dev로 맞추고 `pull`·`up -d`, 밖에서 `/api/v1/system/health` 확인)를 차례로 돕니다. PR에서는 돌지 않습니다. 발표 전에 main 기준으로 옮길 때는 두 작업의 `if`에 있는 브랜치만 바꿉니다.
+**자동 배포**: dev에 병합되면 CI(`ci.yml`)가 검사 네 개를 통과한 뒤 `이미지 게시`(이미지 세 개를 GHCR에 `:latest`·커밋 SHA로 올림) → `서버 배포`(SSH로 서버에 들어가 저장소와 이미지를 그 실행이 검사한 커밋으로 맞추고 `pull`·`up -d`, 밖에서 `/api/v1/system/health` 확인)를 차례로 돕니다. 배포는 서버 `.env`의 `IMAGE_TAG`를 그 커밋 SHA로 적어 두므로, 손으로 `down`·`up -d` 해도 같은 버전으로 뜨고, 옛 실행을 다시 돌리면(Re-run) 그 버전으로 되돌아갑니다. PR에서는 돌지 않습니다. 발표 전에 main 기준으로 옮길 때는 두 작업의 `if`에 있는 브랜치만 바꿉니다.
 
 | 준비 | 내용 |
 | --- | --- |
 | 서버 | EC2 t3.small(2GB) 한 대, Ubuntu 24.04 x86, 스왑 2GB, Docker, 보안 그룹은 22·80만. 저장소를 `~/SOLution`에 dev로 clone하고 그 안에 `.env` |
-| GitHub Secret | `EC2_HOST`(서버 주소), `EC2_USER`(`ubuntu`), `EC2_SSH_KEY`(접속 키 내용) |
+| GitHub Secret | `EC2_HOST`(서버 주소), `EC2_USER`(`ubuntu`), `EC2_SSH_KEY`(접속 키 내용), `EC2_KNOWN_HOSTS`(서버 호스트 공개키 `known_hosts` 줄. 배포가 접속하는 서버가 진짜인지 확인. 서버를 새로 만들면 다시 넣기) |
 
 GHCR 패키지는 비공개로 둡니다. 서버는 배포할 때만 그 작업의 토큰으로 잠깐 로그인해 받고 바로 로그아웃합니다. 그래서 서버에서 손으로 `pull`하려면 먼저 `docker login ghcr.io`가 필요합니다(이미 받은 이미지로 `down`·`up -d` 하는 것은 로그인 없이 됩니다).
 

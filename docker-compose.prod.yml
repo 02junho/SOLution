@@ -1,5 +1,6 @@
 # 배포용 (서버 1대). 서버에서는 빌드하지 않고 GHCR 이미지를 받아 띄운다.
 # 이미지 게시와 서버 갱신은 dev 병합 때 ci.yml(이미지 게시 → 서버 배포)이 자동으로 한다. README "7. 배포용 구성" 참고.
+# 이미지 태그는 IMAGE_TAG(배포가 서버 .env에 그 커밋 SHA로 적음)를 따르고, 없으면 latest를 쓴다.
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
 # 밖에는 화면(nginx) 80번만 연다. DB(5432)·Spring(8080)·FastAPI(8000)는 컨테이너끼리만 쓴다.
@@ -27,7 +28,7 @@ services:
     restart: unless-stopped
 
   ai-server:
-    image: ghcr.io/02junho/solution-ai-server:latest
+    image: ghcr.io/02junho/solution-ai-server:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
       DB_HOST: db
@@ -39,7 +40,7 @@ services:
 
   # 테이블은 backend가 뜰 때 Flyway로 만든다.
   backend:
-    image: ghcr.io/02junho/solution-backend:latest
+    image: ghcr.io/02junho/solution-backend:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
       DB_HOST: db
@@ -55,7 +56,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/02junho/solution-frontend:latest
+    image: ghcr.io/02junho/solution-frontend:${IMAGE_TAG:-latest}
     ports:
       - "80:80"
     depends_on:
