@@ -224,11 +224,6 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 | `SWAGGER_ENABLED` | `false` (API 문서 닫기) |
 | `POSTGRES_PASSWORD` | 로컬과 다른 긴 값 |
 
-```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-```
-
 **자동 배포**: dev에 병합되면 CI(`ci.yml`)가 검사 네 개를 통과한 뒤 `이미지 게시`(이미지 세 개를 GHCR에 `:latest`·커밋 SHA로 올림) → `서버 배포`(SSH로 서버에 들어가 저장소와 이미지를 그 실행이 검사한 커밋으로 맞추고 `pull`·`up -d`, 밖에서 `/api/v1/system/health` 확인)를 차례로 돕니다. 배포는 서버 `.env`의 `IMAGE_TAG`를 그 커밋 SHA로 적어 두므로, 손으로 `down`·`up -d` 해도 같은 버전으로 뜨고, 옛 실행을 다시 돌리면(Re-run) 그 버전으로 되돌아갑니다. PR에서는 돌지 않습니다. 발표 전에 main 기준으로 옮길 때는 두 작업의 `if`에 있는 브랜치만 바꿉니다.
 
 | 준비 | 내용 |
@@ -238,27 +233,10 @@ docker compose -f docker-compose.prod.yml up -d
 
 GHCR 패키지는 비공개로 둡니다. 서버는 배포할 때만 그 작업의 토큰으로 잠깐 로그인해 받고 바로 로그아웃합니다. 그래서 서버에서 손으로 `pull`하려면 먼저 `docker login ghcr.io`가 필요합니다(이미 받은 이미지로 `down`·`up -d` 하는 것은 로그인 없이 됩니다).
 
-**수동 게시** (자동 배포를 쓸 수 없을 때만): 로컬에서 직접 올립니다. 토큰은 GitHub 설정의 Personal access token(classic)에서 `write:packages`로 만듭니다.
+**배포가 실패하거나 되돌릴 때**: 서버에서 손으로 이미지를 올리거나 바꾸지 않고 Actions에서 다시 돌립니다. 손으로 바꾸면 서버의 설정 파일(저장소)과 이미지 버전이 어긋날 수 있어서입니다.
 
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u 깃허브아이디 --password-stdin
-for app in backend ai-server frontend; do
-  # 빌드나 push가 하나라도 실패하면 멈춘다 (예전 :latest가 대신 올라가지 않게)
-  docker build --platform linux/amd64 -t ghcr.io/02junho/solution-${app}:latest ./${app} \
-    && docker push ghcr.io/02junho/solution-${app}:latest \
-    || { echo "${app} 실패: 여기서 멈춤"; break; }
-done
-```
-
-그다음 서버에 SSH로 들어가 적용합니다. 자동 배포가 한 번이라도 돌았다면 서버 `.env`에 `IMAGE_TAG=<커밋 SHA>`가 남아 있어 `latest`를 받지 않으므로, 먼저 `latest`로 바꿉니다. `docker login`은 비밀번호(토큰)를 물어보면 붙여 넣습니다(화면과 기록에 남지 않음). 다음 자동 배포가 돌면 `IMAGE_TAG`는 다시 그 커밋 SHA로 바뀝니다.
-
-```bash
-cd ~/SOLution
-sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=latest|' .env
-docker login ghcr.io -u 깃허브아이디
-docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
-docker logout ghcr.io
-```
+- 실패한 배포: 그 CI 실행에서 **Re-run failed jobs**
+- 예전 버전으로 되돌리기: 되돌릴 커밋이 dev에 병합됐던 CI 실행을 열어 **Re-run all jobs**(GitHub는 30일 안의 실행만 다시 돌릴 수 있음). 그 커밋의 설정과 이미지(SHA 태그)로 서버가 맞춰집니다.
 
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다.
 
