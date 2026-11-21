@@ -6,6 +6,8 @@ import json
 import math
 from pathlib import Path
 
+from .day_window import CLOSE_RANGE, OPEN_RANGE, STEP_MIN
+
 FILE = Path(__file__).with_name("menu_catalog.json")
 BASE = json.loads(FILE.read_text("utf-8"))
 PLAN_IDS = ("CURRENT", "ALT_A", "ALT_C")
@@ -60,6 +62,16 @@ def validate_menus(menus):
     return menus
 
 
+def _scale_menu(menu, total):
+    """가게가 잰 한 잔 제조시간(초)으로 바꾼다. 단계 비율(사람 단계·기계 단계)과 흔들림 비율은 그대로 둔다."""
+    factor = total / menu["manufacture_sec"]
+    for step in menu["steps"]:
+        step["duration_sec"] = step["duration_sec"] * factor
+    menu["manufacture_stddev_sec"] = min(300.0, menu["manufacture_stddev_sec"] * factor)
+    menu["manufacture_sec"] = sum(step["duration_sec"] for step in menu["steps"])
+    menu["manufacture_sec_source"] = "STORE_ENTERED"
+
+
 def config_for(body):
     if not isinstance(body, dict):
         raise ValueError("JSON request must be object")
@@ -93,6 +105,13 @@ def config_for(body):
             raise ValueError("menu_weights keys must exactly match selected menus")
         for m in selected:
             m["sales_weight"] = weights[m["menu_id"]]
+    times = body.get("manufacture_sec_by_menu")
+    if times is not None:
+        if not isinstance(times, dict) or set(times) - {m["menu_id"] for m in selected}:
+            raise ValueError("manufacture_sec_by_menu keys must be selected menus")
+        for m in selected:
+            if m["menu_id"] in times:
+                _scale_menu(m, _real(times[m["menu_id"]], f"{m['menu_id']}.manufacture_sec", lower=10, upper=600))
     validate_menus(selected)
     durations = _real(
         body.get("manufacture_duration_scale", 1),
@@ -148,6 +167,9 @@ def options():
         "model_version": "operation.v1",
         "execution_mode": "continuous_day",
         "time_slots": list(SLOTS),
+        "open_time_range": list(OPEN_RANGE),
+        "close_time_range": list(CLOSE_RANGE),
+        "time_step_min": STEP_MIN,
         "choice_keys": list(PLAN_IDS),
         "test_loads": list(TEST_LOADS),
         "default_repetitions": 30,

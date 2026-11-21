@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import GuideCards from './features/guide/GuideCards'
 import { guideAutoOpen, markGuideSeen } from './features/guide/guideSlides'
 import OperationResultsPage from './features/operation/OperationResultsPage'
@@ -14,6 +14,9 @@ import PurchasePreparationPage from './pages/PurchasePreparationPage'
 import QuoteIntegrationPage from './pages/QuoteIntegrationPage'
 import SystemCheckPage from './pages/SystemCheckPage'
 import type { FeatureType } from './types/api'
+
+// 운영 실험실(#/lab)은 그 주소를 열 때만 불러온다(첫 화면 번들을 늘리지 않게).
+const OperationLab = lazy(() => import('./features/operation/lab/OperationLab'))
 
 export default function App() {
   const params = new URLSearchParams(window.location.search)
@@ -61,6 +64,8 @@ function WorkflowApp() {
     if (match) void openSession(Number(match[1]))
   }, [route, openSession])
 
+  // 운영 2번(가게 데이터 버전) 확인용 실험실. #/operation보다 먼저 본다.
+  const labPage = route.startsWith('#/lab')
   const operationPage = route.startsWith('#/operation')
   const savedPage = route.startsWith('#/confirmations')
   const systemPage = route.startsWith('#/system')
@@ -97,6 +102,12 @@ function WorkflowApp() {
     setGuideOpen(false)
   }
 
+  if (labPage)
+    return (
+      <Suspense fallback={null}>
+        <OperationLab />
+      </Suspense>
+    )
   if (operationPage) return <OperationResultsPage />
 
   return (

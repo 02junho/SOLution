@@ -8,7 +8,8 @@ from __future__ import annotations
 import copy
 import random
 import statistics
-from .catalog import SLOTS, config_for
+from .catalog import config_for
+from .day_window import day
 from .demand import DEMAND_PRESETS, scenario as base_scenario, draw_orders
 
 DEMAND_LEVEL = DEMAND_PRESETS
@@ -58,7 +59,7 @@ def _scenario(value):
     result = base_scenario(spec)
     result["id"] = "CONTINUOUS_DAY"
     result["applied_assumptions"] = [
-        "07:00-19:00 operates as one continuous queue with no resets at slot boundaries.",
+        f"{result['start']}-{result['end']} operates as one continuous queue with no resets at slot boundaries.",
         "Orders are one customer and one drink by model assumption; no sales forecast.",
         "Seoul payment-time distribution determines time shares only, not daily volume.",
         "Orders arriving after an optional early last_order_time are rejected and not rescheduled.",
@@ -180,7 +181,7 @@ def aggregate(records, plan, include_events):
             {k: v for k, v in records[0].items() if k not in ("events", "by_slot")}
         ),
     }
-    for index, slot in enumerate(SLOTS):
+    for index, slot in enumerate(day().slots):
         keys = [
             "arrived_in_slot",
             "completed_in_slot",

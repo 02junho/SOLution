@@ -20,8 +20,8 @@ from .simulation_common import (
     MIN_SLOT_ORDERS,
 )
 from .day_simulation import DayCafe, roster_for_base, profile
-from .catalog import SLOTS
 from .demand import allocate
+from .day_window import day, using, from_scenario
 from .slot_plan import recommend_slots, slot_details, slot_roster
 from .stats import paired_difference
 from .staffing_input import simulated_staffing
@@ -264,11 +264,11 @@ def _choose(results, quality, repetitions):
 
 
 def _staffing(rows):
-    """Positions the simulation used, always on the four fixed slots. Not paid hours, breaks or a shift plan."""
+    """Positions the simulation used, on the four slots of the day. Not paid hours, breaks or a shift plan."""
     if any("assignments" in r for r in rows):
         return simulated_staffing(rows)  # 받은 근무표: 구간이 네 칸으로 고정되지 않는다
     slots = []
-    for label in SLOTS:
+    for label in day().slots:
         start, end = label.split("-")
         row = next(r for r in rows if r["start"] <= start < r["end"])
         positions = []
@@ -322,7 +322,7 @@ def _presence(rows):
 def _slot_plan_result(choice_keys, records, rejected, quality, current, decisions=None):
     agg = _summarize_plan("SLOT_PLAN", records, rejected, quality, False)
     agg.pop("choice_key", None)
-    agg["slot_choice_keys"] = dict(zip(SLOTS, choice_keys))
+    agg["slot_choice_keys"] = dict(zip(day().slots, choice_keys))
     agg["slots"] = slot_details(choice_keys, records, quality)
     agg["comparison_to_current"] = compare_to(current["per_run"], agg["per_run"])
     if decisions is not None:
@@ -337,7 +337,24 @@ def compare(
     max_order_runs=MAX_ORDER_RUNS,
     plan_rosters=None,
 ):
-    """plan_rosters가 있으면(받은 근무표) 그 세 안으로 계산하고, 정해 둔 안 기준의 시간대별 추천은 만들지 않는다."""
+    """plan_rosters가 있으면(받은 근무표) 그 세 안으로 계산하고, 정해 둔 안 기준의 시간대별 추천은 만들지 않는다.
+
+    영업시간은 scenario의 start_time·end_time(기본 07:00~19:00)이다. plan_rosters는 같은 영업시간으로
+    만든 것이어야 한다(router가 같은 using() 안에서 만든다)."""
+    spec = body.get("scenario") if isinstance(body, dict) else None
+    with using(from_scenario(spec)):
+        return _compare(
+            body, engine, include_slot_recommendation, max_order_runs, plan_rosters
+        )
+
+
+def _compare(
+    body,
+    engine,
+    include_slot_recommendation,
+    max_order_runs,
+    plan_rosters,
+):
     quality = quality_from(body)
     repetitions, seed, conf = _validate(body)
     if engine not in ("reference", "simpy"):
@@ -422,9 +439,10 @@ def compare(
     custom_slot_plan = None
     if body.get("slot_choices") is not None and current is not None and not custom:
         choices = body["slot_choices"]
-        if not isinstance(choices, dict) or set(choices) != set(SLOTS):
-            raise ValueError(f"slot_choices needs every slot: {', '.join(SLOTS)}")
-        keys = [choices[s] for s in SLOTS]
+        slots = day().slots
+        if not isinstance(choices, dict) or set(choices) != set(slots):
+            raise ValueError(f"slot_choices needs every slot: {', '.join(slots)}")
+        keys = [choices[s] for s in slots]
         custom_slot_plan = _slot_plan_result(
             keys, run_roster("SLOT_PLAN", slot_roster(keys)), rejected, quality, current
         )
@@ -474,7 +492,8 @@ def compare(
             "rejected_demand_is_redistributed": False,
         },
         "closing": {
-            "store_close_time": "19:00",
+            "store_open_time": scn["start"],
+            "store_close_time": scn["end"],
             "last_order_time": scn["last_order_time"],
             "accepted_orders_are_finished": True,
             "after_close_finish_is_quality_gate": False,
@@ -645,6 +664,12 @@ def _slot_view(plan):
 
 
 def sensitivity(body, engine="simpy"):
+    spec = body.get("scenario") if isinstance(body, dict) else None
+    with using(from_scenario(spec)):
+        return _sensitivity(body, engine)
+
+
+def _sensitivity(body, engine):
     """One factor at a time; every variant reuses the same seeds as the baseline.
 
     Main basis = the per-slot recommendation (what the owner sees). For the four owner-facing

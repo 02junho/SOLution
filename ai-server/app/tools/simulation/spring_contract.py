@@ -25,7 +25,7 @@ METRIC_SOURCES = {
     "post_order_wait_over_300_ratio": "post_order_receipt_over_300_sec_ratio",
     "completed_customer_count_mean": "completed_eventually",
 }
-OPEN_HOURS = 12  # 07:00~19:00
+OPEN_HOURS = 12  # 기본 07:00~19:00. 계산 결과의 영업시간(scenario.duration_min)을 쓴다.
 COMPARISON_METRIC = "post_order_wait_mean_seconds"
 BASIS_METRIC = "post_order_wait_over_300_ratio"
 METRIC_DEFINITIONS = {
@@ -76,11 +76,11 @@ class ContractError(ValueError):
     """Spring 계약에 맞는 결과를 만들 수 없을 때. router가 needs_input으로 돌려준다."""
 
 
-def _run_metrics(run: dict) -> dict:
+def _run_metrics(run: dict, open_hours: float = OPEN_HOURS) -> dict:
     values = {name: run.get(source) for name, source in METRIC_SOURCES.items()}
     done = run.get("completed_by_close")
     values["throughput_per_hour_mean"] = (
-        round(done / OPEN_HOURS, 4) if done is not None else None
+        round(done / open_hours, 4) if done is not None else None
     )
     return values
 
@@ -133,8 +133,9 @@ def build(data: dict, staffing: StaffingInput) -> dict:
             "하루 주문량이 0건이면 운영안을 비교할 수 없어요. 예상 주문량을 입력해 주세요."
         )
     by_key = {p["choice_key"]: p for p in data["results"]}
+    open_hours = data["scenario"].get("duration_min", OPEN_HOURS * 60) / 60
     run_metrics = {
-        key: [_run_metrics(run) for run in plan["per_run"]]
+        key: [_run_metrics(run, open_hours) for run in plan["per_run"]]
         for key, plan in by_key.items()
     }
     for key, runs in run_metrics.items():
@@ -206,8 +207,8 @@ def build(data: dict, staffing: StaffingInput) -> dict:
         "statistics_policy_version": STATISTICS_POLICY_VERSION,
         "metric_definitions": METRIC_DEFINITIONS,
         "comparison_window": {
-            "start_time": "07:00",
-            "end_time": "19:00",
+            "start_time": scenario.get("start", "07:00"),
+            "end_time": scenario.get("end", "19:00"),
             "last_order_time": scenario.get("last_order_time"),
         },
         "recommendation": recommendation,

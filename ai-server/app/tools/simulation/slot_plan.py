@@ -9,7 +9,8 @@ orders carried over from one slot change the next one.
 
 from __future__ import annotations
 
-from .catalog import SLOTS, PLAN_IDS
+from .catalog import PLAN_IDS
+from .day_window import day
 from .simulation_common import MIN_SLOT_ORDERS, summarize
 from .day_simulation import profile, roster, seconds
 
@@ -20,7 +21,7 @@ MAX_REPAIRS = 4
 
 
 def slot_hours(index: int) -> float:
-    start, end = SLOTS[index].split("-")
+    start, end = day().slots[index].split("-")
     return (seconds(end) - seconds(start)) / 3600
 
 
@@ -29,9 +30,10 @@ def extra_staff_hours(choice_key: str, index: int) -> float:
 
 
 def slot_roster(choice_keys: list[str]) -> list[dict]:
-    if len(choice_keys) != len(SLOTS) or any(k not in PLAN_IDS for k in choice_keys):
+    slots = day().slots
+    if len(choice_keys) != len(slots) or any(k not in PLAN_IDS for k in choice_keys):
         raise ValueError(
-            f"slot choices need {len(SLOTS)} values from {', '.join(PLAN_IDS)}"
+            f"slot choices need {len(slots)} values from {', '.join(PLAN_IDS)}"
         )
     return roster("four", list(choice_keys))
 
@@ -101,7 +103,7 @@ def _best(candidates):
 def slot_details(choice_keys, records, quality):
     return [
         {"slot": slot, **_candidate(key, i, records, quality)}
-        for i, (slot, key) in enumerate(zip(SLOTS, choice_keys))
+        for i, (slot, key) in enumerate(zip(day().slots, choice_keys))
     ]
 
 
@@ -109,10 +111,11 @@ def recommend_slots(run_roster, quality) -> dict:
     """run_roster(choice_keys) -> list of per-run engine records (memoized by the caller)."""
     chosen: list[str] = []
     decisions = []
-    for index, slot in enumerate(SLOTS):
+    slots = day().slots
+    for index, slot in enumerate(slots):
         candidates = [
             _candidate(
-                key, index, run_roster(chosen + [key] * (len(SLOTS) - index)), quality
+                key, index, run_roster(chosen + [key] * (len(slots) - index)), quality
             )
             for key in PLAN_IDS
         ]
@@ -139,7 +142,7 @@ def recommend_slots(run_roster, quality) -> dict:
         )
         if failing is None:
             break
-        index = SLOTS.index(failing["slot"])
+        index = slots.index(failing["slot"])
         upgraded = UPGRADE[chosen[index]]
         repairs.append(
             {

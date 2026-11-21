@@ -9,7 +9,9 @@ from functools import lru_cache
 from math import floor
 import random
 from .preprocess import load, SLOTS, QUARTERS
+from . import day_window
 
+# 기본 영업시간(07~19시) 값. 계산은 scenario의 start·end(day_window)를 쓴다.
 LABELS = [f"{a}-{b}" for a, b, *_ in SLOTS]
 DAY_START = 7 * 3600
 DAY_END = 19 * 3600
@@ -55,10 +57,18 @@ def allocate(total: int, weights: list[float]):
     return b
 
 
-def get_shares(method="p50", quarter=None):
+def _band_hours(day):
+    edges = [day_window.to_sec(t) for t in day.edges]
+    hours = [(b - a) / 3600 for a, b in zip(edges, edges[1:])]
+    return [int(h) if h.is_integer() else h for h in hours]
+
+
+def get_shares(method="p50", quarter=None, day=None):
+    """시간대 비중. 영업시간이 기본(07~19시)과 다르면 첫·마지막 시간대 건수를 시간 길이에 비례해 늘이거나 줄인다
+    (원본 시간대 안에서 시간당 결제 건수가 같다는 기존 가정 그대로). 기본 영업시간이면 값이 전과 같다."""
+    day = day or day_window.DEFAULT
     data = normalization()
     if method == "p50":
-        values = list(data["normalized_shares"].values())
         counts = list(data["p50_adjusted_counts"].values())
     elif method in ("latest", "quarter"):
         q = QUARTERS[-1] if method == "latest" else quarter
@@ -74,9 +84,19 @@ def get_shares(method="p50", quarter=None):
                 "estimate_17_19",
             )
         ]
-        values = [v / sum(counts) for v in counts]
     else:
         raise ValueError("share_method must be p50/latest/quarter")
+    base_hours = [t[2] for t in SLOTS]
+    hours = _band_hours(day)
+    counts = [
+        c if h == b else c / b * h for c, h, b in zip(counts, hours, base_hours)
+    ]
+    if method == "p50" and day.is_default:
+        values = list(data["normalized_shares"].values())
+    else:
+        values = [v / sum(counts) for v in counts]
+    # 원본 시간대(06~11시 5시간, 17~21시 4시간) 중 쓰는 비율.
+    factors = [hours[0] / 5, 1, 1, hours[3] / 4]
     return {
         "area": "을지로입구역",
         "source_period": "2024Q1-2026Q2",
@@ -92,14 +112,18 @@ def get_shares(method="p50", quarter=None):
             {
                 "start": s,
                 "end": e,
-                "hours": hours,
+                "hours": h,
                 "adjusted_payment_count": round(c, 3),
                 "share": v,
                 "was_partially_estimated": i in (0, 3),
             }
-            for i, ((s, e, hours, *_), v, c) in enumerate(zip(SLOTS, values, counts))
+            for i, ((s, e), h, v, c) in enumerate(
+                zip(
+                    [x.split("-") for x in day.slots], hours, values, counts
+                )
+            )
         ],
-        "adjustment_factors": [0.8, 1, 1, 0.5],
+        "adjustment_factors": [round(f, 4) for f in factors],
         "data_provenance": "서울시 상권분석 서비스: 을지로입구역 CS100010 시간대별 카드 결제 건수",
         "methodology": data["method"],
         "caveat": data["limitations"],
@@ -112,15 +136,12 @@ def scenario(spec: dict):
     area = spec.get("area", "을지로입구역")
     if area != "을지로입구역":
         raise ValueError("demonstration area is fixed to 을지로입구역")
-    if (
-        spec.get("start_time", "07:00") != "07:00"
-        or spec.get("end_time", "19:00") != "19:00"
-    ):
-        raise ValueError("continuous-day start/end fixed at 07:00-19:00")
-    last = spec.get("last_order_time", "18:45")
+    day = day_window.from_scenario(spec)
+    close_abs = day.open_abs + day.length
+    last = spec.get("last_order_time") or day.clock(day.length - 15 * 60)
     last_secs = hhmm(last)
-    if not DAY_START < last_secs <= DAY_END:
-        raise ValueError("last_order_time must be 07:01 to 19:00")
+    if not day.open_abs < last_secs <= close_abs:
+        raise ValueError(f"last_order_time must be after {day.open} and no later than {day.close}")
     provided = [
         k
         for k in ("daily_orders", "demand_level", "orders_by_slot")
@@ -134,19 +155,32 @@ def scenario(spec: dict):
         raise ValueError(
             "Specify exactly one of daily_orders, demand_level or orders_by_slot"
         )
-    share = get_shares(spec.get("share_method", "p50"), spec.get("quarter"))
-    weights = [x["share"] for x in share["time_bands"]]
+    labels = list(day.slots)
+    if day.is_store:
+        # 가게가 넣은 시간대별 주문 수만 쓴다. 상권 비중은 쓰지 않는다.
+        share = {
+            "area": "을지로입구역",
+            "basis": "STORE_ENTERED_SLOT_ORDER_COUNTS",
+            "time_bands": [
+                {"start": s.split("-")[0], "end": s.split("-")[1]} for s in labels
+            ],
+        }
+    else:
+        share = get_shares(spec.get("share_method", "p50"), spec.get("quarter"), day)
+    weights = [x.get("share", 0) for x in share["time_bands"]]
+    if day.is_store and provided[0] != "orders_by_slot":
+        raise ValueError("가게 시간대는 시간대별 주문 수(orders_by_slot)와 함께만 쓸 수 있어요.")
     if provided[0] == "orders_by_slot":
         source = spec["orders_by_slot"]
         if (
             not isinstance(source, dict)
-            or set(source) != set(LABELS)
+            or set(source) != set(labels)
             or any(type(v) != int or v < 0 or v > 5000 for v in source.values())
         ):
             raise ValueError(
-                f"orders_by_slot requires nonnegative integer counts for {LABELS}"
+                f"orders_by_slot requires nonnegative integer counts for {labels}"
             )
-        counts = [source[k] for k in LABELS]
+        counts = [source[k] for k in labels]
         if sum(counts) > 5000:
             raise ValueError("Total orders must be <=5000")
         origin = "USER_ENTERED_SLOT_ORDER_COUNTS"
@@ -165,25 +199,35 @@ def scenario(spec: dict):
     if type(ratio) not in (float, int) or not 0 <= ratio <= 1:
         raise ValueError("takeout_ratio must be 0..1")
     return {
-        "id": "EULJIRO_ENTRANCE_0719",
+        "id": "EULJIRO_ENTRANCE_" + _hours_id(day),
         "area": "을지로입구역",
-        "start": "07:00",
-        "end": "19:00",
+        "start": day.open,
+        "end": day.close,
         "last_order_time": last,
-        "last_order_sec": last_secs - DAY_START,
-        "duration_min": 720,
+        "last_order_sec": last_secs - day.open_abs,
+        "duration_min": day.length // 60,
+        "slots": labels,
+        "peak_start_time": day.peak[0],
+        "peak_end_time": day.peak[1],
         "origin": origin,
         "planned_orders_before_last_order_filter": sum(counts),
-        "orders_by_slot": dict(zip(LABELS, counts)),
+        "orders_by_slot": dict(zip(labels, counts)),
         "takeout_ratio": ratio,
         "source": share,
         "applied_assumptions": [
-            "Entire 07:00-19:00 simulated without queue resets at band changes.",
+            f"Entire {day.label} simulated without queue resets at band changes.",
             "Orders are distributed uniformly within each observed/estimated 4-hour/3-hour/2-hour time band.",
-            "With a last order earlier than 19:00, rejected post-cutoff arrivals are NOT redistributed.",
+            f"With a last order earlier than {day.close}, rejected post-cutoff arrivals are NOT redistributed.",
             "Public district card payments determine shares only; customer/day volume comes from user or example.",
         ],
     }
+
+
+def _hours_id(day):
+    """기본 07~19시는 예전 그대로 0719. 30분이 섞이면 0730_1900처럼 분까지 쓴다."""
+    if day.open.endswith(":00") and day.close.endswith(":00"):
+        return day.open[:2] + day.close[:2]
+    return day.open.replace(":", "") + "_" + day.close.replace(":", "")
 
 
 def draw_orders(scn: dict, seed: int, service_stddev: dict | None = None):
@@ -192,8 +236,10 @@ def draw_orders(scn: dict, seed: int, service_stddev: dict | None = None):
     rng = random.Random(seed)
     rows = []
     rejected = 0
-    for (a, b, *_), label in zip(SLOTS, LABELS):
-        start = hhmm(a) - DAY_START
+    open_abs = hhmm(scn["start"])
+    for label in scn["orders_by_slot"]:
+        a, b = label.split("-")
+        start = hhmm(a) - open_abs
         length = hhmm(b) - hhmm(a)
         for j in range(scn["orders_by_slot"][label]):
             at = start + rng.random() * length

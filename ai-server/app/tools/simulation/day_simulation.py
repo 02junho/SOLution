@@ -1,4 +1,4 @@
-"""One-day cafe simulation (07:00-19:00, last order before close).
+"""One-day cafe simulation (open to close, default 07:00-19:00, last order before close).
 
 New arrivals stop at the last order time. Orders already accepted are finished so
 that their waiting time can be measured; employees on the final roster finish them.
@@ -11,14 +11,12 @@ import math
 import statistics
 
 from .engine import SlotCafe
-from .catalog import SLOTS
-from .demand import DAY_START, hhmm
+from .day_window import day
 
-DAY_END_SEC = 12 * 3600
-
-
+# 기본 영업시간(07~19시)의 길이. 계산 중에는 day().length를 쓴다.
 def seconds(hhmm_text):
-    return hhmm(hhmm_text) - DAY_START
+    """시각 → 오픈부터 지난 초(지금 계산의 영업시간 기준)."""
+    return day().rel(hhmm_text)
 
 
 def percentile(values, q=0.90):
@@ -60,14 +58,16 @@ def profile(plan_id):
     raise ValueError("Unknown roster profile")
 
 
+def peak_edges():
+    """바쁜 시간 앞·바쁜 시간·뒤 경계(길이 0인 구간은 뺀다). 기본은 07·11·14·19시."""
+    d = day()
+    return list(dict.fromkeys([d.open, d.peak[0], d.peak[1], d.close]))
+
+
 def roster(mode, plan_ids):
-    # Each roster covers the full working day. Four-order-demand time bands
-    # remain unchanged when using the three-segment staffing option.
-    edges = (
-        ["07:00", "11:00", "14:00", "19:00"]
-        if mode == "three"
-        else ["07:00", "11:00", "14:00", "17:00", "19:00"]
-    )
+    # Each roster covers the full working day. "three": before peak / peak / after peak.
+    # "four": one segment per demand time slot (four by default, N for store data).
+    edges = peak_edges() if mode == "three" else list(day().edges)
     if mode not in ("three", "four") or len(plan_ids) != len(edges) - 1:
         raise ValueError("roster mode and plan count mismatch")
     return [
@@ -120,7 +120,7 @@ def shift_groups(shift):
 
 
 def roster_from_shifts(shifts):
-    """직원별 근무 구간 → 하루(07~19시) 구간표. 휴게는 반영하지 않는다(labor 배치표에서만 다룸).
+    """직원별 근무 구간 → 하루(오픈~마감) 구간표. 휴게는 반영하지 않는다(labor 배치표에서만 다룸).
 
     구간마다 그 시간에 일하는 직원(번호)과 역할 묶음을 담는다. 직원 번호는 근무표에 처음 나온 순서다.
     """
@@ -135,16 +135,16 @@ def roster_from_shifts(shifts):
         start, end = seconds(shift["start_time"]), seconds(shift["end_time"])
         if start >= end:
             raise ValueError(f"{key} 근무의 시작이 끝보다 빨라야 합니다.")
-        start, end = max(start, 0), min(end, DAY_END_SEC)
+        start, end = max(start, 0), min(end, day().length)
         if start >= end:
-            continue  # 영업시간(07~19시) 밖 근무는 손님 흐름에 영향이 없다.
+            continue  # 영업시간 밖 근무는 손님 흐름에 영향이 없다.
         if key not in keys:
             keys.append(key)
         spans.append((keys.index(key), start, end, shift_groups(shift)))
     if not spans:
-        raise ValueError("07:00~19:00 안에 일하는 사람이 없습니다.")
+        raise ValueError(f"{day().label.replace('-', '~')} 안에 일하는 사람이 없습니다.")
     edges = sorted(
-        {0, DAY_END_SEC} | {s for _, s, _, _ in spans} | {e for _, _, e, _ in spans}
+        {0, day().length} | {s for _, s, _, _ in spans} | {e for _, _, e, _ in spans}
     )
     rows = []
     for lo, hi in zip(edges, edges[1:]):
@@ -168,22 +168,24 @@ def roster_from_shifts(shifts):
         )
     if not rows[-1]["assignments"]:
         raise ValueError(
-            "NEEDS_INPUT: 19:00 마감까지 일하는 사람이 있어야 받은 주문을 끝낼 수 있어요. 근무표를 확인해 주세요."
+            f"NEEDS_INPUT: {day().close} 마감까지 일하는 사람이 있어야 받은 주문을 끝낼 수 있어요. 근무표를 확인해 주세요."
         )
     return rows
 
 
 def _clock(sec):
-    total = int(sec) + DAY_START
-    return f"{total // 3600:02d}:{total % 3600 // 60:02d}"
+    return day().clock(sec)
 
 
 def roster_for_base(pid):
     """Day plans for the three-plan comparison (team decision 11.11): A and C apply only 11~14,
     the other hours run as CURRENT. Other hours are covered by the per-slot recommendation."""
-    if pid == "CURRENT":
-        return roster("three", ["CURRENT", "CURRENT", "CURRENT"])
-    return roster("three", ["CURRENT", pid, "CURRENT"])
+    edges = peak_edges()
+    peak_start = day().peak[0]
+    return roster(
+        "three",
+        [pid if a == peak_start else "CURRENT" for a in edges[:-1]],
+    )
 
 
 class DayCafe(SlotCafe):
@@ -218,11 +220,13 @@ class DayCafe(SlotCafe):
             }
             for i in range(count)
         ]
+        self.day = day()
+        self.day_end = self.day.length
         super().__init__(
             orders,
             {"id": label, "employees": all_workers},
             config,
-            ("07:00-19:00", 0, DAY_END_SEC),
+            (self.day.label, 0, self.day_end),
             clock_mode,
             include_events,
         )
@@ -231,7 +235,7 @@ class DayCafe(SlotCafe):
 
     def _segment_index(self, at=None):
         at = self.clock.now if at is None else at
-        if at >= DAY_END_SEC:
+        if at >= self.day_end:
             # The final on-duty employees finish orders already accepted.
             return len(self.roster_segments) - 1
         return next(
@@ -264,7 +268,7 @@ class DayCafe(SlotCafe):
                 break
             end = row["end_sec"]
         # A worker present at 19:00 may finish accepted orders after closing.
-        if end >= DAY_END_SEC and idx in self.assignments[-1]:
+        if end >= self.day_end and idx in self.assignments[-1]:
             return math.inf
         return end
 
@@ -304,7 +308,7 @@ class DayCafe(SlotCafe):
     def _slot_summary(self):
         jobs = list(self.jobs.values())
         byslot = []
-        for label in SLOTS:
+        for label in self.day.slots:
             lo, hi = map(seconds, label.split("-"))
             arrived = [j for j in jobs if lo <= j["arrival_sec"] < hi]
             done = [j for j in jobs if j.get("completed_at_sec") is not None]
@@ -321,7 +325,7 @@ class DayCafe(SlotCafe):
             )
             cohort_done = [j for j in arrived if j.get("completed_at_sec") is not None]
             cohort_done_by_close = [
-                j for j in cohort_done if j["completed_at_sec"] <= DAY_END_SEC
+                j for j in cohort_done if j["completed_at_sec"] <= self.day_end
             ]
             waits = [j["queue_wait_sec"] for j in cohort_done]
             post_order_waits = [
@@ -370,8 +374,8 @@ class DayCafe(SlotCafe):
                     "backlog_at_start": backlog_start,
                     "backlog_at_end": backlog_end,
                     "carried_from_previous_slot": backlog_start,
-                    "carried_to_next_slot": backlog_end if hi < DAY_END_SEC else 0,
-                    "unfinished_at_close": backlog_end if hi == DAY_END_SEC else None,
+                    "carried_to_next_slot": backlog_end if hi < self.day_end else 0,
+                    "unfinished_at_close": backlog_end if hi == self.day_end else None,
                     "cohort_completed_by_slot_end": sum(
                         j["completed_at_sec"] <= hi for j in cohort_done
                     ),
@@ -410,7 +414,7 @@ class DayCafe(SlotCafe):
             self.clock.schedule(order["arrival_sec"], lambda o=order: self.arrival(o))
         # The last roster handles any accepted orders remaining at 19:00.
         # Guard the virtual horizon and fail explicitly if the queue cannot drain.
-        horizon = DAY_END_SEC + 3600 * max(4, len(self.orders) + 1)
+        horizon = self.day_end + 3600 * max(4, len(self.orders) + 1)
         self.clock.run(horizon)
         finished = sorted(self.finished, key=lambda j: j["completed_at_sec"])
         all_jobs = list(self.jobs.values())
@@ -420,7 +424,7 @@ class DayCafe(SlotCafe):
                 f"Accepted orders did not finish: {len(finished)}/{len(self.orders)}"
             )
         finished_by_close = [
-            j for j in finished if j["completed_at_sec"] <= DAY_END_SEC + 1e-7
+            j for j in finished if j["completed_at_sec"] <= self.day_end + 1e-7
         ]
         waits = [j["queue_wait_sec"] for j in finished]
         elapsed = [j["elapsed_sec"] for j in finished]
@@ -431,8 +435,8 @@ class DayCafe(SlotCafe):
         ]
         drain_sec = max(
             0.0,
-            max((j["completed_at_sec"] for j in finished), default=DAY_END_SEC)
-            - DAY_END_SEC,
+            max((j["completed_at_sec"] for j in finished), default=self.day_end)
+            - self.day_end,
         )
         stage_wait = {
             key: (
@@ -467,7 +471,7 @@ class DayCafe(SlotCafe):
             if t.get("assigned_worker"):
                 assert t["started_at"] is not None
         return {
-            "slot": "07:00-19:00",
+            "slot": self.day.label,
             "plan_id": self.plan["id"],
             "arrived_orders": len(all_jobs),
             "completed_by_cutoff": len(finished_by_close),
@@ -504,14 +508,14 @@ class DayCafe(SlotCafe):
                                 t["ended_at"]
                                 if t["ended_at"] is not None
                                 else t["started_at"] + t["seconds"],
-                                DAY_END_SEC,
+                                self.day_end,
                             )
                             - t["started_at"],
                         )
                         for t in tasks
                         if t["equipment"] == name and t["started_at"] is not None
                     )
-                    / (DAY_END_SEC * count),
+                    / (self.day_end * count),
                     4,
                 )
                 for name, count in self.equipment_counts.items()
@@ -526,7 +530,7 @@ class DayCafe(SlotCafe):
                                 t["ended_at"]
                                 if t["ended_at"] is not None
                                 else t["started_at"] + t["seconds"],
-                                DAY_END_SEC,
+                                self.day_end,
                             )
                             - t["started_at"],
                         )
@@ -534,7 +538,7 @@ class DayCafe(SlotCafe):
                         if t.get("assigned_worker") == w["id"]
                         and t["started_at"] is not None
                     )
-                    / DAY_END_SEC,
+                    / self.day_end,
                     4,
                 )
                 for w in self.workers

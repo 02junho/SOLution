@@ -1,6 +1,8 @@
 import { request } from './client'
 import type { OperationPlan } from '../types/api'
 import type { OperationResult, OperationTrace } from '../features/operation/types'
+import type { DailyRoster, MenuTypes, RosterChatReply, RosterJob, RosterOptions, StoredRosterResult } from '../features/operation/lab/rosterTypes'
+import type { JsonObject } from '../types/workflow'
 
 // /api 접두사는 공통 client가 붙인다. 브라우저에서 FastAPI 주소를 호출하지 않는다.
 export function loadOperationResult(resultId: number, view: 'summary' | 'detail' = 'summary', signal?: AbortSignal) {
@@ -25,4 +27,48 @@ export function confirmOperation(result: OperationResult, choice: OperationPlan,
     body: JSON.stringify({ expected_input_version_id: result.input_version_id, selected_choice_key: choice,
       acknowledged_warning_ids: warningIds }),
   })
+}
+
+// 하루 근무표 만들기(미리보기, 저장 없음). 시간대별 필요 인원 → 근무조 → 휴게 → 휴게까지 넣어 다시 확인.
+export function planDailyRoster(body: { operation_form: JsonObject; owner_start_time?: string; owner_end_time?: string }) {
+  return request<DailyRoster>('/v1/operation/daily-rosters', { method: 'POST', body: JSON.stringify(body) })
+}
+
+
+// 가게 파일 메뉴 중 낱말로 모른 이름만 보내 제조 유형을 고른다(이름과 유형 목록만 보냄). 키가 없으면 모두 null.
+export function classifyMenuTypes(body: { names: string[]; types: { id: string; label: string }[] }) {
+  return request<MenuTypes>('/v1/operation/menu-types', { method: 'POST', body: JSON.stringify(body) })
+}
+
+// 추천 근무표 3안(미리보기, 저장 없음). 요청은 planWeek과 같고, 바쁜 시간에만 사람을 더해 아끼는/추천/여유 안을 만든다.
+export function planRosterOptions(body: { days: JsonObject[]; workers: JsonObject[]; min_gain_sec?: number }) {
+  return request<RosterOptions>('/v1/operation/roster-options', { method: 'POST', body: JSON.stringify(body) })
+}
+
+// 추천 근무표 3안 계산 시작(확인한 입력 버전에 붙음). 서버가 뒤에서 계산해 업무 결과로 저장한다. 바로 state=RUNNING.
+export function startRosterResult(sessionId: number, body: JsonObject, requestKey: string) {
+  return request<RosterJob>(`/v1/operation/sessions/${sessionId}/roster-results`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }, body: JSON.stringify(body),
+  })
+}
+
+// 계산 상태: RUNNING / DONE(result_id) / FAILED / LOST
+export function rosterResultStatus(sessionId: number, versionId: number, requestKey: string) {
+  const query = new URLSearchParams({ input_version_id: String(versionId), request_key: requestKey })
+  return request<RosterJob>(`/v1/operation/sessions/${sessionId}/roster-results?${query}`)
+}
+
+// 저장한 추천 근무표 다시 불러오기(근무표 전체 = detail).
+export function loadRosterResult(resultId: number) {
+  return request<StoredRosterResult>(`/v1/operation/results/${resultId}?view=detail`)
+}
+
+// 말로 고치기: 사장님 말 + 바꿀 수 있는 칸·지금 값·결과 요약 → 바꿀 칸(범위 검사됨)·답장. 직원은 별칭만 보낸다.
+export function rosterChat(body: JsonObject) {
+  return request<RosterChatReply>('/v1/operation/roster-chat', { method: 'POST', body: JSON.stringify(body) })
+}
+
+// 추천 근무표 결과 설명(두세 문장). 결과에 없는 숫자가 있으면 fallback(코드 문장)을 돌려준다.
+export function rosterExplain(body: { result: JsonObject; fallback: string }) {
+  return request<{ source: 'LLM' | 'TEMPLATE'; text: string }>('/v1/operation/roster-explain', { method: 'POST', body: JSON.stringify(body) })
 }

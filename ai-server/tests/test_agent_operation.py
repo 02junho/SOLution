@@ -196,10 +196,10 @@ def test_사장님_근무와_시급도_폼_값으로_바꾼다():
     assert _form(run(_req(), Fake(_change("hourly_wage_krw", 11000))))["hourly_wage_krw"] == 11000
 
 
-def test_바쁜_시간은_입력이_아니라_상권_데이터로_정해져_있다고_안내한다():
+def test_바쁜_시간은_대화로_바꾸지_않고_가게_데이터로_정한다고_안내한다():
     response = run(_req(), Fake(_change("rush_start_time", "12:00")))
     assert response.status == ResponseStatus.INFEASIBLE
-    assert "11:00~14:00" in response.message
+    assert "가게 데이터" in response.message and "11~14시" in response.message
 
 
 def test_최저시급보다_낮으면_바꾸지_않고_되묻는다():

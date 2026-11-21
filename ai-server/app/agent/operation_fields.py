@@ -11,7 +11,11 @@
   필수 값이 다 모이기 전에는 계산할 수 없다(Spring이 입력 필요로 막는다).
 - 수정: 저장된 폼 값을 바꾼다.
 값을 읽는 일은 LLM이 하고, 이 모듈은 형식 맞추기와 폼과 같은 검사만 한다:
-하루 주문 1~300건, 라스트 오더 18:30~19:00, 시급은 그해 최저시급 이상, 처리시간 1~300초.
+하루 주문 1~300건, 라스트 오더 마감 30분 전~마감(기본 18:30~19:00), 시급은 그해 최저시급 이상, 처리시간 1~300초.
+
+가게 데이터 버전 칸(open_time·close_time·menu_cups·manufacture_sec_by_menu·orders_by_slot·peak_*·store_source)은
+폼(파일 불러오기)에서만 넣고 대화는 그대로 둔다. 하루 주문 수는 시간대별 주문(orders_by_slot) 합계,
+없으면 메뉴별 잔 수(menu_cups) 합계다(Spring이 같은 순서로 계산한다).
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from app.tools.labor.policies import MINIMUM_WAGES
 
 SEOUL = ZoneInfo("Asia/Seoul")
 MAX_DAILY_ORDERS = 300
+DAY_START = "07:00"
 DAY_END = "19:00"
 DEFAULT_LAST_ORDER = "18:45"
 # 상권 데이터에서 손님이 가장 몰리는 시간대(Spring OperationInputBuilder.PEAK_START~PEAK_END). 안내 문장에만 쓴다.
@@ -79,15 +84,15 @@ VALUE_LABELS: dict[str, dict[int, str]] = {
 FORM_ONLY: dict[str, str] = {
     "staff_count": "인원은 비교 안에 이미 들어 있어요. '한 명 추가' 안이 바쁜 시간에 1명을 더한 결과예요. "
     "사장님 없이 직원 2명이 일하면 '사장님은 안 나와요'라고 말해 주세요.",
-    "open_time": "영업시간은 07~19시로 고정해서 비교해요.",
-    "close_time": "영업시간은 07~19시로 고정해서 비교해요. 마감은 라스트 오더(18:30~19:00)로 바꿀 수 있어요.",
+    "open_time": "영업시간은 '폼으로 직접 입력'에서 바꿔 주세요.",
+    "close_time": "영업시간은 '폼으로 직접 입력'에서 바꿔 주세요. 라스트 오더는 마감 30분 전부터 마감 사이로 바꿀 수 있어요.",
     "repeat_count": "반복 횟수는 30회로 고정해서 비교해요.",
-    "staff_start_time": "직원 근무시간은 07~19시로 고정해서 비교해요.",
-    "staff_end_time": "직원 근무시간은 07~19시로 고정해서 비교해요.",
+    "staff_start_time": "직원 근무시간은 오픈부터 마감까지로 정해서 비교해요.",
+    "staff_end_time": "직원 근무시간은 오픈부터 마감까지로 정해서 비교해요.",
     "selected_menu_ids": "메뉴는 기본 5종으로 비교해요. 판매 비중은 '폼으로 직접 입력'에서 바꿔 주세요.",
     "menu_weights": "판매 비중은 '폼으로 직접 입력'에서 바꿔 주세요.",
-    "rush_start_time": f"바쁜 시간은 상권 데이터에서 손님이 가장 몰리는 {PEAK[0]}~{PEAK[1]}로 정해져 있어요. "
-    "우리 매장만의 바쁜 시간 반영은 다음 단계 기능이에요.",
+    "rush_start_time": "바쁜 시간은 가게 데이터 파일을 불러오면 주문이 가장 몰리는 시간으로 정해지고, "
+    f"확인 화면에서 고칠 수 있어요. 파일이 없으면 상권 데이터의 {int(PEAK[0][:2])}~{int(PEAK[1][:2])}시를 써요.",
 }
 FORM_ONLY["rush_end_time"] = FORM_ONLY["rush_start_time"]
 
@@ -117,15 +122,52 @@ def form_values(current: dict | None) -> dict:
     return {}
 
 
+def cups_total(values: dict) -> int | None:
+    """가게 데이터의 하루 주문 수: 시간대별 주문 합계, 없으면 메뉴별 잔 수 합계. 둘 다 없으면 None."""
+    for key in ("orders_by_slot", "menu_cups"):
+        counts = values.get(key)
+        if isinstance(counts, dict) and counts:
+            return sum(int(v) for v in counts.values() if isinstance(v, (int, float)))
+    return None
+
+
+def peak(values: dict) -> tuple[str, str]:
+    return values.get("peak_start_time") or PEAK[0], values.get("peak_end_time") or PEAK[1]
+
+
+def _slot_hours(values: dict) -> tuple[str, str] | None:
+    slots = values.get("orders_by_slot")
+    if not isinstance(slots, dict) or not slots:
+        return None
+    spans = sorted(k.split("-") for k in slots if isinstance(k, str) and "-" in k)
+    return (spans[0][0], spans[-1][1]) if spans else None
+
+
+def hours(values: dict) -> tuple[str, str]:
+    """폼의 영업시간: 시간대별 주문의 처음·끝, 없으면 open_time·close_time, 없으면 07:00~19:00."""
+    return _slot_hours(values) or (values.get("open_time") or DAY_START, values.get("close_time") or DAY_END)
+
+
+def _minus(hhmm: str, minutes: int) -> str:
+    total = int(hhmm[:2]) * 60 + int(hhmm[3:]) - minutes
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _filled(values: dict, key: str) -> bool:
+    if key == "daily_orders" and cups_total(values) is not None:
+        return True
+    return values.get(key) is not None
+
+
 def is_complete(values: dict) -> bool:
     """필수 값(하루 주문·사장님 근무·시급)이 다 있는지. 다 있어야 계산할 수 있다."""
-    return all(values.get(key) is not None for key in REQUIRED)
+    return all(_filled(values, key) for key in REQUIRED)
 
 
 def next_missing(values: dict) -> tuple[int, str, str, list[str], str] | None:
     """처음 입력에서 아직 빠진 필수 값(순번, 칸, 질문, 선택지, 칸 이름). 다 있으면 None."""
     for step, (key, text, choices, label) in enumerate(GUIDED, start=1):
-        if values.get(key) is None:
+        if not _filled(values, key):
             return step, key, text, guided_choices(key, choices), label
     return None
 
@@ -181,15 +223,28 @@ def pending_question(values: dict, asked: str | None = None, asked_text: str | N
 def summary(current: dict | None) -> dict:
     """LLM에 줄 작은 요약. 지금 폼 값과, 비어 있으면 계산에 쓰는 기본값."""
     values = form_values(current)
-    return {
-        "daily_orders": values.get("daily_orders"),
-        "last_order_time": values.get("last_order_time", f"{DEFAULT_LAST_ORDER}(기본)"),
+    open_time, close_time = hours(values)
+    cups = cups_total(values)
+    out = {
+        "daily_orders": cups if cups is not None else values.get("daily_orders"),
+        "last_order_time": values.get(
+            "last_order_time", f"{_minus(close_time, 15)}(기본)"
+        ),
         "is_owner_working": values.get("is_owner_working"),
         "hourly_wage_krw": values.get("hourly_wage_krw"),
         "order_time_sec": values.get("order_time_sec", 60),
         "handoff_time_sec": values.get("handoff_time_sec", 30),
-        "fixed": f"영업 07~19시, 일하는 사람 2명이 07~19시 근무, 바쁜 시간 {PEAK[0]}~{PEAK[1]}(상권 데이터), 30회 반복",
+        "fixed": f"영업 {open_time}~{close_time}, 일하는 사람 2명이 영업시간 내내 근무, "
+        f"바쁜 시간 {peak(values)[0]}~{peak(values)[1]}"
+        f"({'가게 데이터' if values.get('peak_start_time') else '상권 데이터'}), 30회 반복"
+        f", 에스프레소 머신 {values.get('espresso_machines', 1)}대·블렌더 {values.get('blenders', 1)}대"
+        f", 목표 대기 주문 후 {values.get('target_wait_sec', 300) // 60}분(10명 중 9명)",
     }
+    if cups is not None:
+        out["store_data"] = (
+            "가게 데이터 파일로 넣음(하루 주문 = 시간대별 주문 합계 또는 잔 수 합계, 폼에서만 바꿈)"
+        )
+    return out
 
 
 # ---------------------------------------------------------------- 값 검사
@@ -229,10 +284,18 @@ def normalize(target: str, value):
 def check(values: dict, target: str) -> str | None:
     """한 칸이 폼 기준을 지키는지. 문제가 있으면 사장님께 보일 문장."""
     value = values.get(target)
+    cups = cups_total(values)
+    if target == "daily_orders" and cups is not None and value != cups:
+        return (
+            f"가게 데이터가 들어 있어서 하루 주문은 데이터 합계({cups}건)로 계산해요. "
+            "바꾸려면 가게 데이터를 다시 불러와 주세요."
+        )
     if target == "daily_orders" and not 1 <= value <= MAX_DAILY_ORDERS:
         return f"하루 주문은 1~{MAX_DAILY_ORDERS}건으로 알려 주세요."
-    if target == "last_order_time" and not "18:30" <= value <= DAY_END:
-        return "라스트 오더는 18:30~19:00 사이로 알려 주세요."
+    close_time = hours(values)[1]
+    earliest = _minus(close_time, 30)
+    if target == "last_order_time" and not earliest <= value <= close_time:
+        return f"라스트 오더는 {earliest}~{close_time} 사이로 알려 주세요."
     if target == "hourly_wage_krw":
         year = _year(values)
         minimum = MINIMUM_WAGES.get(year)
