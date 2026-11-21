@@ -1,5 +1,5 @@
 # 실행: 저장소 루트에서 cp .env.example .env 후 값을 채우고 docker compose up --build
-# 화면(frontend)은 compose에 넣지 않고 frontend 폴더에서 npm run dev로 띄웁니다. (배포 설정은 별도)
+# 화면(frontend)은 compose에 넣지 않고 frontend 폴더에서 npm run dev로 띄웁니다. (배포는 docker-compose.prod.yml)
 services:
   db:
     image: pgvector/pgvector:pg16
