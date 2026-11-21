@@ -123,6 +123,9 @@ export default function EasyPage() {
   const resultRef = useRef<HTMLDivElement>(null)
   // 화면을 옮긴 뒤 늦게 도착한 응답이 새 화면을 덮지 않게 한다.
   const tokenRef = useRef(0)
+  // 다른 화면으로 옮길 때만 바뀌는 표시. "계산 멈추기"는 tokenRef만 바꿔 결과는 버리지만,
+  // 서버에 이미 저장된 업무·입력 버전은 같은 화면이면 기록해 두어야 다시 계산할 때 이어진다.
+  const screenRef = useRef(0)
   // 지금 보이는 결과의 result_id. 늦게 끝난 저장 응답이 다른 결과에 "저장했어요"를 붙이지 않게 비교한다.
   const shownResultRef = useRef<number | null>(null)
 
@@ -190,6 +193,7 @@ export default function EasyPage() {
 
   function open(next: EasyRoute) {
     tokenRef.current += 1
+    screenRef.current += 1
     const token = tokenRef.current
     reset()
     setRoute(next)
@@ -340,28 +344,28 @@ export default function EasyPage() {
 
   // 조건을 새 버전으로 저장하고 입력 확인까지 마친다.
   // 저장(이벤트)은 서버에 먼저 남으므로, 확인이 실패해도 다시 시도할 때 이 새 버전부터 이어 가게 바로 기록해 둔다.
-  // (옛 버전을 base로 다시 보내면 서버가 STALE로 거부한다.) 화면을 옮겼으면(token이 바뀌면) 기록하지 않는다.
-  async function saveInput(sessionId: number, baseVersionId: number | null, kind: EasyFeature, token: number) {
+  // (옛 버전을 base로 다시 보내면 서버가 STALE로 거부한다.) 계산을 멈췄어도 같은 화면이면 기록하고, 다른 화면으로 옮겼을 때만 건너뛴다.
+  async function saveInput(sessionId: number, baseVersionId: number | null, kind: EasyFeature, screen: number) {
     const response = await workflowApi.event(sessionId, { event_type: 'form', form_input: buildInput(kind), base_version_id: baseVersionId }, crypto.randomUUID())
     const data = response.data as JsonObject | null
     const versionId = Number(data?.input_version_id)
     const versionNo = Number(data?.version_no)
     if (response.status !== 'ok' || !versionId) throw new Error(response.message || '조건을 저장하지 못했어요.')
-    if (token === tokenRef.current) setResume({ sessionId, versionId, versionNo, confirmed: false, values })
+    if (screen === screenRef.current) setResume({ sessionId, versionId, versionNo, confirmed: false, values })
     await workflowApi.confirmInput(versionId, versionNo)
     return { versionId, versionNo }
   }
 
   // 새 업무면 만들고, 이어서 하는 업무면 그 업무 안에서. 조건이 그대로면 저장된 버전을 다시 쓴다.
-  async function ready(kind: EasyFeature, token: number): Promise<Prepared> {
+  async function ready(kind: EasyFeature, screen: number): Promise<Prepared> {
     if (!resume) {
       const created = await workflowApi.create(1, kind, 'form', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
       // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
-      if (token === tokenRef.current) setResume({ sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' })
-      return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind, token)) }
+      if (screen === screenRef.current) setResume({ sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' })
+      return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind, screen)) }
     }
     if (resume.versionId === null || resume.values !== values) {
-      return { sessionId: resume.sessionId, ...(await saveInput(resume.sessionId, resume.versionId, kind, token)) }
+      return { sessionId: resume.sessionId, ...(await saveInput(resume.sessionId, resume.versionId, kind, screen)) }
     }
     if (!resume.confirmed) await workflowApi.confirmInput(resume.versionId, resume.versionNo)
     return { sessionId: resume.sessionId, versionId: resume.versionId, versionNo: resume.versionNo }
@@ -375,7 +379,7 @@ export default function EasyPage() {
     setPurchase(null); setOperation(null)
     shownResultRef.current = null
     try {
-      const done = await ready(feature, token)
+      const done = await ready(feature, screenRef.current)
       if (token !== tokenRef.current) return
       // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
       setResume({ sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values })
