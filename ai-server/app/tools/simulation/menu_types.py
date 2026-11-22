@@ -8,6 +8,9 @@
 from __future__ import annotations
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 FOOD = "FOOD"
 MAX_NAMES = 40
@@ -25,10 +28,12 @@ def _anthropic_call(system: str, user: str) -> str | None:
 
     settings = get_settings()
     if not settings.anthropic_api_key:
+        logger.warning("AI 호출 생략: ANTHROPIC_API_KEY가 없어요")
         return None
     try:
         import anthropic
     except ModuleNotFoundError:
+        logger.warning("AI 호출 생략: anthropic 패키지가 없어요")
         return None
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=20, max_retries=0)
     try:
@@ -38,9 +43,12 @@ def _anthropic_call(system: str, user: str) -> str | None:
             system=system,
             messages=[{"role": "user", "content": user}],
         )
-    except anthropic.APIError:
+    except anthropic.APIError as exc:
+        # 한도 초과(429)·크레딧 부족(400)·시간 초과 등. 키 값은 남기지 않고 종류와 상태 코드만 남긴다.
+        logger.warning("AI 호출 실패: %s status=%s", type(exc).__name__, getattr(exc, "status_code", None))
         return None
     if result.stop_reason == "max_tokens":
+        logger.warning("AI 답이 길어서 잘렸어요(max_tokens)")
         return None
     return "".join(b.text for b in result.content if b.type == "text").strip()
 
@@ -55,6 +63,7 @@ def _parse(raw: str | None) -> dict | None:
     try:
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except ValueError:
+        logger.warning("AI 답을 JSON으로 읽지 못했어요")
         return None
     return data if isinstance(data, dict) else None
 

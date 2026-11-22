@@ -4,8 +4,9 @@ import type { OptionKey, RosterOptions, RosterSummary } from '../lab/rosterTypes
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
+import DayTimeline from './DayTimeline'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, capacityText, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
+import { averagePeak, busiestDay, capacityText, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -48,7 +49,7 @@ export default function EasyRosterResult({
   const [ladderDay, setLadderDay] = useState<Weekday | null>(() => busiestDay(data, days))
   const day = ladderDay && days.includes(ladderDay) ? ladderDay : busiestDay(data, days)
   const bars = day ? ladderBars(data, day) : []
-  const windows = day ? data.days[day].windows.map((w) => range(w.start_time, w.end_time)).join(', ') : ''
+  const windows = day ? mergedWindows(data.days[day].windows).map((w) => range(w.start, w.end)).join(', ') : '' // 이어진 바쁜 시간은 하나로
   const rows = weekRows(option, days)
   const holes = unfilledCells(option, days)
   const peak = averagePeak(option, days)
@@ -76,11 +77,7 @@ export default function EasyRosterResult({
             ))}
           </div>
         )}
-        {explain && (
-          <p className="er-explain">
-            <b>{explain.ai ? 'AI 설명' : '요약'}</b> {explain.text}
-          </p>
-        )}
+        {explain && <Explain label={explain.ai ? 'AI 설명' : '요약'} text={explain.text} />}
       </section>
 
       {day && bars.length > 1 && (
@@ -114,7 +111,8 @@ export default function EasyRosterResult({
       <section className="easy-card easy-print er-print" data-tour="detail">
         <h2>{OPTION_NAME[option.key]} · {period.title}</h2>
         <p className="easy-print-only easy-print-sign er-sign">확인 ____________</p>
-        <div className="er-week-wrap">
+        {days.length === 1 && <DayTimeline rows={rows} per={period.per} />}
+        <div className={`er-week-wrap${days.length === 1 ? ' er-week-day' : ''}`}>
           <table className="er-week">
             <thead>
               <tr>
@@ -196,8 +194,10 @@ export default function EasyRosterResult({
         )}
       </section>
 
+      {/* 따라 하며 배우기 6단계는 비교와 바로 아래 말 칸을 함께 비춘다 */}
+      <div data-tour="compare">
       {/* 세 근무표 비교: 펼쳐 두되 접을 수 있게(근무표만 보고 싶을 때) */}
-      <details className="easy-card easy-noprint er-fold" open data-tour="compare">
+      <details className="easy-card easy-noprint er-fold" open>
         <summary>
           <h2>세 근무표 비교</h2>
         </summary>
@@ -218,6 +218,7 @@ export default function EasyRosterResult({
       </details>
 
       {!readOnly && chat}
+      </div>
 
       <section className="easy-card easy-noprint er-save" data-tour="save">
         {readOnly ? (
@@ -237,5 +238,23 @@ export default function EasyRosterResult({
         )}
       </section>
     </>
+  )
+}
+
+/** 결과 설명: 첫 문장만 보이고 나머지는 "더 보기"(AI 설명이 길어 결론을 밀어내지 않게). */
+function Explain({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false)
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const rest = sentences.slice(1).join(' ')
+  return (
+    <p className="er-explain">
+      <b>{label}</b> {sentences[0] ?? text}
+      {rest && (open ? <> {rest}</> : null)}
+      {rest && (
+        <button type="button" className="er-more" onClick={() => setOpen(!open)}>
+          {open ? '접기' : '더 보기'}
+        </button>
+      )}
+    </p>
   )
 }

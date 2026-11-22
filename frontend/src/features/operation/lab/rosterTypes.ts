@@ -214,6 +214,9 @@ export function rosterDigest(data: RosterOptions): JsonObject {
     min_gain_sec: data.min_gain_sec,
     // 인건비가 어느 기간 것인지(요일 하나만 계산했으면 하루). AI 설명이 "주 인건비"라고 잘못 말하지 않게 데이터로 넘긴다.
     cost_period: days.length === 1 ? '하루' : '일주일',
+    // AI가 자주 말하는 셈("사람을 더 두는 날이 6일", "추천보다 18만 원 적게")은 여기서 미리 세어 넘긴다.
+    // 검사는 결과에 없는 숫자를 버리므로, 넘기지 않으면 맞는 설명도 버려진다.
+    day_count: days.length,
     days: Object.fromEntries(
       days.map((d) => [
         d,
@@ -233,6 +236,9 @@ export function rosterDigest(data: RosterOptions): JsonObject {
       unfilled_hours: o.shortfall.unfilled_hours,
       more_people_needed: o.shortfall.more_people_under_15h,
       extra_by_day: o.extra_by_day,
+      days_with_extra: Object.values(o.extra_by_day ?? {}).filter((n) => Number(n) > 0).length,
+      // 추천안과의 인건비 차이(크기만). AI가 "180,600원 적게"처럼 말하므로 부호 없이 넘긴다(많고 적음은 cost_krw로 안다).
+      cost_gap_vs_recommended_krw: Math.abs(o.plan_cost_krw - (data.options.find((r) => r.key === 'RECOMMENDED')?.plan_cost_krw ?? o.plan_cost_krw)),
     })),
     // 주휴 비교를 안 했으면 AI에도 보내지 않는다(없는 숫자를 지어내지 않게).
     ...(data.holiday_compare

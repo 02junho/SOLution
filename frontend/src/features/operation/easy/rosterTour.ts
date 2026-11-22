@@ -13,7 +13,7 @@ export const ROSTER_RESULT_STEPS: TourStep[] = [
   {
     key: 'verdict', target: 'verdict', waitsForAction: false, place: 'side',
     title: '맨 위가 추천이에요',
-    body: '바쁜 시간에 손님이 가장 오래 기다리는 시간과 일주일 인건비만 보셔도 돼요.',
+    body: '새로 뽑을 직원이 몇 명인지와 인건비만 보셔도 돼요.',
   },
   {
     key: 'detail', target: 'detail', waitsForAction: false, place: 'side',
@@ -23,7 +23,7 @@ export const ROSTER_RESULT_STEPS: TourStep[] = [
   {
     key: 'compare', target: 'compare', waitsForAction: false, place: 'side',
     title: '세 근무표를 비교해 골라요',
-    body: '인건비를 아끼려면 "인건비 절약", 손님이 덜 기다리게 하려면 "여유"를 누르세요. 위 근무표가 바로 바뀌어요.',
+    body: '인건비를 아끼려면 "인건비 절약", 손님이 덜 기다리게 하려면 "여유"를 누르세요. 위 근무표가 바로 바뀌어요. 조건을 바꾸고 싶으면 아래 칸에 말로 적으세요. 다시 계산할지 먼저 물어봐요.',
   },
   {
     key: 'save', target: 'save', waitsForAction: false, place: 'side',
@@ -51,7 +51,7 @@ export function rosterStep(phase: TourPhase, stage: RosterStage, resultIndex: nu
       step: {
         key: 'confirm', target: 'confirm-area', waitsForAction: true, place: 'side',
         title: '조건이 맞는지 봐요',
-        body: '틀린 곳은 "고치기"를 누르거나, 아래 "말로 고치기" 칸에 "토요일은 내가 못 나와"처럼 적으면 돼요. 맞으면 파란 버튼을 누르세요.',
+        body: '틀린 곳은 "고치기"를 누르거나, 아래 "말로 고치기" 칸에 "금요일엔 제가 가게에 못 나가요"처럼 사장님 말투 그대로 적으면 돼요. 맞으면 파란 버튼을 누르세요.',
       },
     }
   }

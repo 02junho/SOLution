@@ -227,3 +227,18 @@ export function periodOf(days: Weekday[]): { per: string; title: string; within:
     ? { per: '하루', title: `${WEEKDAY_LABEL[days[0]]}요일`, within: '이날' }
     : { per: '주', title: '일주일', within: '일주일에' }
 }
+
+/**
+ * 바쁜 시간 표시용: 이어 붙은 구간은 하나로(8~11시 + 11~14시 → 8~14시). 계산은 구간마다 따로 재지만,
+ * 사장님에게는 "바쁜 시간이 왜 두 개지?"가 되지 않게 이어진 것은 합쳐 보여 준다.
+ */
+export function mergedWindows(windows: { start_time: string; end_time: string }[]): { start: string; end: string }[] {
+  const sorted = [...windows].sort((a, b) => a.start_time.localeCompare(b.start_time))
+  const out: { start: string; end: string }[] = []
+  for (const w of sorted) {
+    const last = out[out.length - 1]
+    if (last && w.start_time <= last.end) last.end = w.end_time > last.end ? w.end_time : last.end
+    else out.push({ start: w.start_time, end: w.end_time })
+  }
+  return out
+}

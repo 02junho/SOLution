@@ -12,6 +12,8 @@
 .er-reply { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); color: var(--ink-2); }
 .er-reply.ok { background: #ecf8f0; }
 .er-reply.ok i { color: var(--good); font-style: normal; font-weight: 800; }
+.er-ai-note { background: var(--blue-soft); }
+.er-ai-note b { margin-right: 6px; color: var(--blue-dark); }
 
 .easy-running .er-running-note { display: block; margin-top: 4px; color: var(--gray-2); font-size: 0.85em; }
 
@@ -71,8 +73,7 @@
 .er-source > .er-source-main { border: 2px solid var(--blue); background: var(--blue-soft); padding: 13px 17px; }
 .er-source-main b { color: var(--blue-dark); }
 .er-badge-inline { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--blue); color: #fff; font-size: 0.75em; font-style: normal; font-weight: 700; vertical-align: 2px; }
-/* 예시 가게 두 버튼: 위 목록의 글자 열(테두리 1 + 안쪽 18 + 아이콘 28 + 간격 14 = 61px)에 맞추고 연한 색을 넣는다 */
-.er-source .er-source-samples { padding-left: 61px; } /* 공통 .easy-pick { padding: 0 }보다 앞서게 */
+/* 예시 가게 두 버튼: 운영 1번 화면처럼 들여쓰기 없이 위 카드 왼쪽 끝에 맞추고 연한 색을 넣는다 */
 .er-source-samples button { background: #f0f7f1; border-color: #cfe5d3; color: #1f5130; }
 .er-source-samples button:hover { background: #e2f1e5; border-color: #1f5130; }
 .er-source-note { margin-top: 12px; font-size: 0.85em; }
@@ -138,7 +139,9 @@
 .er-fold > summary::after { content: '접기 ⌃'; font-size: 0.85em; color: #555; }
 .er-fold:not([open]) > summary::after { content: '펼치기 ⌄'; }
 .er-fold[open] > summary { margin-bottom: 12px; }
-.er-queue-close { display: block; margin-left: auto; }
+/* 줄 서는 모습 접기: 세 근무표 비교 제목 줄의 "접기 ⌃"(.er-fold summary::after)와 같은 글자 크기·색 */
+.er-queue-close { display: block; margin-left: auto; padding: 4px 0; border: 0; background: none; font: inherit; font-size: 0.85em; color: #555; cursor: pointer; }
+.er-queue-close:hover { color: var(--ink); }
 .er-jumps { display: flex; flex-wrap: wrap; margin-top: 8px; }
 /* 말로 바꾼 뒤 다시 계산하기 전 확인 상자 */
 .er-pending { margin-top: 12px; padding: 14px 16px; border: 1px solid #c7d7fe; border-radius: 12px; background: #eef4ff; }
@@ -160,3 +163,26 @@
 .er-progress li.done span { color: var(--ink); }
 .er-progress li.fail span { color: #b42318; }
 .er-progress small { color: var(--gray); }
+.er-more { margin-left: 6px; padding: 0; border: 0; background: none; color: #1d4ed8; font: inherit; font-size: 0.9em; cursor: pointer; }
+.er-facts li.er-team { display: block; }
+.er-team ul { margin: 0 0 6px; padding-left: 1em; font-size: 0.92em; }
+.er-team li { display: list-item; padding: 2px 0; border: 0; }
+.er-team small { color: var(--gray); }
+/* 하루 근무표: 시간 막대(DayTimeline). 하루일 때는 요일 표 대신 이걸 보이고, 요일 표는 인쇄할 때만 */
+.er-week-day { display: none; }
+.er-day { margin: 8px 0 12px; }
+.er-day-row { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; min-height: 48px; }
+.er-day-head { min-height: 24px; }
+.er-day-name { display: flex; flex-direction: column; font-size: 0.95em; }
+.er-day-name small { color: #1f7a3a; font-size: 0.82em; }
+.er-day-track { position: relative; height: 40px; }
+.er-day-head .er-day-track { height: 22px; }
+.er-day-head i { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 0.78em; color: var(--gray); white-space: nowrap; }
+.er-day-head i:last-child { transform: translateX(-100%); }
+.er-day-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eef0f4; }
+.er-day-bar { position: absolute; top: 4px; bottom: 4px; display: flex; align-items: center; padding: 0 8px; border-radius: 8px; background: #e5f6ec; font-size: 0.88em; white-space: nowrap; overflow: hidden; }
+.er-day-row.owner .er-day-bar { background: var(--blue-soft); }
+.er-day-row.hire .er-day-bar { background: #fff7d6; border: 1.5px dashed #c99a1c; }
+.er-day-row.hire .er-day-name b { color: var(--accent); }
+.er-day-rest { position: absolute; top: 0; bottom: 0; background-image: repeating-linear-gradient(135deg, rgba(120,128,140,.35) 0 4px, transparent 4px 8px); }
+@media print { .er-day { display: none; } .er-week-day { display: block; } }

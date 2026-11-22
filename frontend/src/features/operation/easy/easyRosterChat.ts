@@ -24,9 +24,9 @@ export type RosterConditions = {
 /** 바꿀 수 있는 칸. 메뉴 유형·바쁜 시간은 아직 말로 못 바꾼다. */
 export function chatFields(open: string, close: string, dataDays: Weekday[]): ChatField[] {
   return [
-    { key: 'target_wait_min', label: '목표 대기', unit: '분', hint: '주문 후 받기까지, 10명 중 9명이 이 안에 받게', type: 'int', min: Math.min(...TARGET_WAIT_MINUTES), max: Math.max(...TARGET_WAIT_MINUTES) },
-    { key: 'espresso_machines', label: '에스프레소 머신', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
-    { key: 'blenders', label: '블렌더', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
+    { key: 'target_wait_min', label: '목표 대기 시간', unit: '분', hint: '주문 후 음료를 받기까지 걸리는 시간. 손님 10명 중 9명(90%)이 이 시간 안에 받게 사람을 둔다', type: 'int', min: Math.min(...TARGET_WAIT_MINUTES), max: Math.max(...TARGET_WAIT_MINUTES) },
+    { key: 'espresso_machines', label: '에스프레소 머신 개수', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
+    { key: 'blenders', label: '블렌더 개수', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
     { key: 'owner_working', label: '사장님 근무', hint: '사장님이 매장에서 직접 일하는지', type: 'bool' },
     { key: 'owner_days', label: '사장님 근무 요일', type: 'choices', choices: dataDays, choice_labels: WEEKDAY_LABEL },
     { key: 'owner_start', label: '사장님 출근 시각', type: 'time', min: open, max: close, step_min: 30 },
@@ -137,4 +137,34 @@ export function applyReply(
   next = { ...next, team: { ...next.team, people } }
   const changed = rows.size > 0
   return { next, rows: [...rows], changed }
+}
+
+/**
+ * 말로 바꾼 내용 모으기. 답장은 "칸: 값 / 칸: 값" 모양이라 칸 이름으로 나눠, 같은 칸은 마지막 값만 남긴다.
+ * 반영하지 못한 안내 같은 다른 문장은 그대로 붙인다.
+ */
+export function mergeChanges(list: string[], reply: string): string[] {
+  const out = [...list]
+  for (const part of reply.split(' / ').map((x) => x.trim().replace(/\.$/, '')).filter(Boolean)) {
+    const label = part.includes(':') ? part.slice(0, part.indexOf(':')) : null
+    const at = label ? out.findIndex((x) => x.startsWith(`${label}:`)) : -1
+    if (at >= 0) out[at] = part
+    else out.push(part)
+  }
+  return out
+}
+
+/**
+ * 말로 바꿀 수 있는 것 안내(칸 정의에서 만든다. 칸이 늘면 안내도 같이 는다).
+ * 사장님 근무 칸 여러 개는 하나로, 직원 명단은 할 수 있는 일로 풀어 쓴다.
+ */
+export function editableText(fields: ChatField[]): string {
+  const out: string[] = []
+  for (const f of fields) {
+    if (f.key === 'workers') out.push('직원(더하기·빼기·일할 수 있는 요일·시간)')
+    else if (f.key.startsWith('owner_')) {
+      if (!out.includes('사장님 근무(요일·시간)')) out.push('사장님 근무(요일·시간)')
+    } else out.push(f.label)
+  }
+  return out.join(' · ')
 }

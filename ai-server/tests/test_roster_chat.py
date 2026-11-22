@@ -129,3 +129,12 @@ def test_직원_고치기_답장에_무엇을_바꿨는지_쓴다():
     out, _ = ask({"intent": "EDIT", "worker_changes": [
         {"op": "update", "alias": "P1", "fields": {"days": ["MON", "TUE"], "start": "09:00"}}]})
     assert "P1: 가능 요일 월·화 · 시작 09:00" in out["reply"]
+
+
+def test_근무표_답은_주문이라는_말을_막지_않고_보장_표현과_없는_숫자는_막는다():
+    from app.tools.simulation.roster_chat import _roster_safe
+
+    allowed = {"10", "9", "5"}
+    assert _roster_safe("주문 후 음료를 받기까지 걸리는 시간이에요. 손님 10명 중 9명이 5분 안에 받아요.", allowed) is None
+    assert _roster_safe("대기가 반드시 줄어요.", allowed) is not None
+    assert _roster_safe("7명이 더 필요해요.", allowed) is not None

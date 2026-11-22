@@ -1,7 +1,7 @@
 import type { RosterProgress as Progress } from '../lab/rosterTypes'
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
-import { clock, waitText } from './easyRosterModel'
+import { mergedWindows, rangeText, waitText } from './easyRosterModel'
 
 /*
  * 계산 중 진행 상황: 요일이 끝나는 대로 그 요일의 추천(바쁜 시간·몇 명 더·가장 긴 대기)을 먼저 보여 준다.
@@ -37,13 +37,14 @@ export default function RosterProgress({ progress }: { progress: Progress | null
                 <span>이 요일은 계산하지 못했어요</span>
               </li>
             )
-          const busy = day.windows.map((w) => `${clock(w.start_time)}~${clock(w.end_time)}`).join(', ')
+          // 짧게: "✓ 바쁜 시간 8~14시 · 1명 더 · 가장 긴 대기 약 3분"(이어진 바쁜 시간은 하나로)
+          const busy = mergedWindows(day.windows).map((w) => rangeText(w.start, w.end)).join(', ')
           return (
             <li key={d} className="done">
               <b>{name}</b>
               <span>
                 ✓ {busy ? `바쁜 시간 ${busy} · ` : ''}
-                {day.extra ? `${day.extra}명 더 두면` : '지금 인원으로'} 가장 긴 대기 {waitText(day.peak_wait_sec)}
+                {day.extra ? `${day.extra}명 더` : '추가 없이'} · 가장 긴 대기 {waitText(day.peak_wait_sec)}
               </span>
             </li>
           )

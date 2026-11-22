@@ -5,7 +5,7 @@ import type { OptionKey } from '../lab/rosterTypes'
 import type { OperationTrace } from '../types'
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
-import { clock, OPTION_NAME, staffText } from './easyRosterModel'
+import { clock, mergedWindows, OPTION_NAME, staffText } from './easyRosterModel'
 import Info from './Info'
 
 /*
@@ -71,8 +71,8 @@ export default function RosterQueue({
 
   return (
     <div className="easy-replay er-queue">
-      <button type="button" className="er-back er-queue-close" onClick={() => setOpen(false)}>
-        줄 서는 모습 접기 ⌃
+      <button type="button" className="er-queue-close" onClick={() => setOpen(false)}>
+        접기 ⌃
       </button>
       <div className="easy-pick" role="group" aria-label="어느 근무표로 볼까요">
         {pair.map((k) => (
@@ -108,7 +108,8 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
   const at = (hhmm: string) => Math.min(duration, Math.max(0, seconds(hhmm) - origin))
   // 시작 시각 버튼: "오전 7시부터 (문 열 때)", "오전 8시부터 (바쁠 때)"처럼 무엇을 하는 버튼인지 바로 보이게. 처음 위치는 문 여는 시각.
   const opening = trace.time_origin.slice(0, 5)
-  const jumps = [...new Set([opening, ...windows.map((w) => w.start_time.slice(0, 5))])].map((hhmm) => ({ label: `${clock(hhmm)}부터 (${hhmm === opening ? '문 열 때' : '바쁠 때'})`, hhmm }))
+  // 이어진 바쁜 시간은 시작 하나만
+  const jumps = [...new Set([opening, ...mergedWindows(windows).map((w) => w.start.slice(0, 5))])].map((hhmm) => ({ label: `${clock(hhmm)}부터 (${hhmm === opening ? '문 열 때' : '바쁠 때'})`, hhmm }))
   const first = opening
   const [time, setTime] = useState(() => at(first))
   const [playing, setPlaying] = useState(false)

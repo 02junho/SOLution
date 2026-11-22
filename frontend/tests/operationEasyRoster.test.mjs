@@ -291,3 +291,23 @@ test('하루 근무표면 "주" 대신 "하루", 제목은 그 요일', () => {
   assert.deepEqual(periodOf(['MON']), { per: '하루', title: '월요일', within: '이날' })
   assert.deepEqual(periodOf(['MON', 'TUE']), { per: '주', title: '일주일', within: '일주일에' })
 })
+
+test('말로 바꾼 내용: 같은 칸은 마지막 값만', () => {
+  let list = chat.mergeChanges([], '직원 시급: 11,000원.')
+  list = chat.mergeChanges(list, '직원 시급: 10,320원.')
+  assert.deepEqual(list, ['직원 시급: 10,320원'])
+  list = chat.mergeChanges(list, '목표 대기: 3분 / 직원 G: 가능 요일 월·화')
+  assert.deepEqual(list, ['직원 시급: 10,320원', '목표 대기: 3분', '직원 G: 가능 요일 월·화'])
+})
+
+test('바쁜 시간 표시: 이어진 구간은 하나로', () => {
+  assert.deepEqual(model.mergedWindows([{ start_time: '11:00', end_time: '14:00' }, { start_time: '08:00', end_time: '11:00' }]), [{ start: '08:00', end: '14:00' }])
+  assert.deepEqual(model.mergedWindows([{ start_time: '08:00', end_time: '10:00' }, { start_time: '12:00', end_time: '13:00' }]).length, 2)
+})
+
+test('말로 바꿀 수 있는 것 안내는 칸 정의에서', () => {
+  const text = chat.editableText(chat.chatFields('07:00', '20:00', ['MON']))
+  assert.match(text, /목표 대기/)
+  assert.match(text, /사장님 근무\(요일·시간\)/)
+  assert.equal(text.split('사장님 근무').length, 2) // 사장님 칸 여러 개는 하나로
+})

@@ -18,7 +18,7 @@ import { analyzeTable, MENU_TYPES, planFrom, readTable, WEEKDAY_LABEL, WEEKDAYS 
 import type { StoreImport, Weekday } from '../workspace/storeFile'
 import EasyRosterResult from './EasyRosterResult'
 import type { RosterStage } from './rosterTour'
-import { applyReply, chatFields, chatState, chatWorkers, pushHistory, toAliases, toNames } from './easyRosterChat'
+import { applyReply, chatFields, chatState, chatWorkers, editableText, mergeChanges, pushHistory, toAliases, toNames } from './easyRosterChat'
 import type { ChatTurn } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
 import { clock, OPTION_NAME, won } from './easyRosterModel'
@@ -81,6 +81,7 @@ export default function EasyRoster({
   const [aiCount, setAiCount] = useState(0)
   const [cond, setCond] = useState<RosterConditions | null>(null)
   const [editing, setEditing] = useState(false)
+  const [showTeam, setShowTeam] = useState(false) // 조건 카드: 직원별 일할 수 있는 요일·시간 펼치기
   const [changedRows, setChangedRows] = useState<string[]>([])
   const [chatText, setChatText] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
@@ -91,6 +92,8 @@ export default function EasyRoster({
   const [chosen, setChosen] = useState<OptionKey>('RECOMMENDED')
   const [saved, setSaved] = useState('')
   const [explain, setExplain] = useState<{ text: string; ai: boolean } | null>(null)
+  // AI 설명: 맨 위 상자는 코드 요약으로 두고, AI 설명은 사장님이 보고 있는 채팅 칸에 띄운다(다시 계산해도 그 자리에서 보임).
+  const [aiNote, setAiNote] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [legacy, setLegacy] = useState(false)
   const [seconds, setSeconds] = useState(0)
@@ -257,9 +260,15 @@ export default function EasyRoster({
   async function explainResult(data: RosterOptions, summary: RosterSummary) {
     const fallback = summary.message
     setExplain({ text: fallback, ai: false })
+    setAiNote(null)
     try {
       const response = await rosterExplain({ result: rosterDigest(data), fallback })
-      if (response.status === 'ok' && response.data) setExplain({ text: response.data.text, ai: response.data.source === 'LLM' })
+      if (response.status === 'ok' && response.data?.source === 'LLM') {
+        const text = response.data.text
+        setAiNote(text)
+        // "왜 그래?"처럼 설명을 이어 물으면 AI가 무엇을 가리키는지 알 수 있게 대화 기록에도 넣는다.
+        chatHistory.current = pushHistory(chatHistory.current, { role: 'assistant', text })
+      }
     } catch {
       // 설명을 못 받아도 코드 요약 문장은 이미 보인다.
     }
@@ -486,8 +495,11 @@ export default function EasyRoster({
         setChangedRows(applied.rows)
         // 결과를 보고 있었으면 바로 계산하지 않고, 바꾼 내용을 보여 주고 "다시 계산할까요?"를 묻는다(더 고칠 수도 있게).
         if (phase === 'result') {
-          setPending((p) => ({ before: p?.before ?? cond, changes: [...(p?.changes ?? []), shown.replace(/^바꿨어요 — /, '')] }))  // 제목이 이미 "이렇게 바꿨어요"
+          // 제목이 이미 "이렇게 바꿨어요"라 앞말은 뺀다. 같은 칸을 또 바꾸면(시급 11,000 → 10,320) 마지막 값만 남긴다.
+          setPending((p) => ({ before: p?.before ?? cond, changes: mergeChanges(p?.changes ?? [], shown.replace(/^바꿨어요 — /, '')) }))
           setChatReply(null)
+          // AI가 "그럼 계산해 줘", "응"을 알아듣게, 화면이 물은 말도 앞 대화에 넣는다.
+          chatHistory.current = pushHistory(chatHistory.current, { role: 'assistant', text: '바꾼 조건으로 아직 다시 계산하지 않았어요. 이대로 다시 계산할까요?' })
         }
       }
       // "다시 계산해 줘"처럼 계산해 달라고 직접 말했을 때만 바로 계산한다(모아 둔 변경이 있으면 같이).
@@ -514,7 +526,7 @@ export default function EasyRoster({
           rows={2}
           maxLength={300}
           value={chatText}
-          placeholder={phase === 'result' ? '예: 토요일은 내가 못 나와' : '예: 손님 3분 넘게 안 기다리게 해 줘'}
+          placeholder={phase === 'result' ? '예: 금요일엔 제가 가게에 못 나가요' : '예: 손님 3분 넘게 안 기다리게 해 줘'}
           disabled={chatBusy}
           onChange={(e) => setChatText(e.target.value)}
           onKeyDown={(e) => {
@@ -542,12 +554,20 @@ export default function EasyRoster({
           </div>
         </div>
       )}
+      {phase === 'result' && aiNote && (
+        <p className="er-reply er-ai-note" role="status">
+          <b>AI 설명</b> {aiNote}
+        </p>
+      )}
       {chatReply && (
         <p className={`er-reply${chatReply.ok ? ' ok' : ''}`} role="status">
           {chatReply.ok && <i aria-hidden>✓ </i>}
           {chatReply.text}
         </p>
       )}
+      <p className="easy-muted er-small er-editable">
+        <b>말로 바꿀 수 있어요:</b> {editableText(chatFields(open, close, dataDays))}. 결과나 조건을 물어봐도 돼요.
+      </p>
       <p className="easy-muted er-small">AI가 고칠 칸을 고르면, 값이 허용 범위 안인지 다시 확인한 뒤에만 반영해요.</p>
     </section>
   )
@@ -714,8 +734,27 @@ export default function EasyRoster({
           </li>
           <li className={row('team')}>
             <span>직원 명단</span>
-            <b>{cond.team.people.length}명 {facts ? '(지난번 명단)' : '(예시 명단)'}</b>
+            <b>
+              {cond.team.people.length}명 {facts ? '(지난번 명단)' : '(예시 명단)'}{' '}
+              <button type="button" className="er-more" onClick={() => setShowTeam(!showTeam)}>
+                {showTeam ? '접기' : '누가 언제 되는지 보기'}
+              </button>
+            </b>
           </li>
+          {showTeam && (
+            // 근무표는 직원마다 일할 수 있는 요일·시간 안에서만 짠다(모든 날 다 되는 게 아니다). 그 가정을 그대로 보여 준다.
+            <li className="er-team">
+              <ul>
+                {cond.team.people.map((p) => (
+                  <li key={p.id}>
+                    <b>{p.name}</b> {p.days.length ? p.days.map((d) => WEEKDAY_LABEL[d]).join('·') : '요일 없음'} · {clock(p.start)} ~ {clock(p.end)} · 주 최대 {p.maxHours}시간
+                    {p.minor ? ' · 미성년' : ''}
+                  </li>
+                ))}
+              </ul>
+              <small>직원마다 일할 수 있다고 한 요일·시간이에요. 근무표는 모두 주 15시간 미만으로 짜요.</small>
+            </li>
+          )}
           <li className={row('target')}>
             <span>목표 대기</span>
             <b>{cond.targetWaitSec / 60}분 안 (손님 10명 중 9명)</b>
