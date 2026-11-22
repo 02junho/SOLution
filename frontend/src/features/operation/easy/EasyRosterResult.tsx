@@ -5,7 +5,7 @@ import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
+import { averagePeak, busiestDay, capacityText, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -43,6 +43,7 @@ export default function EasyRosterResult({
   chat: React.ReactNode
 }) {
   const days = shownDays(data)
+  const period = periodOf(days) // 하루 근무표면 "주" 대신 "하루"
   const option = data.options.find((o) => o.key === chosen) ?? data.options[0]
   const [ladderDay, setLadderDay] = useState<Weekday | null>(() => busiestDay(data, days))
   const day = ladderDay && days.includes(ladderDay) ? ladderDay : busiestDay(data, days)
@@ -62,7 +63,7 @@ export default function EasyRosterResult({
         <p className="easy-label">{readOnly ? '저장한 근무표' : option.key === 'RECOMMENDED' ? '추천' : '고른 근무표'}</p>
         <h2>{headline(option, days)}</h2>
         <p>
-          바쁜 시간 가장 긴 대기 <b>{waitText(peak)}</b> · 알바 <b>{option.weekly.people_used}명</b> (모두 주 15시간 미만) · 주 인건비{' '}
+          바쁜 시간 가장 긴 대기 <b>{waitText(peak)}</b> · 직원 <b>{option.weekly.people_used}명</b>{option.shortfall.more_people_under_15h > 0 && <> + 새로 뽑을 직원 <b>{option.shortfall.more_people_under_15h}명</b></>} (모두 주 15시간 미만) · {period.per} 인건비{' '}
           <b>{won(option.plan_cost_krw)}</b>
         </p>
         {!readOnly && (
@@ -111,7 +112,7 @@ export default function EasyRosterResult({
       )}
 
       <section className="easy-card easy-print er-print" data-tour="detail">
-        <h2>{OPTION_NAME[option.key]} · 일주일</h2>
+        <h2>{OPTION_NAME[option.key]} · {period.title}</h2>
         <p className="easy-print-only easy-print-sign er-sign">확인 ____________</p>
         <div className="er-week-wrap">
           <table className="er-week">
@@ -131,7 +132,7 @@ export default function EasyRosterResult({
                 <tr key={r.key} className={r.owner ? 'owner' : r.hire ? 'hire' : ''}>
                   <th scope="row">
                     {r.name}
-                    {r.hours != null && <small>주 {r.hours}시간</small>}
+                    {r.hours != null && <small>{period.per} {r.hours}시간</small>}
                     {r.pay != null && <small className="er-pay">{won(r.pay)}</small>}
                   </th>
                   {r.cells.map((c, i) => (
@@ -163,25 +164,26 @@ export default function EasyRosterResult({
         </div>
         <p className="easy-legend er-legend">
           <span><i className="owner" />사장님</span>
-          <span><i />알바</span>
-          {(option.new_hires?.length ?? 0) > 0 && <span><i className="hire" />새로 뽑을 알바</span>}
+          <span><i />지금 직원</span>
+          {(option.new_hires?.length ?? 0) > 0 && <span><i className="hire" />새로 뽑을 직원</span>}
           <span><i className="rest" />휴게 있음(4시간 넘게 일하면 30분, 무급)</span>
         </p>
+        {capacityText(option, days) && <p className="er-warn easy-noprint">{capacityText(option, days)}</p>}
         {option.shortfall.more_people_under_15h > 0 && (
           <p className="er-warn easy-noprint">
             {option.new_hires
-              ? `지금 직원 ${option.weekly.workers.length}명으로는 일주일에 ${option.shortfall.unfilled_hours}시간이 비어요. 알바 ${option.shortfall.more_people_under_15h}명을 더 뽑으면 이 근무표대로 돌아가요.`
-              : `지금 직원 ${option.weekly.workers.length}명으로는 일주일에 ${option.shortfall.unfilled_hours}시간이 비어요. 알바 ${option.shortfall.more_people_under_15h}명이 더 필요해요.`}
+              ? `지금 직원 ${option.weekly.workers.length}명으로는 ${period.within} ${option.shortfall.unfilled_hours}시간이 비어요. 직원 ${option.shortfall.more_people_under_15h}명을 더 뽑으면 이 근무표대로 돌아가요.`
+              : `지금 직원 ${option.weekly.workers.length}명으로는 ${period.within} ${option.shortfall.unfilled_hours}시간이 비어요. 직원 ${option.shortfall.more_people_under_15h}명이 더 필요해요.`}
           </p>
         )}
         <div className="easy-noprint">
-          <Info title="알바는 이렇게 일해요">
+          <Info title="직원은 이렇게 일해요">
             <ul>
               <li>
-                한 번에 {rules?.short_shift_hours ?? 3.5}~{rules?.long_shift_hours ?? 5}시간씩, 하루에 한 번만 일해요(바쁜 시간에 맞춰 짧게 나눠요).
+                한 번에 {rules?.short_shift_hours ?? 3.5}~{rules?.long_shift_hours ?? 7.5}시간씩(쉬는 시간 포함), 하루에 한 번만 일해요. 예: 7시간 근무 + 30분 휴게를 이틀이면 주 14시간이에요.
               </li>
               <li>직원마다 일할 수 있는 요일·시간 안에서만 넣어요.</li>
-              <li>모두 주 15시간 미만이라 주휴수당이 없어요. 새로 뽑을 알바도 같아요.</li>
+              <li>모두 주 15시간 미만이라 주휴수당이 없어요. 새로 뽑을 직원도 같아요.</li>
               <li>4시간 넘게 일하면 30분 쉬어요(무급). 바쁜 시간을 피해 넣었고, 근무 중간이면 옮겨도 돼요(처음·끝은 안 돼요).</li>
               <li>"주 ○시간"은 쉬는 시간을 뺀, 실제로 돈을 받는 시간이에요. 옆의 금액은 이 근무표대로 일할 때 주 예상 급여예요(세전, 보험·가산수당 빼고).</li>
             </ul>
@@ -194,8 +196,11 @@ export default function EasyRosterResult({
         )}
       </section>
 
-      <section className="easy-card easy-noprint">
-        <h2>세 근무표 비교</h2>
+      {/* 세 근무표 비교: 펼쳐 두되 접을 수 있게(근무표만 보고 싶을 때) */}
+      <details className="easy-card easy-noprint er-fold" open data-tour="compare">
+        <summary>
+          <h2>세 근무표 비교</h2>
+        </summary>
         <div className="er-compare">
           {data.options.map((o) => (
             <button key={o.key} type="button" className={`er-option${o.key === option.key ? ' on' : ''}`} disabled={readOnly} onClick={() => onChoose(o.key)}>
@@ -203,14 +208,14 @@ export default function EasyRosterResult({
               <b>{OPTION_NAME[o.key]}</b>
               <span>가장 긴 대기</span>
               <strong>{waitText(averagePeak(o, days))}</strong>
-              <span>주 인건비</span>
+              <span>{period.per} 인건비</span>
               <strong>{won(o.plan_cost_krw)}</strong>
-              <span>알바 {o.weekly.people_used}명{o.shortfall.more_people_under_15h > 0 ? ` · ${o.shortfall.more_people_under_15h}명 더 필요` : ''}</span>
+              <span>직원 {o.weekly.people_used}명{o.shortfall.more_people_under_15h > 0 ? ` · ${o.shortfall.more_people_under_15h}명 더 필요` : ''}</span>
               {versusText(o, recommended, days) && <em className="er-versus">{versusText(o, recommended, days)}</em>}
             </button>
           ))}
         </div>
-      </section>
+      </details>
 
       {!readOnly && chat}
 
@@ -222,7 +227,7 @@ export default function EasyRosterResult({
             key={option.key}
             lines={[
               `${OPTION_NAME[option.key]} · 바쁜 시간 가장 긴 대기 ${waitText(peak)}`,
-              `주 인건비 ${won(option.plan_cost_krw)} · 알바 ${option.weekly.people_used}명${option.shortfall.more_people_under_15h > 0 ? ` + 새로 뽑을 알바 ${option.shortfall.more_people_under_15h}명` : ''}(모두 주 15시간 미만)`,
+              `${period.per} 인건비 ${won(option.plan_cost_krw)} · 직원 ${option.weekly.people_used}명${option.shortfall.more_people_under_15h > 0 ? ` + 새로 뽑을 직원 ${option.shortfall.more_people_under_15h}명` : ''}(모두 주 15시간 미만)`,
               ...notes.map((n) => n.message),
             ]}
             warnings={warnings}

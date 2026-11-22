@@ -24,6 +24,7 @@ public class RosterChatService {
 	static final int MAX_MESSAGE = 300;
 	static final int MAX_FIELDS = 30;
 	static final int MAX_WORKERS = 20;
+	static final int MAX_HISTORY = 4;
 
 	private static final ParameterizedTypeReference<ApiResponse<Map<String, Object>>> RESPONSE =
 			new ParameterizedTypeReference<>() { };
@@ -34,7 +35,7 @@ public class RosterChatService {
 		this.client = client;
 	}
 
-	/** 요청: {"message", "fields", "state", "workers", "result"(선택)} */
+	/** 요청: {"message", "fields", "state", "workers", "result"(선택), "history"(선택, 바로 앞 대화 4줄까지)} */
 	public ApiResponse<Map<String, Object>> chat(Map<String, Object> body) {
 		if (!(body.get("message") instanceof String message) || message.isBlank() || message.length() > MAX_MESSAGE) {
 			throw ApiException.badRequest("INVALID_REQUEST", "말은 1~" + MAX_MESSAGE + "자로 보내 주세요.");
@@ -45,8 +46,11 @@ public class RosterChatService {
 		if (body.get("workers") instanceof List<?> workers && workers.size() > MAX_WORKERS) {
 			throw ApiException.badRequest("INVALID_REQUEST", "직원은 " + MAX_WORKERS + "명까지예요.");
 		}
+		if (body.get("history") instanceof List<?> history && history.size() > MAX_HISTORY) {
+			throw ApiException.badRequest("INVALID_REQUEST", "앞 대화는 " + MAX_HISTORY + "줄까지 보내 주세요.");
+		}
 		Map<String, Object> request = new LinkedHashMap<>();
-		for (String key : List.of("message", "fields", "state", "workers", "result")) {
+		for (String key : List.of("message", "fields", "state", "workers", "result", "history")) {
 			if (body.get(key) != null) {
 				request.put(key, body.get(key));
 			}

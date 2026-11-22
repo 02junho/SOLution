@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.execution_log import LOG_STATUS, write_tool_log
 from app.core.request_key import get_request_key
@@ -25,7 +25,7 @@ from .weekly_roster import plan as weekly_roster
 from .week_plan import plan as week_plan
 from .menu_types import classify as classify_menus
 from .roster_chat import chat as roster_chat, explain as roster_explain
-from .roster_options import plan as roster_options
+from .roster_options import plan as roster_options, progress as roster_progress
 from .roster_replay import replay as roster_replay
 
 # 근무표 계산(하루·일주일·추천 3안)은 같은 이벤트를 같은 순서로 처리하는 가벼운 스케줄러로 돌린다.
@@ -257,7 +257,7 @@ def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(ge
     """추천 근무표 3안: 요일별 꼭 필요한 인원 → 바쁜 시간에만 0~3명 더해 비교 → 아끼는/추천/여유 안(주 15시간 미만). 저장하지 않는다."""
     raw = body.model_dump(exclude_none=True)
     request = {"days": _engine_days(raw["days"]), "workers": raw["workers"]}
-    for key in ("min_gain_sec", "compare_holiday_pay", "background"):
+    for key in ("min_gain_sec", "compare_holiday_pay", "background", "progress_key"):
         if key in raw:
             request[key] = raw[key]
     try:
@@ -266,6 +266,12 @@ def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(ge
         raise HTTPException(status_code=400, detail=f"추천 근무표 입력 오류: {exc}") from exc
     data["request_key"] = request_key
     return ok(data)
+
+
+@router.get("/roster-options/progress", response_model=ApiResponse[dict])
+def roster_options_progress(key: str = Query(min_length=1, max_length=111)) -> ApiResponse[dict]:
+    """계산 중인 추천 근무표에서 끝난 요일(추천안 요약). 모르는 키면 done 0(아직 시작 전이거나 이미 지워짐)."""
+    return ok(roster_progress(key) or {"total": None, "done": 0, "order": [], "days": {}})
 
 
 @router.post("/roster-replay", response_model=ApiResponse[dict])

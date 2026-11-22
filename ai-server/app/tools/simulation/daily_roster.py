@@ -10,7 +10,7 @@
    먼저 고른다(다음으로 매장이 비지 않는 때, 바쁜 시간 밖, 근무 가운데에 가까운 때). 넣은 휴게는 노동 쪽
    배치표 검사(labor.create_schedule)로 다시 확인한다.
 4. 검증: 휴게 동안 빠지는 사람까지 반영해 다시 30번 돌린다. 기준을 못 지키면 가장 약한 시간대에 짧은 조를 더하고
-   휴게·검증을 다시 한다(최대 MAX_REPAIRS번).
+   휴게·검증을 다시 한다(최대 MAX_REPAIRS번). 더해도 대기가 안 줄면 그 사람을 빼고 멈춘다(capacity_limited).
 5. 인건비: 노동 쪽 비용 계산(labor.calculate_cost)으로 직원 유급시간 × 시급.
 
 역할: 구간마다 먼저 있던 사람(사장님이 있으면 사장님) 1명이 주문·전달을 먼저 하고 제조를 돕고, 나머지는 제조를 먼저
@@ -34,6 +34,9 @@ MIN_STAFF = 1
 MAX_STAFF = 6
 MAX_FIX_STEPS = 4
 MAX_REPAIRS = 4
+# 보강 한 번에 이만큼도 안 좋아지면(가장 약한 시간대 대기가 이 초 넘게 안 줄고, 통과한 판도 안 늘면) 사람을 더해도
+# 소용없는 것으로 본다(머신이 만들 수 있는 양이 한계인 가게). 그때는 더한 사람을 빼고 멈춘다.
+MIN_REPAIR_GAIN_SEC = 5
 MAX_ORDER_RUNS = 9000  # 30번이면 하루 300건. 여러 번 돌리므로 compare보다 낮게 둔다.
 # 시간대 판정에서 그 시간대 끝 뒤로 이만큼만 손님을 넣는다(그 뒤 손님은 판정에 거의 영향이 없음).
 # 하루 전체 확인은 언제나 모든 손님으로 한다.
@@ -152,17 +155,36 @@ def _required(run, slot_run, quality, min_staff, max_staff):
                 break
         chosen.append(pick)
     fixes = []
-    for _ in range(MAX_FIX_STEPS):
+    before = None  # 바로 전에 더한 것: (시간대, 그 전 통과율, 그 전 그 시간대 대기)
+    for step in range(MAX_FIX_STEPS + 1):  # 마지막 한 번은 바로 전에 더한 것이 효과가 있었는지 보기만 한다
         records = run(_count_rows(chosen))
-        if _day_rate(records, limit) >= need:
+        rate = _day_rate(records, limit)
+        if before is not None:
+            index, old_rate, old_p90 = before
+            now_p90 = _slot_p90(records, index)
+            gained = rate - old_rate >= 1 / len(records) - 1e-9 or (
+                old_p90 is not None and now_p90 is not None and old_p90 - now_p90 >= MIN_REPAIR_GAIN_SEC
+            )
+            if not gained:
+                # 한 명 더해도 대기가 안 줄었다(머신이 한계) → 되돌리고 멈춘다
+                chosen[index] -= 1
+                fixes.pop()
+                break
+        if rate >= need or step == MAX_FIX_STEPS:
             break
         weakest = _weakest(records, chosen, limit, max_staff)
         if weakest is None:
             break
+        before = (weakest, rate, _slot_p90(records, weakest))
         chosen[weakest] += 1
         fixes.append({"slot": slots[weakest], "to": chosen[weakest], "reason": "하루 전체 기준을 못 지켜 1명 더함"})
     records = run(_count_rows(chosen))
     return chosen, [slot_pass_rate(records, i, limit) for i in range(len(slots))], fixes
+
+
+def _slot_p90(records, index):
+    """시간대 하나의 대기(주문 후 받기 P90, 여러 번 평균). 주문이 적어 못 재면 None."""
+    return summarize([r["by_slot"][index]["p90_post_order_receipt_sec"] for r in records])["mean"]
 
 
 def _day_rate(records, limit) -> float:
@@ -501,14 +523,29 @@ def _build(ctx, rules):
     for u in range(total_units):
         at = u * UNIT
         need_total.append(counts[next(i for i, (x, y) in enumerate(zip(edges, edges[1:])) if x <= at < y)])
+    capacity_limited = None  # 사람을 더해도 대기가 안 줄던 시간대
+    before = None  # 바로 전 보강 전 상태: (근무조, 통과율, 약한 시간대, 그 대기)
     for attempt in range(MAX_REPAIRS + 1):
         shifts = _place_breaks(shifts, need_total, owner_window, d.peak)
         shifts = _check_breaks(shifts, wage, business_date, minor, d.peak)
         records = run(_shift_rows(shifts))
         day_rate = _day_rate(records, limit)
+        if before is not None:
+            old_shifts, old_rate, old_slot, old_p90 = before
+            now_p90 = _slot_p90(records, old_slot)
+            gained = day_rate - old_rate >= 1 / len(records) - 1e-9 or (
+                old_p90 is not None and now_p90 is not None and old_p90 - now_p90 >= MIN_REPAIR_GAIN_SEC
+            )
+            if not gained:
+                # 더한 사람이 대기를 줄이지 못했다 → 그 사람을 빼고 멈춘다(더 더해도 인건비만 는다).
+                shifts = old_shifts
+                repairs.pop()
+                capacity_limited = {"slot": d.slots[old_slot], "p90_sec": old_p90}
+                break
         if day_rate >= need_rate or attempt == MAX_REPAIRS:
             break
         weakest = _weakest_slot(records, limit)
+        before = (list(shifts), day_rate, weakest, _slot_p90(records, weakest))  # 아래 append가 바꾸지 않게 복사
         slot = d.slots[weakest]
         a = d.rel(slot.split("-")[0]) // UNIT
         b = min(total_units, a + short_units)
@@ -553,7 +590,7 @@ def _build(ctx, rules):
         ],
         "required_fixes": fixes,
         "staff_curve": ctx["curve"],
-        # 휴게까지 넣은 근무표로 돌린 시간대별 대기(주문 후 받기 P90, 30번 평균). 주문이 적은 시간대는 null.
+        # 휴게까지 넣은 근무표로 돌린 시간대별 대기(주문 후 받기 P90, 반복 평균). 주문이 적은 시간대는 null.
         "slot_p90_sec": [
             summarize([r["by_slot"][i]["p90_post_order_receipt_sec"] for r in records])["mean"] for i in range(len(slots))
         ],
@@ -578,10 +615,12 @@ def _build(ctx, rules):
             "passes": _day_rate(records, limit) >= need_rate,
             "p90_post_order_receipt_sec": p90,
             "repairs": repairs,
+            # 사람을 더해도 대기가 안 줄어 보강을 멈춘 시간대(없으면 None). 화면이 "머신이 한계" 안내에 쓴다.
+            "capacity_limited": capacity_limited,
         },
         "cost": cost,
         "assumptions": [
-            "시간대별 필요 인원은 같은 손님 조건 30번으로 대기 기준을 지키는 가장 적은 인원이에요(앞 시간대부터 차례로 찾음).",
+            f"시간대별 필요 인원은 같은 손님 조건 {repetitions}번으로 대기 기준을 지키는 가장 적은 인원이에요(앞 시간대부터 차례로 찾음).",
             f"근무조는 이어서 필요한 시간만큼 {rules['short_shift_hours']:g}~{rules['long_shift_hours']:g}시간, 30분 단위예요.",
             "휴게는 노동 규칙(4시간 이상 30분, 8시간 이상 1시간) 길이로, 빠져도 필요 인원이 남는 때를 먼저 골랐어요(다음으로 매장이 비지 않는 때, 바쁜 시간 밖).",
             "휴게로 빠지는 사람까지 넣어 다시 돌려 확인했어요.",

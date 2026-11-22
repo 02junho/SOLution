@@ -234,7 +234,18 @@ class DayCafe(SlotCafe):
         self.worker_index = {w["id"]: i for i, w in enumerate(self.workers)}
 
     def _segment_index(self, at=None):
-        at = self.clock.now if at is None else at
+        if at is None:
+            # 같은 시각에 여러 번 묻는다(직원·작업마다). 근무 구간은 바뀌지 않으니 시각별로 한 번만 찾는다.
+            now = self.clock.now
+            cached = getattr(self, "_segment_at", None)
+            if cached is not None and cached[0] == now:
+                return cached[1]
+            index = self._find_segment(now)
+            self._segment_at = (now, index)
+            return index
+        return self._find_segment(at)
+
+    def _find_segment(self, at):
         if at >= self.day_end:
             # The final on-duty employees finish orders already accepted.
             return len(self.roster_segments) - 1
@@ -308,10 +319,39 @@ class DayCafe(SlotCafe):
     def _slot_summary(self):
         jobs = list(self.jobs.values())
         byslot = []
-        for label in self.day.slots:
-            lo, hi = map(seconds, label.split("-"))
+        # 시간대와 상관없는 것은 한 번만 만든다(예전에는 시간대마다 모든 작업을 다시 훑었다).
+        # 머신·직원별 (시작, 끝) 목록은 작업 순서 그대로 둔다: 더하는 순서가 같아야 반올림 전 합계가 똑같다.
+        done = [j for j in jobs if j.get("completed_at_sec") is not None]
+        by_equipment = {name: [] for name in self.equipment_counts}
+        by_worker = {w["id"]: [] for w in self.workers}
+        for j in jobs:
+            for t in j["tasks"]:
+                start = t["started_at"]
+                if start is None:
+                    continue  # 시작 안 한 작업은 0초라 합계에 영향이 없다
+                end = t["ended_at"] if t["ended_at"] is not None else start + t["seconds"]
+                if t["equipment"] in by_equipment:
+                    by_equipment[t["equipment"]].append((start, end))
+                if t.get("assigned_worker") in by_worker:
+                    by_worker[t["assigned_worker"]].append((start, end))
+        bounds = [tuple(map(seconds, label.split("-"))) for label in self.day.slots]
+
+        def busy_by_slot(intervals):
+            # 작업 하나가 겹치는 시간대는 보통 1~2개라, 작업마다 겹치는 시간대에만 더한다(작업 순서대로 더해 합계가 예전과 같다).
+            totals = [0] * len(bounds)
+            for start, end in intervals:
+                for i, (lo, hi) in enumerate(bounds):
+                    if lo >= end:
+                        break  # 시간대는 앞에서부터 차례라 이후는 안 겹친다
+                    if hi > start:
+                        totals[i] += max(0.0, min(end, hi) - max(start, lo))
+            return totals
+
+        equipment_busy = {name: busy_by_slot(v) for name, v in by_equipment.items()}
+        worker_busy = {wid: busy_by_slot(v) for wid, v in by_worker.items()}
+        for slot_no, label in enumerate(self.day.slots):
+            lo, hi = bounds[slot_no]
             arrived = [j for j in jobs if lo <= j["arrival_sec"] < hi]
-            done = [j for j in jobs if j.get("completed_at_sec") is not None]
             completion = [j for j in done if lo < j["completed_at_sec"] <= hi]
             backlog_start = sum(
                 j["arrival_sec"] < lo
@@ -333,39 +373,11 @@ class DayCafe(SlotCafe):
                 - next(t["ended_at"] for t in j["tasks"] if t["stage"] == "order")
                 for j in cohort_done
             ]
-            task_all = [t for j in jobs for t in j["tasks"]]
-
-            def busy_overlap(task):
-                start = task["started_at"]
-                if start is None:
-                    return 0.0
-                end = (
-                    task["ended_at"]
-                    if task["ended_at"] is not None
-                    else start + task["seconds"]
-                )
-                return max(0.0, min(end, hi) - max(start, lo))
-
             equipment_util = {
-                name: round(
-                    sum(busy_overlap(t) for t in task_all if t["equipment"] == name)
-                    / ((hi - lo) * count),
-                    4,
-                )
+                name: round(equipment_busy[name][slot_no] / ((hi - lo) * count), 4)
                 for name, count in self.equipment_counts.items()
             }
-            staff_util = {
-                w["id"]: round(
-                    sum(
-                        busy_overlap(t)
-                        for t in task_all
-                        if t.get("assigned_worker") == w["id"]
-                    )
-                    / (hi - lo),
-                    4,
-                )
-                for w in self.workers
-            }
+            staff_util = {w["id"]: round(worker_busy[w["id"]][slot_no] / (hi - lo), 4) for w in self.workers}
             byslot.append(
                 {
                     "slot": label,

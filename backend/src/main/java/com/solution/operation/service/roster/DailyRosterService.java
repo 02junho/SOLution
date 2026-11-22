@@ -69,7 +69,26 @@ public class DailyRosterService {
 		if (Boolean.TRUE.equals(body.get("background"))) {
 			request.put("background", true);
 		}
+		// 진행 상황 키(계산 작업의 요청 키). ai-server가 끝난 요일을 이 키로 모아 두고, 상태 조회 때 progress로 꺼낸다.
+		if (body.get("progress_key") instanceof String progressKey && !progressKey.isBlank() && progressKey.length() <= 111) {
+			request.put("progress_key", progressKey);
+		}
 		return call("/tools/simulation/roster-options", request, ":options", "추천 근무표 응답을 받지 못했습니다.");
+	}
+
+	/**
+	 * 계산 중인 추천 근무표의 진행 상황(끝난 요일 수와 요일별 추천안 요약). 화면이 끝난 요일부터 먼저 보여 준다.
+	 * 진행 표시는 덤이라 ai-server에 못 닿으면 null(상태 조회는 그대로 RUNNING).
+	 */
+	public Map<String, Object> rosterProgress(String progressKey) {
+		try {
+			String path = "/tools/simulation/roster-options/progress?key="
+					+ java.net.URLEncoder.encode(progressKey, java.nio.charset.StandardCharsets.UTF_8);
+			ApiResponse<Map<String, Object>> response = client.get(path, RESPONSE);
+			return response == null ? null : response.data();
+		} catch (RuntimeException unreachable) {
+			return null;
+		}
 	}
 
 	private ApiResponse<Map<String, Object>> call(String path, Map<String, Object> request, String suffix, String failure) {

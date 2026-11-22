@@ -55,11 +55,14 @@ test('대기 글자: 1분 안 / 반올림한 분 / 없음', () => {
   assert.equal(model.waitText(null), '—')
 })
 
-test('추천 한 줄: 모든 요일 같은 수면 "N명씩", 아니면 요일, 0이면 충분', () => {
+test('추천 한 줄: 새로 뽑을 직원 먼저, 모든 요일 같은 수면 "N명씩", 아니면 요일, 0이면 충분', () => {
   const days = model.shownDays(data)
   assert.deepEqual(days, ['MON', 'TUE'])
   assert.equal(model.headline(data.options[1], days), '바쁜 시간에 1명씩 더 두면 돼요')
-  assert.equal(model.headline(data.options[0], days), '지금 꼭 필요한 인원으로 충분해요')
+  assert.equal(model.headline(data.options[0], days), '지금 직원으로 충분해요')
+  // 새로 뽑을 직원이 있으면 그걸 먼저(표의 노란 줄과 맞게)
+  assert.equal(model.headline({ ...data.options[0], shortfall: { more_people_under_15h: 2 } }, days), '직원 2명을 더 뽑으면 돼요')
+  assert.equal(model.headline({ ...data.options[1], shortfall: { more_people_under_15h: 1 } }, days), '직원 1명을 더 뽑고, 바쁜 시간에 1명씩 더 두면 돼요')
   const mixed = { ...data.options[1], extra_by_day: { MON: 1, TUE: 0 } }
   assert.equal(model.headline(mixed, days), '월요일 바쁜 시간에 사람을 더 두면 돼요')
   const uneven = { ...data.options[1], extra_by_day: { MON: 1, TUE: 2 } }
@@ -99,11 +102,11 @@ test('새로 뽑을 알바: 서버가 나눈 그대로 줄로, 빈 자리 줄은
   const option = {
     ...base,
     weekly: { ...base.weekly, unfilled: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5 }] },
-    new_hires: [{ worker_key: 'NEW_1', name: '새 알바 1', weekly_work_hours: 4.5, base_wage_krw: 46_440, assignments: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5, breaks: [{ start_time: '09:30', end_time: '10:00' }] }] }],
+    new_hires: [{ worker_key: 'NEW_1', name: '새 직원 1', weekly_work_hours: 4.5, base_wage_krw: 46_440, assignments: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5, breaks: [{ start_time: '09:30', end_time: '10:00' }] }] }],
   }
   const rows = model.weekRows(option, ['MON', 'TUE'])
   const hire = rows.at(-1)
-  assert.equal(hire.name, '새 알바 1')
+  assert.equal(hire.name, '새 직원 1')
   assert.equal(hire.hire, true)
   assert.equal(hire.pay, 46_440, '주 예상 급여는 서버 값 그대로')
   assert.equal(hire.cells[0], null)
@@ -281,4 +284,10 @@ test('목록 요약: 바꾼 목표 대기·시급이 보여 같은 가게 근무
   assert.equal(recent.inputSummary('operation', { operation_form: form }), '주문 142건 · 사장님 같이 일함 · 목표 대기 3분 · 시급 12,000원')
   // 1번(시간대 주문 없음)은 예전 그대로
   assert.equal(recent.inputSummary('operation', { operation_form: { daily_orders: 150, is_owner_working: true, hourly_wage_krw: 10320 } }), '보통 날(150건) · 사장님 같이 일함')
+})
+
+test('하루 근무표면 "주" 대신 "하루", 제목은 그 요일', () => {
+  const { periodOf } = model
+  assert.deepEqual(periodOf(['MON']), { per: '하루', title: '월요일', within: '이날' })
+  assert.deepEqual(periodOf(['MON', 'TUE']), { per: '주', title: '일주일', within: '일주일에' })
 })

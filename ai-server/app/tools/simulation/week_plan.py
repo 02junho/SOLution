@@ -3,7 +3,7 @@
 1. 요일마다 하루 근무표 조건(손님·사장님 근무)을 받아 시간대별 필요 인원을 한 번 찾는다.
 2. 같은 필요 인원으로 근무조를 두 가지로 만든다.
    - 주휴 포함 안: 긴 조(최대 8시간)로 적은 인원
-   - 주 15시간 미만 안: 짧은 조(3.5~5시간)로 잘게 나눠 한 사람이 주 여러 번 들어갈 수 있게
+   - 주 15시간 미만 안: 3.5~7.5시간 조(weekly_roster.UNDER_15H_SHIFTS)로 나눠 한 사람이 주 여러 번 들어갈 수 있게
 3. 안마다 요일별 직원 자리를 명단에 배정한다(weekly_roster, 정수 계획법).
 요일 계산은 CPU 코어 수만큼 동시에 돌린다(결과는 순서대로 돌린 것과 같다). 저장하지 않는다.
 """
@@ -19,7 +19,7 @@ from .parallel import worker_count
 
 VARIANTS = {
     "WITH_HOLIDAY_PAY": {},
-    "UNDER_15H": {"long_shift_hours": 5, "short_shift_hours": 3.5},
+    "UNDER_15H": weekly_roster.UNDER_15H_SHIFTS,
 }
 
 
@@ -104,7 +104,7 @@ def plan(body: dict, engine: str = "simpy") -> dict:
         "results": results,
         "assumptions": [
             "요일마다 그 요일 평균 손님으로 시간대별 필요 인원을 한 번 찾고, 같은 필요 인원으로 근무조를 두 가지로 만들었어요.",
-            "주휴 포함 안은 긴 조(최대 8시간), 주 15시간 미만 안은 짧은 조(3.5~5시간)로 나눴어요. 휴게는 근무 길이에 맞춰 넣고 다시 확인했어요.",
+            f"주휴 포함 안은 긴 조(최대 8시간), 주 15시간 미만 안은 {weekly_roster.UNDER_15H_SHIFTS['short_shift_hours']:g}~{weekly_roster.UNDER_15H_SHIFTS['long_shift_hours']:g}시간 조로 나눴어요. 휴게는 근무 길이에 맞춰 넣고 다시 확인했어요.",
             *weekly_roster.plan({"days": [{"day": "MON", "shifts": []}], "workers": [{"worker_key": "x", "hourly_wage_krw": 1}]})[
                 "assumptions"
             ][1:],

@@ -35,6 +35,8 @@ export type DailyRoster = {
     passes: boolean
     p90_post_order_receipt_sec: number | null
     repairs: { slot: string; added: string; reason: string }[]
+    /** 사람을 더해도 대기가 안 줄어 보강을 멈춘 시간대(머신이 만들 수 있는 양이 한계). 예전 결과엔 없다. */
+    capacity_limited?: { slot: string; p90_sec: number | null } | null
   }
   cost: { employee_paid_hours: number; cash_cost_krw: number; basis: string }
   /** 하루 내내 n명(서로 돕기)일 때 대기. "1명 더 쓰면" 비교용 어림값. */
@@ -154,7 +156,11 @@ export type RosterSummary = {
   message: string
 }
 /** 계산 시작·상태 응답. DONE이면 result_id와 summary가 있다. */
+/** 계산 중 끝난 요일(추천안 요약). 서버가 상태 조회에 붙여 준다(없을 수도 있다). */
+export type RosterProgressDay = { windows: { start_time: string; end_time: string }[]; extra: number; peak_wait_sec: number | null } | { failed: true }
+export type RosterProgress = { total: number | null; done: number; order: string[]; days: Record<string, RosterProgressDay> }
 export type RosterJob = {
+  progress?: RosterProgress
   state: 'RUNNING' | 'DONE' | 'FAILED' | 'LOST'
   request_key?: string
   session_id: number
@@ -206,6 +212,8 @@ export function rosterDigest(data: RosterOptions): JsonObject {
   const days = Object.keys(data.days)
   return {
     min_gain_sec: data.min_gain_sec,
+    // 인건비가 어느 기간 것인지(요일 하나만 계산했으면 하루). AI 설명이 "주 인건비"라고 잘못 말하지 않게 데이터로 넘긴다.
+    cost_period: days.length === 1 ? '하루' : '일주일',
     days: Object.fromEntries(
       days.map((d) => [
         d,
@@ -220,7 +228,7 @@ export function rosterDigest(data: RosterOptions): JsonObject {
       key: o.key,
       title: o.title,
       peak_wait_min_avg: min(avg(days.map((d) => o.peak_wait_sec[d] ?? null))),
-      weekly_cost_krw: o.plan_cost_krw,
+      cost_krw: o.plan_cost_krw,
       people_used: o.weekly.people_used,
       unfilled_hours: o.shortfall.unfilled_hours,
       more_people_needed: o.shortfall.more_people_under_15h,

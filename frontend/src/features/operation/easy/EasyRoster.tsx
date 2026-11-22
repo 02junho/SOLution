@@ -9,12 +9,17 @@ import { rosterDays, rosterWorkers } from '../lab/rosterRequest'
 import { optionsFromStored, rosterDigest } from '../lab/rosterTypes'
 import type { OptionKey, RosterOptions, RosterSummary, StoredRosterResult } from '../lab/rosterTypes'
 import { waitRoster } from '../lab/rosterJob'
+import type { RosterProgress as RosterProgressData } from '../lab/rosterTypes'
+import RosterProgress from './RosterProgress'
+import { ROSTER_SCOPE_DEFAULT } from './rosterSwitch'
 import { exampleTeam } from '../lab/team'
 import { DEFAULT_CLOSE, DEFAULT_OPEN, DEFAULT_TARGET_WAIT_SEC, draftBody, draftOperationInput, FORM_KEY, formInput, MACHINE_COUNTS, TARGET_WAIT_MINUTES, wageFloor } from '../workspace/operationInput'
 import { analyzeTable, MENU_TYPES, planFrom, readTable, WEEKDAY_LABEL, WEEKDAYS } from '../workspace/storeFile'
 import type { StoreImport, Weekday } from '../workspace/storeFile'
 import EasyRosterResult from './EasyRosterResult'
-import { applyReply, chatFields, chatState, chatWorkers, toAliases, toNames } from './easyRosterChat'
+import type { RosterStage } from './rosterTour'
+import { applyReply, chatFields, chatState, chatWorkers, pushHistory, toAliases, toNames } from './easyRosterChat'
+import type { ChatTurn } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
 import { clock, OPTION_NAME, won } from './easyRosterModel'
 import { equipmentOf, patchForm, restoreConditions, restoredDayBodies, restoredFacts } from './easyRosterRestore'
@@ -38,8 +43,8 @@ export type RosterOpened = { sessionId: number; resultId: number | null; savedCh
 // 첫 단계 "어떤 데이터로 만들까요?"의 기본: 마이샵에 연결된 매출(시연에서는 연동이 없어 첫 예시 가게 데이터를 쓴다).
 const MYSHOP_LABEL = '마이샵 매출 데이터'
 const SAMPLES = [
-  { file: 'shinhan_pattern_pos.xlsx', label: '예시 가게 (상권 평균 모양)' },
-  { file: 'busy_cafe_pos.xlsx', label: '바쁜 예시 가게 (아침·점심 모두 붐빔)' },
+  { file: 'shinhan_pattern_pos.xlsx', label: '예시 가게 (상권 평균 데이터)' },
+  { file: 'busy_cafe_pos.xlsx', label: '바쁜 가게 예시 (아침·점심 모두 붐빔)' },
 ]
 // 쉬운 화면은 버튼을 적게: 목표 대기 선택지(TARGET_WAIT_MINUTES) 중 3·5·7분만 보인다. 지금 값이 다르면 그 값도 같이 보인다.
 const WAIT_CHOICES = TARGET_WAIT_MINUTES.filter((m) => m === 3 || m === 5 || m === 7)
@@ -56,12 +61,18 @@ export default function EasyRoster({
   onPhase,
   onSession,
   opened = null,
+  onBack,
+  onStage,
 }: {
   phase: RosterPhase
   onPhase: (next: 'confirm' | 'running' | 'result' | 'error') => void
   /** 업무를 만들면 알린다(쉬운 화면이 주소를 이 업무로 바꿔 새로 고쳐도 다시 열리게). */
   onSession: (sessionId: number) => void
   opened?: RosterOpened | null
+  /** 위 "← 이전" 줄을 이 화면 안의 한 단계(조건 확인 → 데이터 고르기)로 바꿀 때 알린다. null이면 쉬운 화면 기본. */
+  onBack?: (back: { label: string; run: () => void } | null) => void
+  /** 따라 하며 배우기가 데이터 고르기/조건 확인 중 어느 단계인지 알게 한다. */
+  onStage?: (stage: RosterStage) => void
 }) {
   const [source, setSource] = useState<{ label: string; imp: StoreImport } | null>(null)
   // 다시 불러온 업무: 저장된 계산 요청(요일별 조건·직원)으로 조건을 채우고, 원본 파일 없이 그 숫자로 다시 계산한다.
@@ -83,6 +94,7 @@ export default function EasyRoster({
   const [error, setError] = useState('')
   const [legacy, setLegacy] = useState(false)
   const [seconds, setSeconds] = useState(0)
+  const [progress, setProgress] = useState<RosterProgressData | null>(null) // 계산 중 끝난 요일
   const stopRef = useRef<{ stopped: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   // 새로 시작하면 먼저 데이터를 고른다(한 화면에 하나만 묻기). 이어서 열거나 다시 계산할 때는 건너뛴다.
@@ -95,6 +107,30 @@ export default function EasyRoster({
   const open = facts?.open ?? plan?.open ?? DEFAULT_OPEN
   const close = facts?.close ?? plan?.close ?? DEFAULT_CLOSE
   const dataDays: Weekday[] = facts ? facts.days : plan ? WEEKDAYS.filter((w) => plan.weekdayDays[w]) : []
+  // 근무표 범위: 'week' = 데이터가 있는 요일 전부, 요일 하나 = 그 요일 하루만(빠름). null이면 기본값(ROSTER_SCOPE_DEFAULT).
+  const [scopePick, setScopePick] = useState<'week' | Weekday | null>(null)
+  const busiestDataDay = useMemo<Weekday | null>(() => {
+    // 하루 근무표 기본 요일: 주문이 가장 많은 요일(같으면 앞 요일)
+    if (!imp || restored) return dataDays[0] ?? null
+    let best: Weekday | null = null
+    let most = -1
+    for (const d of dataDays) {
+      const orders = planFrom(imp, d, null, {}, 1, aiTypes).dailyOrders ?? 0
+      if (orders > most) {
+        most = orders
+        best = d
+      }
+    }
+    return best
+    // dataDays는 imp·facts에서 나온다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imp, restored, aiTypes, dataDays.join(',')])
+  const scope: 'week' | Weekday =
+    scopePick && (scopePick === 'week' || dataDays.includes(scopePick))
+      ? scopePick
+      : ROSTER_SCOPE_DEFAULT === 'day' && busiestDataDay
+        ? busiestDataDay
+        : 'week'
   const stops = facts ? [] : plan ? blocking(plan) : []
   const peakNow = facts ? facts.peak : plan?.peak ?? null
   const dailyNow = facts ? facts.dailyOrders : plan?.dailyOrders ?? null
@@ -245,8 +281,10 @@ export default function EasyRoster({
             c.owner,
             c.team,
           ).days
+    // 하루 근무표면 그 요일만 보낸다(서버는 요일 1~7개를 같은 방식으로 계산한다).
+    const picked = scope === 'week' ? days : days.filter((d) => (d as { day?: string }).day === scope)
     // 쉬운 화면은 주휴 비교를 보여 주지 않으므로 계산하지 않는다(요일마다 근무표 하나를 덜 짜서 빨라진다).
-    return { days, workers: rosterWorkers(c.team.people), compare_holiday_pay: false }
+    return { days: picked, workers: rosterWorkers(c.team.people), compare_holiday_pay: false }
   }
 
   // ---------------------------------------------------------------- 미리 계산(E·G)
@@ -274,7 +312,7 @@ export default function EasyRoster({
     }
     // rosterBody는 아래 값들로만 정해진다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [warmStage, cond, restored, imp, aiTypes])
+  }, [warmStage, cond, restored, imp, aiTypes, scope])
   useEffect(() => {
     const queue = warmBodies.map((body) => ({ body, signature: JSON.stringify(body) })).filter((w) => !warmSent.current.has(w.signature))
     if (!queue.length) return
@@ -318,13 +356,16 @@ export default function EasyRoster({
     setError('')
     setSaved('')
     setSeconds(0)
+    setProgress(null)
     setChatReply(null)
     onPhase('running')
     try {
       if (form) await draftOperationInput(form)
       let sessionId = session
       if (!sessionId) {
-        const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', '[쉬운 화면] 점심 인원 근무표')
+        // 제목에 어떤 데이터로 만들었는지 붙여 "하던 일" 목록에서 같은 제목이 줄줄이 나오지 않게 한다.
+        const from = source ? source.label.replace(/\s*\(.*\)$/, '').replace(/^내 판매 내역$/, source.label.match(/\((.*)\)$/)?.[1] ?? '내 판매 내역') : ''
+        const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', `[쉬운 화면] 추천 근무표${from ? ` · ${from}` : ''}`)
         sessionId = created.session_id
         setSession(sessionId)
         onSession(sessionId)
@@ -345,7 +386,7 @@ export default function EasyRoster({
       const key = crypto.randomUUID()
       const begun = await startRosterResult(sessionId, { input_version_id: versionId, ...body }, key)
       if (begun.status !== 'ok' || !begun.data) throw new Error(begun.message ?? '계산을 시작하지 못했어요.')
-      const job = begun.data.state === 'DONE' ? begun.data : await waitRoster({ sessionId, versionId, key }, setSeconds, stop)
+      const job = begun.data.state === 'DONE' ? begun.data : await waitRoster({ sessionId, versionId, key }, setSeconds, stop, setProgress)
       if (!job || stop.stopped) return
       if (!job.result_id) throw new Error('추천 근무표를 만들지 못했어요.')
       const detail = await loadRosterResult(job.result_id)
@@ -373,6 +414,43 @@ export default function EasyRoster({
 
   // ---------------------------------------------------------------- 말로 고치기
   const rerunNext = useRef(false)
+  const chatHistory = useRef<ChatTurn[]>([]) // 바로 앞 대화(별칭). 새로 고침하면 비운다.
+  const [rerunNote, setRerunNote] = useState('') // 말로 바꿔 다시 계산할 때 계산 화면에 보일 문장
+  // 결과를 보다가 말로 바꾼 것: 바로 계산하지 않고 모아 두었다가 사장님이 "다시 계산하기"를 누를 때 한 번에 계산한다.
+  // before = 처음 바꾸기 전 조건("취소"하면 이리로 되돌린다), changes = 바꾼 내용 답장들.
+  const [pending, setPending] = useState<{ before: RosterConditions; changes: string[] } | null>(null)
+  const chatInput = useRef<HTMLTextAreaElement>(null)
+
+  function rerunPending() {
+    if (!pending) return
+    setRerunNote(`${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.`)
+    setPending(null)
+    setChatReply(null)
+    void run()
+  }
+
+  function cancelPending() {
+    if (!pending) return
+    setCond(pending.before)
+    setPending(null)
+    setChatReply({ text: '바꾼 내용을 되돌렸어요. 근무표는 그대로예요.', ok: false })
+  }
+  useEffect(() => {
+    if (phase === 'result' || phase === 'error') setRerunNote('') // 계산이 끝나면 지운다(답장은 대화 칸에 남는다)
+  }, [phase])
+
+  // "← 이전" 한 단계: 이 화면에서 데이터를 골라 조건 확인으로 왔으면 데이터 고르기로 돌아간다(홈으로 가지 않게).
+  // 이어서 연 업무(지난번 조건)·저장한 계획·계산 중·결과는 쉬운 화면 기본 동작 그대로.
+  const backToData = phase === 'confirm' && !pickData && !readOnly && Boolean(source) && !restored
+  useEffect(() => {
+    onBack?.(backToData ? { label: '데이터 다시 고르기', run: () => { setEditing(false); setPickData(true) } } : null)
+  }, [backToData, onBack])
+  useEffect(() => () => onBack?.(null), [onBack])
+  const stage: RosterStage = phase === 'confirm' && !readOnly ? (pickData ? 'pick' : 'confirm') : null
+  useEffect(() => {
+    onStage?.(stage)
+  }, [stage, onStage])
+  useEffect(() => () => onStage?.(null), [onStage])
   useEffect(() => {
     if (!rerunNext.current) return
     rerunNext.current = false
@@ -385,10 +463,12 @@ export default function EasyRoster({
     if (!message || !cond || chatBusy) return
     setChatBusy(true)
     setChatReply(null)
+    const aliased = toAliases(message, cond.team.people)
     try {
       const response = await rosterChat({
         // 직원 이름은 별칭으로 바꿔 보내고(AI에 이름이 가지 않게), 답장은 다시 이름으로 바꿔 보여 준다.
-        message: toAliases(message, cond.team.people),
+        message: aliased,
+        history: chatHistory.current,
         fields: chatFields(open, close, dataDays),
         state: chatState(cond, { open, close, busy: peakNow ? `${peakNow.start}~${peakNow.end}` : null, dailyOrders: dailyNow }),
         workers: chatWorkers(cond.team.people),
@@ -398,14 +478,24 @@ export default function EasyRoster({
       const reply = response.data
       const applied = applyReply(cond, reply, { open, close })
       setChatText('')
-      setChatReply({ text: toNames(reply.reply, cond.team.people), ok: applied.changed })
+      chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: reply.reply })
+      const shown = toNames(reply.reply, cond.team.people)
+      setChatReply({ text: shown, ok: applied.changed })
       if (applied.changed) {
         setCond(applied.next)
         setChangedRows(applied.rows)
+        // 결과를 보고 있었으면 바로 계산하지 않고, 바꾼 내용을 보여 주고 "다시 계산할까요?"를 묻는다(더 고칠 수도 있게).
+        if (phase === 'result') {
+          setPending((p) => ({ before: p?.before ?? cond, changes: [...(p?.changes ?? []), shown.replace(/^바꿨어요 — /, '')] }))  // 제목이 이미 "이렇게 바꿨어요"
+          setChatReply(null)
+        }
       }
-      // 결과를 보고 있었으면 바뀐 조건으로 바로 다시 계산한다(다음 렌더에서 최신 조건으로).
-      if ((applied.changed || reply.intent === 'RUN') && phase === 'result') rerunNext.current = true
-      else if (reply.intent === 'RUN' && phase === 'confirm') rerunNext.current = true
+      // "다시 계산해 줘"처럼 계산해 달라고 직접 말했을 때만 바로 계산한다(모아 둔 변경이 있으면 같이).
+      if (reply.intent === 'RUN' && (phase === 'result' || phase === 'confirm')) {
+        setRerunNote(pending ? `${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.` : shown)
+        setPending(null)
+        rerunNext.current = true
+      }
     } catch (cause) {
       setChatReply({ text: errorText(cause, '말을 처리하지 못했어요.'), ok: false })
     } finally {
@@ -420,6 +510,7 @@ export default function EasyRoster({
         <label htmlFor="er-chat" className="easy-sr">말로 고치기</label>
         <textarea
           id="er-chat"
+          ref={chatInput}
           rows={2}
           maxLength={300}
           value={chatText}
@@ -435,6 +526,22 @@ export default function EasyRoster({
         />
         <button type="submit" className="easy-primary" disabled={chatBusy || !chatText.trim()}>{chatBusy ? '보내는 중' : '보내기'}</button>
       </form>
+      {phase === 'result' && pending && (
+        <div className="er-pending" role="status">
+          <p className="er-pending-title">이렇게 바꿨어요. 아직 근무표에는 반영 안 했어요.</p>
+          <ul>
+            {pending.changes.map((text, i) => (
+              <li key={i}>{text}</li>
+            ))}
+          </ul>
+          <p>이 조건으로 다시 계산할까요? 더 고칠 게 있으면 위 칸에 이어서 말해 주세요.</p>
+          <div className="easy-actions">
+            <button type="button" className="easy-primary" onClick={rerunPending}>다시 계산하기</button>
+            <button type="button" className="easy-secondary" onClick={() => chatInput.current?.focus()}>더 고칠게요</button>
+            <button type="button" className="easy-secondary" onClick={cancelPending}>취소</button>
+          </div>
+        </div>
+      )}
       {chatReply && (
         <p className={`er-reply${chatReply.ok ? ' ok' : ''}`} role="status">
           {chatReply.ok && <i aria-hidden>✓ </i>}
@@ -450,12 +557,16 @@ export default function EasyRoster({
 
   if (phase === 'running')
     return (
-      <div className="easy-running" role="status">
-        <span className="easy-spinner" aria-hidden />
-        <span>
-          요일마다 사람을 한 명씩 늘려 보며 대기 시간을 재는 중이에요{seconds ? ` (${seconds}초)` : ''}
-          <small className="er-running-note">창을 닫아도 계산은 계속돼요. "하던 일 이어하기"에서 다시 열 수 있어요.</small>
-        </span>
+      <div className="easy-running er-running" role="status">
+        <div className="er-running-top">
+          <span className="easy-spinner" aria-hidden />
+          <span>
+            {rerunNote && <strong className="er-rerun-note">{rerunNote}</strong>}
+            요일마다 사람을 한 명씩 늘려 보며 대기 시간을 재는 중이에요{seconds ? ` (${seconds}초)` : ''}
+            <small className="er-running-note">창을 닫아도 계산은 계속돼요. "하던 일 이어하기"에서 다시 열 수 있어요.</small>
+          </span>
+        </div>
+        <RosterProgress progress={progress} />
       </div>
     )
 
@@ -527,7 +638,7 @@ export default function EasyRoster({
   )
   if (pickData)
     return (
-      <Card title="어떤 데이터로 근무표를 만들까요?" tour="confirm">
+      <Card title="어떤 데이터로 근무표를 만들까요?" tour="source">
         {fileInput}
         <div className="er-source">
           <button type="button" className="er-source-main" onClick={() => void chooseData(() => readSample(SAMPLES[0].file, MYSHOP_LABEL))}>
@@ -572,7 +683,8 @@ export default function EasyRoster({
     )
   const sourceTag = facts ? '지난번 조건' : source?.label === MYSHOP_LABEL ? '마이샵' : source?.label.startsWith('내 판매 내역') ? '내 파일' : '예시'
   return (
-    <>
+    // 조건 카드와 아래 말로 고치기 칸을 한 묶음으로(따라 하며 배우기 3단계가 둘을 같이 비춘다)
+    <div data-tour="confirm-area">
       {fileInput}
       <Card title="이 조건이 맞나요?" tour="confirm">
         <ul className="easy-facts er-facts">
@@ -601,7 +713,7 @@ export default function EasyRoster({
             <b>{ownerText}</b>
           </li>
           <li className={row('team')}>
-            <span>알바 후보</span>
+            <span>직원 명단</span>
             <b>{cond.team.people.length}명 {facts ? '(지난번 명단)' : '(예시 명단)'}</b>
           </li>
           <li className={row('target')}>
@@ -612,8 +724,12 @@ export default function EasyRoster({
             <span>기계</span>
             <b>에스프레소 머신 {cond.espresso}대 · 블렌더 {cond.blenders}대</b>
           </li>
+          <li>
+            <span>근무표 범위</span>
+            <b>{scope === 'week' ? `일주일 (${dataDays.map((d) => WEEKDAY_LABEL[d]).join('·')})` : `${WEEKDAY_LABEL[scope]}요일 하루만 (빨라요)`}</b>
+          </li>
           <li className={row('wage')}>
-            <span>알바 시급 · 규칙</span>
+            <span>직원 시급 · 규칙</span>
             <b>{won(wageNumber)} · 주 15시간 미만 · 휴게 포함</b>
           </li>
         </ul>
@@ -622,9 +738,19 @@ export default function EasyRoster({
         {stops.length > 0 && <p className="easy-error">{stops[0]}</p>}
         {editing && (
           <div className="easy-edit">
+            {dataDays.length > 1 && (
+              // 일주일이 오래 걸릴 때 하루만 먼저: 서버가 요일 하나만 계산해서 빠르다(멘토링 대안).
+              <Pick
+                label="근무표 범위"
+                value={scope === 'week' ? -1 : dataDays.indexOf(scope)}
+                options={[-1, ...dataDays.map((_, i) => i)]}
+                format={(i) => (i < 0 ? '일주일' : `${WEEKDAY_LABEL[dataDays[i]]}요일 하루만`)}
+                onPick={(i) => setScopePick(i < 0 ? 'week' : dataDays[i])}
+              />
+            )}
             <Pick label="목표 대기" value={cond.targetWaitSec / 60} options={withCurrent(WAIT_CHOICES, cond.targetWaitSec / 60)} format={(v) => `${v}분`} onPick={(v) => setCond({ ...cond, targetWaitSec: v * 60 })} />
             <Pick label="사장님도 일하나요?" value={cond.owner ? 1 : 0} options={[1, 0]} format={(v) => (v ? '네, 같이 일해요' : '아니요')} onPick={(v) => setCond({ ...cond, owner: v === 1 })} />
-            <Pick label="알바 시급" value={wageNumber} options={withCurrent([wageFloor(), ...WAGE_STEPS], wageNumber)} format={won} onPick={(v) => setCond({ ...cond, wage: String(v), team: { ...cond.team, people: cond.team.people.map((p) => ({ ...p, wage: String(v) })) } })} />
+            <Pick label="직원 시급" value={wageNumber} options={withCurrent([wageFloor(), ...WAGE_STEPS], wageNumber)} format={won} onPick={(v) => setCond({ ...cond, wage: String(v), team: { ...cond.team, people: cond.team.people.map((p) => ({ ...p, wage: String(v) })) } })} />
             <Pick label="에스프레소 머신" value={cond.espresso} options={MACHINE_COUNTS} format={(v) => `${v}대`} onPick={(v) => setCond({ ...cond, espresso: v })} />
             <Pick
               label="가게 데이터"
@@ -652,6 +778,6 @@ export default function EasyRoster({
         </div>
       </Card>
       {chatBox}
-    </>
+    </div>
   )
 }

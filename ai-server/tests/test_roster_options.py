@@ -127,7 +127,7 @@ def test_새_알바는_하루_한_근무_주_한도_안에서_긴_자리부터()
     hires = new_hires([u("MON-1", "MON", "07:00", "12:00", 4.5), u("MON-2", "MON", "12:00", "15:30", 3.5),
                        u("TUE-1", "TUE", "07:00", "12:00", 4.5), u("WED-1", "WED", "07:00", "12:00", 4.5),
                        u("THU-1", "THU", "07:00", "12:00", 4.5)], 14.5)
-    assert [h["name"] for h in hires] == ["새 알바 1", "새 알바 2"]
+    assert [h["name"] for h in hires] == ["새 직원 1", "새 직원 2"]
     # 1번: 월·화·수 4.5시간씩 13.5시간(목요일을 더하면 18시간이라 2번에게)
     assert [a["slot_id"] for a in hires[0]["assignments"]] == ["MON-1", "TUE-1", "WED-1"]
     assert [a["slot_id"] for a in hires[1]["assignments"]] == ["MON-2", "THU-1"]

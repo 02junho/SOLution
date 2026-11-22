@@ -171,6 +171,8 @@ class RosterOptionsRequest(BaseModel):
     # 미리 계산이면 true: 낮은 우선순위로 돌려 진짜 계산에 양보한다(결과는 같다).
     background: bool | None = None
     request_key: str | None = Field(default=None, max_length=111)
+    # 진행 상황을 볼 키(Spring 계산 작업의 요청 키). GET /roster-options/progress?key=... 로 끝난 요일을 본다.
+    progress_key: str | None = Field(default=None, min_length=1, max_length=111)
 
 
 class SensitivityRequest(CompareRequest):

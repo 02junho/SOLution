@@ -186,7 +186,14 @@ public class RosterResultService {
 		}
 		Job job = jobs.get(requestKey);
 		if (job != null && job.sessionId() == sessionId) {
-			return state(job, requestKey);
+			ApiResponse<Map<String, Object>> current = state(job, requestKey);
+			if ("RUNNING".equals(job.state())) {
+				Map<String, Object> progress = rosters.rosterProgress(requestKey);
+				if (progress != null) {
+					current.data().put("progress", progress);
+				}
+			}
+			return current;
 		}
 		// 서버가 다시 켜졌거나 다른 서버에서 시작한 계산: 결과도 기록도 없으면 다시 계산해야 한다.
 		return state(new Job(sessionId, versionId, "LOST", "계산 기록을 찾지 못했어요. 다시 계산해 주세요.", Instant.now()), requestKey);
@@ -210,7 +217,10 @@ public class RosterResultService {
 
 	private void compute(CalculationRuns.Run run, long sessionId, long versionId, Map<String, Object> body, String key) {
 		try (run) {
-			Map<String, Object> options = rosters.rosterOptions(body).data();
+			// 작업의 요청 키를 진행 상황 키로 같이 보낸다(상태 조회가 이 키로 끝난 요일을 꺼낸다).
+			Map<String, Object> request = new LinkedHashMap<>(body);
+			request.put("progress_key", key);
+			Map<String, Object> options = rosters.rosterOptions(request).data();
 			run.requireActive();
 			save(sessionId, versionId, options, body, key);
 			jobs.remove(key);
@@ -316,10 +326,10 @@ public class RosterResultService {
 		}
 		List<Map<String, Object>> warnings = new ArrayList<>();
 		warnings.add(warning(SIMULATED_CONDITIONS, true, null,
-				"가게 데이터로 만든 평균 하루를 30번씩 돌린 계획 근무표예요. 실제 근무 기록이 아니에요."));
+				"가게 데이터로 만든 평균 하루를 " + repetitionsText(options) + " 돌린 계획 근무표예요. 실제 근무 기록이 아니에요."));
 		if (!short15.isEmpty()) {
 			warnings.add(warning(UNFILLED_SHIFTS, true, short15,
-					"지금 직원 명단으로는 다 못 채워요. 알바를 더 뽑거나, 지금 직원이 일할 수 있는 요일·시간을 늘리면 채울 수 있어요."));
+					"이 근무표에는 새로 뽑을 직원 자리(노란 칸)가 들어 있어요. 뽑기 전까지는 그 자리가 비어요."));
 		}
 		Map<String, Object> holiday = (Map<String, Object>) options.get("holiday_compare");
 		Map<String, Object> summary = new LinkedHashMap<>();
@@ -334,12 +344,24 @@ public class RosterResultService {
 			summary.put("holiday_compare", Map.of("choice_key", "RECOMMENDED", "weekly_cost_krw", holiday.get("plan_cost_krw"),
 					"people_used", ((Map<String, Object>) holiday.get("weekly")).get("people_used")));
 		}
-		summary.put("message", message(Objects.requireNonNull(recommended), Objects.requireNonNull(save)));
+		// 요일 하나만 계산했으면(하루 근무표) "주 인건비" 대신 "하루 인건비"
+		String period = options.get("days") instanceof Map<?, ?> days && days.size() == 1 ? "하루" : "주";
+		summary.put("message", message(Objects.requireNonNull(recommended), Objects.requireNonNull(save), period));
 		return summary;
+	}
+
+	/** 반복 수 문구("20번씩"). 반복 수는 ai-server가 정하고 결과에 담아 보낸다(여기서 따로 정하지 않는다). */
+	static String repetitionsText(Map<String, Object> options) {
+		return options.get("repetitions") instanceof Number n ? n.intValue() + "번씩" : "여러 번";
 	}
 
 	/** 추천안 한 줄 요약. 문구는 값으로 만든다(LLM 아님). */
 	static String message(Map<String, Object> recommended, Map<String, Object> save) {
+		return message(recommended, save, "주");
+	}
+
+	/** period: 인건비 기간 낱말("주" 또는 하루 근무표면 "하루"). */
+	static String message(Map<String, Object> recommended, Map<String, Object> save, String period) {
 		StringBuilder text = new StringBuilder("추천안: ");
 		Object wait = recommended.get("peak_wait_sec");
 		Object baseWait = save.get("peak_wait_sec");
@@ -349,10 +371,10 @@ public class RosterResultService {
 		} else {
 			text.append(wait instanceof Number now ? minutes(now) : "—");
 		}
-		text.append(", 주 인건비 ").append(won(recommended.get("weekly_cost_krw")));
-		text.append(", 알바 ").append(recommended.get("people_used")).append("명(모두 주 15시간 미만)");
+		text.append(", ").append(period).append(" 인건비 ").append(won(recommended.get("weekly_cost_krw")));
+		text.append(", 직원 ").append(recommended.get("people_used")).append("명(모두 주 15시간 미만)");
 		if (((Number) recommended.get("more_people_under_15h")).intValue() > 0) {
-			text.append(", 알바 ").append(recommended.get("more_people_under_15h")).append("명 더 필요");
+			text.append(", 직원 ").append(recommended.get("more_people_under_15h")).append("명 더 필요");
 		}
 		return text.append('.').toString();
 	}

@@ -15,7 +15,7 @@ function measure(target: string): Box | null {
   return { top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 }
 }
 
-export default function TourOverlay({ step, number, onNext, onPrev, onClose }: { step: TourStep; number: number; onNext: () => void; onPrev?: () => void; onClose: () => void }) {
+export default function TourOverlay({ step, number, onNext, onPrev, onClose, total = TOUR_TOTAL }: { step: TourStep; number: number; onNext: () => void; onPrev?: () => void; onClose: () => void; /** 전체 단계 수(추천 근무표는 7). 아직 어느 일인지 모르면 null(번호만 보인다) */ total?: number | null }) {
   const [box, setBox] = useState<Box | null>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [bubbleH, setBubbleH] = useState(240)
@@ -82,7 +82,17 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
   let left = (viewW - width) / 2
   if (box) {
     const clampTop = (t: number) => Math.min(Math.max(16, t), viewH - bubbleH - 16)
-    if (box.top + box.height + gap + bubbleH < viewH - 16) {
+    const side = step.place === 'side'
+    if (side && box.left + box.width + gap + width < viewW - 16) {
+      left = box.left + box.width + gap
+      top = clampTop(box.top)
+    } else if (side && box.left - gap - width > 16) {
+      left = box.left - gap - width
+      top = clampTop(box.top)
+    } else if (side) {
+      // 옆에 자리가 없으면 화면 오른쪽 아래 구석(위치가 단계마다 튀지 않게, 본문 가운데를 덜 가리게)
+      left = viewW - width - 16
+    } else if (box.top + box.height + gap + bubbleH < viewH - 16) {
       top = box.top + box.height + gap
       left = Math.min(Math.max(16, box.left), viewW - width - 16)
     } else if (box.top - gap - bubbleH > 16) {
@@ -102,8 +112,8 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
       {box && (
         <div className="easy-tour-spot" style={{ top: box.top, left: box.left, width: box.width, height: box.height }} aria-hidden />
       )}
-      <div ref={bubbleRef} className="easy-tour-bubble" role="dialog" aria-label={`따라 하며 배우기 ${number}/${TOUR_TOTAL}단계`} style={{ top, left, width }}>
-        <p className="easy-tour-count">따라 하며 배우기 · {number} / {TOUR_TOTAL}</p>
+      <div ref={bubbleRef} className="easy-tour-bubble" role="dialog" aria-label={total ? `따라 하며 배우기 ${number}/${total}단계` : `따라 하며 배우기 ${number}단계`} style={{ top, left, width }}>
+        <p className="easy-tour-count">따라 하며 배우기 · {total ? `${number} / ${total}` : `${number}단계`}</p>
         <h2>{step.title}</h2>
         <p>{step.body}</p>
         <div className="easy-tour-actions">
@@ -111,7 +121,7 @@ export default function TourOverlay({ step, number, onNext, onPrev, onClose }: {
           {step.waitsForAction && <span className="easy-tour-wait">직접 해 보세요</span>}
           {onPrev && <button type="button" className="easy-secondary" onClick={onPrev}>← 이전</button>}
           {!step.waitsForAction && (
-            <button type="button" className="easy-primary" onClick={onNext}>{number === TOUR_TOTAL ? '끝내기' : '다음'}</button>
+            <button type="button" className="easy-primary" onClick={onNext}>{number === total ? '끝내기' : '다음'}</button>
           )}
           <button type="button" className="easy-secondary" onClick={onClose}>그만 보기</button>
         </div>

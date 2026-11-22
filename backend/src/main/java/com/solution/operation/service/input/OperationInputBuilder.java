@@ -238,6 +238,8 @@ public final class OperationInputBuilder {
 		Map<String, Object> input = build(form, today, true);
 		Map<String, Object> simulation = new LinkedHashMap<>((Map<String, Object>) input.get("simulation"));
 		simulation.remove("include_events");
+		// 반복 수는 근무표 계산(ai-server roster_options.ROSTER_REPETITIONS)이 정한다. 1번 비교의 30번과 따로 둔다.
+		simulation.remove("repetitions");
 		Map<String, Object> scenario = (Map<String, Object>) simulation.get("scenario");
 		String open = (String) scenario.getOrDefault("start_time", DAY_START);
 		String close = (String) scenario.getOrDefault("end_time", DAY_END);

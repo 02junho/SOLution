@@ -402,3 +402,7 @@
 .easy-row-confirm p { margin: 0 0 10px; color: var(--ink-2); }
 .easy-danger { min-height: 52px; padding: 0 22px; border: 0; border-radius: 14px; background: #b4232c; color: #fff; font-weight: 700; }
 .easy-danger:disabled { opacity: 0.6; }
+
+/* 첫 화면의 1번(점심 인원 배치)↔2번(직원 근무표) 임시 전환 링크. 월요일에 하나로 정하면 뺀다. */
+.easy-mode-switch { margin: 10px 0 0; text-align: right; font-size: 0.9em; }
+.easy-mode-switch a { color: #1d4ed8; }

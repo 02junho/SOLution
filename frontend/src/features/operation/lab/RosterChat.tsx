@@ -4,8 +4,8 @@ import type { JsonObject } from '../../../types/workflow'
 import type { RosterChatReply } from './rosterTypes'
 
 /** 바꿀 수 있는 칸 정의(서버가 이 범위로 AI 답을 검사한다). */
-/** label은 답장에 쓰는 짧은 이름, hint는 AI가 칸을 알아듣게 돕는 설명(선택). */
-type FieldBase = { key: string; label: string; hint?: string }
+/** label은 답장에 쓰는 짧은 이름, hint는 AI가 칸을 알아듣게 돕는 설명, unit은 숫자 뒤에 붙일 단위(선택). */
+type FieldBase = { key: string; label: string; hint?: string; unit?: string }
 export type ChatField =
   | (FieldBase & { type: 'int'; min: number; max: number })
   | (FieldBase & { type: 'bool'; time_min?: string; time_max?: string })

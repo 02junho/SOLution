@@ -30,10 +30,22 @@ export function averagePeak(option: Option, days: Weekday[]): number | null {
 }
 
 /** 추천 한 줄. 요일마다 더한 사람 수가 같으면 "N명씩", 다르면 가장 많은 날 기준으로 말한다. */
+/**
+ * 결론 한 줄. 새로 뽑을 직원이 있으면 그걸 먼저 말한다(표에 노란 줄이 있는데 "지금 인원으로 충분"이라고 하면 헷갈림).
+ * 그다음 바쁜 시간에 사람을 더 두는지(세 안의 차이)를 붙인다.
+ */
 export function headline(option: Option, days: Weekday[]): string {
+  const hires = option.shortfall?.more_people_under_15h ?? 0
+  const busy = busyText(option, days)
+  if (hires > 0) return busy ? `직원 ${hires}명을 더 뽑고, ${busy}` : `직원 ${hires}명을 더 뽑으면 돼요`
+  return busy || '지금 직원으로 충분해요'
+}
+
+/** 바쁜 시간에 더 두는 사람 이야기("바쁜 시간에 1명씩 더 두면 돼요"). 더 두지 않으면 빈 글자. */
+function busyText(option: Option, days: Weekday[]): string {
   const extras = days.map((d) => option.extra_by_day[d] ?? 0)
   const most = Math.max(0, ...extras)
-  if (most === 0) return '지금 꼭 필요한 인원으로 충분해요'
+  if (most === 0) return ''
   const busy = days.filter((d) => (option.extra_by_day[d] ?? 0) > 0)
   if (busy.length === days.length && new Set(extras).size === 1) return `바쁜 시간에 ${most}명씩 더 두면 돼요`
   if (busy.length === days.length) return `바쁜 시간에 요일마다 ${Math.min(...extras)}~${most}명 더 두면 돼요`
@@ -189,4 +201,29 @@ export function staffText(keys: string[]): string {
   const owner = keys.includes('OWNER')
   const staff = keys.filter((k) => k !== 'OWNER').length
   return [owner ? '사장님' : '', staff ? `직원 ${staff}명` : ''].filter(Boolean).join(' · ') || '없음'
+}
+
+/**
+ * 사람을 더해도 대기가 더 줄지 않던 때(서버 verification.capacity_limited). 같은 시간대는 요일을 묶어 한 문장으로.
+ * 예: "월·화요일 오전 8시대는 사람을 더 넣어도 손님 대기가 더 줄지 않아요. …" 없으면 null.
+ */
+export function capacityText(option: RosterOptions['options'][number], days: Weekday[]): string | null {
+  const bySlot = new Map<string, Weekday[]>()
+  for (const d of days) {
+    const slot = option.days[d]?.verification?.capacity_limited?.slot
+    if (slot) bySlot.set(slot, [...(bySlot.get(slot) ?? []), d])
+  }
+  if (!bySlot.size) return null
+  const where = [...bySlot].map(([slot, ds]) => `${ds.map((d) => WEEKDAY_LABEL[d]).join('·')}요일 ${clock(slot.slice(0, 5))}대`).join(', ')
+  return `${where}는 사람을 더 넣어도 손님 대기가 더 줄지 않아요. 머신이 한 번에 만들 수 있는 양이 한계라서, 에스프레소 머신이나 블렌더를 늘리면 줄어들 수 있어요.`
+}
+
+/**
+ * 근무표 기간에 따른 낱말. 요일 하나만 계산했으면(하루 근무표) "주" 대신 "하루", 제목은 "○요일", 빈 시간은 "이날".
+ * 직원 규칙(주 15시간 미만)은 하루 근무표에서도 그대로라 그 문구는 바꾸지 않는다.
+ */
+export function periodOf(days: Weekday[]): { per: string; title: string; within: string } {
+  return days.length === 1
+    ? { per: '하루', title: `${WEEKDAY_LABEL[days[0]]}요일`, within: '이날' }
+    : { per: '주', title: '일주일', within: '일주일에' }
 }

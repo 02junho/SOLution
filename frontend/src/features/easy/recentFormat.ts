@@ -16,7 +16,13 @@ export function when(iso: string, now = new Date()) {
 
 
 export const FEATURE: Record<string, string> = { purchase: '장보기', operation: '점심 인원' }
-export const STEP: Record<string, string> = { input: '입력 중', review: '조건 확인 전', result: '결과 나옴', saved: '저장함' }
+
+/** 목록 꼬리표. 운영 중 추천 근무표(2번: 제목에 "근무표"가 있거나 근무표 안을 저장한 계획)는 "근무표"로 나눠 보인다. */
+export function featureTag(feature: string, from: { title?: string | null; choiceKey?: string | null } = {}): string {
+  if (feature === 'operation' && ((from.title ?? '').includes('근무표') || (from.choiceKey != null && from.choiceKey in OPTION_NAME))) return '근무표'
+  return FEATURE[feature] ?? feature
+}
+export const STEP: Record<string, string> = { input: '입력 중', review: '조건 확인 전', running: '계산 중', result: '결과 나옴', saved: '저장함' }
 export const CHOICE: Record<string, string> = {
   // 결과 화면(views.tsx)의 이름과 같게: 매입 CHOICE_NAME, 운영 PLAN_TITLE
   purchase_1: '가장 싸게', purchase_2: '한 곳에서 한 번에',

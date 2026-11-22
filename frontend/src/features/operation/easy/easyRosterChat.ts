@@ -24,14 +24,14 @@ export type RosterConditions = {
 /** 바꿀 수 있는 칸. 메뉴 유형·바쁜 시간은 아직 말로 못 바꾼다. */
 export function chatFields(open: string, close: string, dataDays: Weekday[]): ChatField[] {
   return [
-    { key: 'target_wait_min', label: '목표 대기(분)', hint: '주문 후 받기까지, 10명 중 9명이 이 안에 받게', type: 'int', min: Math.min(...TARGET_WAIT_MINUTES), max: Math.max(...TARGET_WAIT_MINUTES) },
-    { key: 'espresso_machines', label: '에스프레소 머신 대수', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
-    { key: 'blenders', label: '블렌더 대수', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
+    { key: 'target_wait_min', label: '목표 대기', unit: '분', hint: '주문 후 받기까지, 10명 중 9명이 이 안에 받게', type: 'int', min: Math.min(...TARGET_WAIT_MINUTES), max: Math.max(...TARGET_WAIT_MINUTES) },
+    { key: 'espresso_machines', label: '에스프레소 머신', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
+    { key: 'blenders', label: '블렌더', unit: '대', type: 'int', min: Math.min(...MACHINE_COUNTS), max: Math.max(...MACHINE_COUNTS) },
     { key: 'owner_working', label: '사장님 근무', hint: '사장님이 매장에서 직접 일하는지', type: 'bool' },
     { key: 'owner_days', label: '사장님 근무 요일', type: 'choices', choices: dataDays, choice_labels: WEEKDAY_LABEL },
     { key: 'owner_start', label: '사장님 출근 시각', type: 'time', min: open, max: close, step_min: 30 },
     { key: 'owner_end', label: '사장님 퇴근 시각', type: 'time', min: open, max: close, step_min: 30 },
-    { key: 'hourly_wage', label: '직원 시급(원)', type: 'int', min: wageFloor(), max: 100_000 },
+    { key: 'hourly_wage', label: '직원 시급', unit: '원', hint: '최저시급(min) 아래로는 못 내림', type: 'int', min: wageFloor(), max: 100_000 },
     { key: 'workers', label: '직원 명단', hint: 'worker_changes로 더하기·빼기·고치기, 직원은 alias로', type: 'bool', time_min: open, time_max: close },
   ]
 }
@@ -52,6 +52,11 @@ export function toAliases(text: string, people: Person[]): string {
 export function toNames(text: string, people: Person[]): string {
   return text.replace(/\bP(\d{1,2})\b/g, (whole, n: string) => people[Number(n) - 1]?.name || whole)
 }
+
+/** 바로 앞 대화(별칭으로 바꾼 말). "그럼 그렇게 해 줘"처럼 앞 말을 가리킬 때 AI가 본다. 최근 4줄까지. */
+export type ChatTurn = { role: 'owner' | 'assistant'; text: string }
+export const MAX_HISTORY = 4
+export const pushHistory = (list: ChatTurn[], ...turns: ChatTurn[]): ChatTurn[] => [...list, ...turns].slice(-MAX_HISTORY)
 
 /** 직원은 이름 없이 별칭(P1…)만 보낸다. */
 export const chatWorkers = (people: Person[]): JsonObject[] =>

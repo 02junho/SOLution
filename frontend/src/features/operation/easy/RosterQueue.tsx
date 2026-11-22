@@ -38,7 +38,7 @@ export default function RosterQueue({
   repetitions: number | null
 }) {
   const pair: OptionKey[] = chosen === 'SAVE' ? ['SAVE', 'RECOMMENDED'] : ['SAVE', chosen]
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true) // 처음부터 펼쳐 두고, 접을 수 있게
   const [choice, setChoice] = useState<OptionKey>(pair[1])
   const [traces, setTraces] = useState<Record<string, OperationTrace | string>>({})
   const key = `${day}:${choice}`
@@ -71,6 +71,9 @@ export default function RosterQueue({
 
   return (
     <div className="easy-replay er-queue">
+      <button type="button" className="er-back er-queue-close" onClick={() => setOpen(false)}>
+        줄 서는 모습 접기 ⌃
+      </button>
       <div className="easy-pick" role="group" aria-label="어느 근무표로 볼까요">
         {pair.map((k) => (
           <button key={k} type="button" aria-pressed={k === choice} className={k === choice ? 'on' : ''} onClick={() => setChoice(k)}>
@@ -103,8 +106,10 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
   const origin = seconds(trace.time_origin)
   const duration = trace.events.reduce((last, e) => Math.max(last, e.at_seconds), trace.observation_window?.end_seconds ?? 0)
   const at = (hhmm: string) => Math.min(duration, Math.max(0, seconds(hhmm) - origin))
-  const jumps = [{ label: `문 열 때 ${clock(trace.time_origin.slice(0, 5))}`, hhmm: trace.time_origin.slice(0, 5) }, ...windows.map((w) => ({ label: `바쁜 시간 ${clock(w.start_time)}`, hhmm: w.start_time }))]
-  const first = windows[0]?.start_time ?? trace.time_origin.slice(0, 5)
+  // 시작 시각 버튼: "오전 7시부터 (문 열 때)", "오전 8시부터 (바쁠 때)"처럼 무엇을 하는 버튼인지 바로 보이게. 처음 위치는 문 여는 시각.
+  const opening = trace.time_origin.slice(0, 5)
+  const jumps = [...new Set([opening, ...windows.map((w) => w.start_time.slice(0, 5))])].map((hhmm) => ({ label: `${clock(hhmm)}부터 (${hhmm === opening ? '문 열 때' : '바쁠 때'})`, hhmm }))
+  const first = opening
   const [time, setTime] = useState(() => at(first))
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(SPEEDS[0].perSec)
@@ -185,11 +190,14 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
             </button>
           ))}
         </div>
+      </div>
+      {/* 시작 시각은 재생 줄 아래 한 줄로(버튼 수가 늘어도 재생 줄이 길어지지 않게) */}
+      <div className="easy-pick er-speed er-jumps" role="group" aria-label="어느 시각부터 볼까요">
+        <span className="er-speed-label">시작 시각</span>
         {jumps.map((jump) => (
           <button
-            key={jump.label}
+            key={jump.hhmm}
             type="button"
-            className="easy-secondary"
             onClick={() => {
               setPlaying(false)
               setTime(at(jump.hhmm))

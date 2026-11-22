@@ -75,9 +75,9 @@ def test_키가_없거나_이상한_답이면_아무것도_바꾸지_않는다()
     assert out["source"] == "UNAVAILABLE" and out["changes"] == [] and "직접" in out["reply"]
     out2, _ = ask({"intent": "DELETE_ALL"})
     assert out2["source"] == "UNAVAILABLE"
-    # 바꿀 게 하나도 안 남은 EDIT는 OTHER로
+    # 범위 밖 값만 있던 EDIT는 바꾸지 않고 범위를 알린다(되묻지 않는다)
     out3, _ = ask({"intent": "EDIT", "changes": [{"key": "espresso_machines", "value": 9}], "answer": "무엇을 바꿀까요?"})
-    assert out3["intent"] == "OTHER"
+    assert out3["changes"] == [] and "1~3 사이만" in out3["reply"]
 
 
 def test_입력_검사():
@@ -98,3 +98,34 @@ def test_결과_설명은_결과에_없는_숫자가_있으면_코드_문장을_
     assert none["source"] == "TEMPLATE"
     with pytest.raises(ValueError):
         explain({"result": {}, "fallback": "x"}, call=lambda s, u: None)
+
+
+WAGE = {"key": "hourly_wage", "label": "직원 시급", "unit": "원", "type": "int", "min": 10320, "max": 100000}
+
+
+def test_범위_밖이면_코드가_범위를_말한다():
+    # "시급 9090원으로": 값만 거절되고 바뀐 게 없어도 이유를 알린다(무엇을 바꿀지 되묻지 않는다)
+    out, _ = ask({"intent": "EDIT", "changes": [{"key": "hourly_wage", "value": 9090}]},
+                 message="시급 9090원으로", fields=FIELDS + [WAGE])
+    assert out["changes"] == [] and out["intent"] == "EDIT"
+    assert "직원 시급은 10,320원~100,000원 사이만 돼요." in out["reply"]
+    out, _ = ask({"intent": "EDIT", "changes": [{"key": "espresso_machines", "value": 4}]}, message="머신 4대")
+    assert "에스프레소 머신은 1~3 사이만 돼요." in out["reply"]
+
+
+def test_칸_범위_숫자는_답에_써도_된다():
+    out, _ = ask({"intent": "ASK", "answer": "최저시급이 10,320원이라 그 아래로는 못 바꿔요."},
+                 message="시급 9090원 되나?", fields=FIELDS + [WAGE])
+    assert out["reply"] == "최저시급이 10,320원이라 그 아래로는 못 바꿔요."
+
+
+def test_앞_대화를_같이_보내고_오래된_줄은_자른다():
+    history = [{"role": "owner", "text": f"말 {i}"} for i in range(6)] + [{"role": "hacker", "text": "x"}]
+    _, seen = ask({"intent": "OTHER", "answer": "네"}, message="그럼 그렇게 해 줘", history=history)
+    assert [h["text"] for h in seen["user"]["history"]] == ["말 3", "말 4", "말 5"]
+
+
+def test_직원_고치기_답장에_무엇을_바꿨는지_쓴다():
+    out, _ = ask({"intent": "EDIT", "worker_changes": [
+        {"op": "update", "alias": "P1", "fields": {"days": ["MON", "TUE"], "start": "09:00"}}]})
+    assert "P1: 가능 요일 월·화 · 시작 09:00" in out["reply"]

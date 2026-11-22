@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.tools.simulation import week_plan
+from app.tools.simulation import week_plan, weekly_roster
 from app.tools.simulation.daily_roster import plan as daily_plan
 from tests.test_operation_store_data import HOURLY
 
@@ -43,7 +43,8 @@ def test_two_shift_rules_from_one_staffing_check_and_assignment():
         ]
         for s in under["days"][day]["shifts"]:
             if not s["is_owner"]:
-                assert s["span_hours"] <= 5
+                # 주 15시간 미만 안의 근무조 길이 상한(weekly_roster.UNDER_15H_SHIFTS, 7시간 근무 + 휴게 30분)
+                assert s["span_hours"] <= weekly_roster.UNDER_15H_SHIFTS["long_shift_hours"]
     for r in (holiday, under):
         w = r["weekly"]
         slots = sum(len([s for s in v["shifts"] if not s["is_owner"]]) for v in r["days"].values())

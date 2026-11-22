@@ -51,7 +51,7 @@ class RosterResultServiceTest {
 						option("RECOMMENDED", "추천안", 13, 0, 1_775_040, 156),
 						option("ROOMY", "여유 안", 13, 4, 2_352_960, 150)),
 				"holiday_compare", Map.of("plan_cost_krw", 1_717_248, "weekly", Map.of("people_used", 8)),
-				"days", Map.of("MON", Map.of("windows", List.of())), "skipped_days", List.of(), "assumptions", List.of("가정"));
+				"days", Map.of("MON", Map.of("windows", List.of()), "TUE", Map.of("windows", List.of())), "skipped_days", List.of(), "assumptions", List.of("가정"));
 	}
 
 	@Test
@@ -68,7 +68,14 @@ class RosterResultServiceTest {
 		assertThat(warnings.get(0)).containsEntry("warning_id", "SIMULATED_CONDITIONS").containsEntry("requires_ack", true)
 				.containsEntry("choice_keys", null);
 		assertThat(warnings.get(1)).containsEntry("warning_id", "UNFILLED_SHIFTS").containsEntry("choice_keys", List.of("ROOMY"));
-		assertThat((String) summary.get("message")).isEqualTo("추천안: 바쁜 시간 대기 3.7분 → 2.6분, 주 인건비 1,775,040원, 알바 13명(모두 주 15시간 미만).");
+		assertThat((String) summary.get("message")).isEqualTo("추천안: 바쁜 시간 대기 3.7분 → 2.6분, 주 인건비 1,775,040원, 직원 13명(모두 주 15시간 미만).");
+	}
+
+	@Test
+	void 요일_하나만_계산했으면_하루_인건비로_요약한다() {
+		Map<String, Object> one = new java.util.HashMap<>(options());
+		one.put("days", Map.of("MON", Map.of("windows", List.of())));
+		assertThat((String) RosterResultService.summary(one).get("message")).contains(", 하루 인건비 1,775,040원");
 	}
 
 	@Test
@@ -168,6 +175,20 @@ class RosterResultServiceTest {
 		assertThat(f.held()).hasSize(1);
 		f.held().get(0).run();
 		assertThat(f.service().status(1L, 7L, "key-2").data()).containsEntry("state", "DONE");
+	}
+
+	@Test
+	void 계산_중_상태에는_끝난_요일_진행_상황이_붙고_요청_키를_진행_키로_보낸다() {
+		var f = fixture(version(2, 2, true), true);
+		when(f.rosters().rosterProgress("key-p")).thenReturn(Map.of("total", 7, "done", 3));
+		f.service().start(1L, BODY, "key-p");
+		var running = f.service().status(1L, 7L, "key-p");
+		assertThat(running.data()).containsEntry("state", "RUNNING").containsEntry("progress", Map.of("total", 7, "done", 3));
+		f.held().get(0).run();
+		@SuppressWarnings("unchecked")
+		ArgumentCaptor<Map<String, Object>> sent = ArgumentCaptor.forClass(Map.class);
+		verify(f.rosters()).rosterOptions(sent.capture());
+		assertThat(sent.getValue()).containsEntry("progress_key", "key-p");
 	}
 
 	@Test

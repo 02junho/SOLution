@@ -209,3 +209,61 @@ def test_미리_계산은_결과가_같고_값을_검사한다():
     assert normal == background
     with pytest.raises(ValueError):
         ro.plan({**body, "background": "yes"})
+
+
+def test_진행_상황은_끝난_요일_요약을_모은다():
+    from app.tools.simulation import roster_options as ro
+
+    ro._progress_start("k1", ["MON", "TUE"])
+    assert ro.progress("k1") == {"total": 2, "done": 0, "order": ["MON", "TUE"], "days": {}}
+    day = {"picks": {"RECOMMENDED": 1}, "windows": [{"start_time": "11:00", "end_time": "14:00"}],
+           "ladder": [{"peak_wait_sec": 200}, {"peak_wait_sec": 150}]}
+    ro._progress_day("k1", "TUE", day, None)
+    ro._progress_day("k1", "MON", None, "주문이 없어요")
+    out = ro.progress("k1")
+    assert out["done"] == 2 and list(out["days"]) == ["MON", "TUE"]  # 요일 순서대로
+    assert out["days"]["TUE"] == {"windows": day["windows"], "extra": 1, "peak_wait_sec": 150}
+    assert out["days"]["MON"] == {"failed": True}
+    assert ro.progress("없는키") is None
+    ro._progress_start(None, ["MON"])  # 키가 없으면 아무것도 안 남긴다
+
+
+def test_계산하면서_진행_상황을_남긴다(calls):
+    out = ro.plan({"days": [_day("MON", BUSY), _day("TUE", QUIET)], "workers": WORKERS, "progress_key": "job-1"})
+    seen = ro.progress("job-1")
+    assert seen["total"] == 2 and seen["done"] == 2
+    assert seen["days"]["MON"]["extra"] == out["options"][1]["extra_by_day"]["MON"]  # 추천안과 같은 값
+    ro.plan({"days": [_day("MON", BUSY), _day("TUE", QUIET)], "workers": WORKERS, "progress_key": "job-2"})
+    assert ro.progress("job-2")["done"] == 2  # 기억에서 꺼낸 요일도 끝난 것으로 센다
+
+
+def test_이어받은_요일은_끝나는_대로_진행에_잡힌다(monkeypatch):
+    """미리 계산이 돌던 요일을 진짜 계산이 이어받을 때, 미리 계산이 요일 하나를 끝내면 바로 진행 표시에 나와야 한다."""
+    import threading, time as _time
+
+    from app.tools.simulation import roster_options as ro2
+
+    real = ro2._day_job
+    gate = threading.Event()
+
+    def slow(args):
+        if args[0] == "TUE":
+            gate.wait(5)  # 화요일만 붙잡아 둔다
+        return real(args)
+
+    monkeypatch.setattr(ro2, "_day_job", slow)
+    monkeypatch.setattr(ro2, "worker_count", lambda n: 1)  # 같은 프로세스에서 차례로(_day_job 바꾼 것이 먹게)
+    body = {"days": [_day("MON", BUSY), _day("TUE", QUIET)], "workers": WORKERS}
+    warm = threading.Thread(target=lambda: ro2.plan({**body, "background": False}))
+    warm.start()
+    _time.sleep(0.2)
+    seen = {}
+    job = threading.Thread(target=lambda: seen.update(out=ro2.plan({**body, "progress_key": "follow"})))
+    job.start()
+    deadline = _time.time() + 20
+    while _time.time() < deadline and (ro2.progress("follow") or {}).get("done", 0) < 1:
+        _time.sleep(0.05)
+    assert ro2.progress("follow")["done"] == 1  # 월요일은 화요일을 기다리지 않고 잡힘
+    gate.set()
+    warm.join(20); job.join(20)
+    assert ro2.progress("follow")["done"] == 2
