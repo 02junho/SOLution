@@ -145,6 +145,7 @@ def _view(roster, windows):
         "cost": roster["cost"],
         "empty_periods": roster["empty_periods"],
         "rules": roster["rules"],
+        "repetitions": roster["repetitions"],
         "peak_wait_sec": _worst(waits),
         "by_window_sec": waits,
     }
@@ -255,11 +256,14 @@ def plan(body: dict, engine: str = "simpy") -> dict:
             }
         )
     holiday_views = {n: r["holiday_roster"] for n, r in done.items()}
+    # 반복 횟수는 요청마다 다를 수 있어 결과에서 읽는다(설명 문장·화면이 같은 숫자를 쓰게).
+    reps = next((v["repetitions"] for v in holiday_views.values()), 30)
     holiday = _assign(holiday_views, workers, "WITH_HOLIDAY_PAY")
     holiday_cost = sum(v["cost"]["cash_cost_krw"] for v in holiday_views.values()) + holiday["holiday_pay_krw"]
     return {
         "model_version": "operation.roster_options.v1",
         "min_gain_sec": min_gain,
+        "repetitions": reps,
         "skipped_days": skipped,
         "days": {
             n: {"windows": r["windows"], "ladder": r["ladder"], "picks": r["picks"], "slots": r["slots"],
@@ -272,8 +276,8 @@ def plan(body: dict, engine: str = "simpy") -> dict:
             "요일마다 그 요일 평균 손님으로 시간대별 꼭 필요한 인원(대기 기준을 지키는 가장 적은 인원)을 찾았어요.",
             f"바쁜 시간은 최대 2구간이에요. 첫 구간은 주문이 가장 몰린 때, 둘째 구간은 시간당 주문이 하루 평균의 "
             f"{PEAK2_MIN_RATIO:g}배 이상이고 첫 구간과 겹치지 않는 때예요.",
-            f"바쁜 시간에만 사람을 더해 30번씩 돌렸어요. 한 명 더할 때 바쁜 시간 대기가 {min_gain:g}초 넘게 줄면 추천안에 넣었어요.",
-            "바쁜 시간 대기는 그 구간 시간대 중 가장 긴 대기예요(주문 후 받기, 10명 중 9명이 받는 시간, 30번 평균).",
+            f"바쁜 시간에만 사람을 더해 {reps}번씩 돌렸어요. 한 명 더할 때 바쁜 시간 대기가 {min_gain:g}초 넘게 줄면 추천안에 넣었어요.",
+            f"바쁜 시간 대기는 그 구간 시간대 중 가장 긴 대기예요(주문 후 받기, 10명 중 9명이 받는 시간, {reps}번 평균).",
             "세 안은 짧은 근무조(3.5~5시간)로 덮고 휴게를 넣어 다시 확인한 뒤, 모두 주 15시간 미만이 되게 명단에 배정했어요.",
             "추천안은 긴 근무조(최대 8시간)로 주휴를 주는 경우와도 비교했어요.",
             f"못 채운 자리는 주 {UNDER_15H_MAX_HOURS:g}시간씩 일하는 알바로 채운다고 보고 더 필요한 사람 수를 어림했어요.",

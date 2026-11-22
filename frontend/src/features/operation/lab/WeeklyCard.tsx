@@ -7,7 +7,8 @@ import { WEEKDAY_LABEL, WEEKDAYS } from '../workspace/storeFile'
 import type { StorePlan, Weekday } from '../workspace/storeFile'
 import { pendingHash, rememberHash, resultHash, waitRoster } from './rosterJob'
 import { optionsFromStored } from './rosterTypes'
-import { ALL_DAYS, example, fromMin, MAX_TEAM, toMin, WEEKDAYS_ONLY } from './team'
+import { rosterDays, rosterWorkers } from './rosterRequest'
+import { ALL_DAYS, example, MAX_TEAM, WEEKDAYS_ONLY } from './team'
 import type { Person, Team } from './team'
 import type { OptionKey, RosterOptions, RosterSummary } from './rosterTypes'
 
@@ -91,24 +92,7 @@ export default function WeeklyCard({
     if (problems.length) return
     setError('')
     setOptions(null)
-    const skip: string[] = []
-    const days: JsonObject[] = []
-    for (const day of weekdays) {
-      const plan = planFor(day)
-      if (!plan.open || !plan.close || plan.problems.length) {
-        skip.push(`${WEEKDAY_LABEL[day]}요일: ${plan.problems[0] ?? '시간대 데이터가 없어요.'}`)
-        continue
-      }
-      const works = ownerWorking && ownerDays.includes(day)
-      const start = fromMin(Math.max(toMin(ownerStart), toMin(plan.open)))
-      const end = fromMin(Math.min(toMin(ownerEnd), toMin(plan.close)))
-      const ownerToday = works && start < end
-      days.push({
-        day,
-        operation_form: { ...formFor(plan), is_owner_working: ownerToday },
-        ...(ownerToday ? { owner_start_time: start, owner_end_time: end } : {}),
-      })
-    }
+    const { days, skipped: skip } = rosterDays(weekdays, planFor, formFor, ownerWorking, team)
     if (!days.length) {
       setSkipped(skip)
       setError('근무표를 만들 요일이 없어요.')
@@ -116,14 +100,7 @@ export default function WeeklyCard({
     }
     setStatus(`${days.length}개 요일마다 꼭 필요한 인원을 찾고, 바쁜 시간에 사람을 더해 보며 세 가지 안을 만드는 중이에요. 1~2분 걸려요`)
     try {
-      const workers = people.map((p) => ({
-        worker_key: p.name.trim(),
-        name: p.name.trim(),
-        hourly_wage_krw: Number(p.wage),
-        is_minor: p.minor,
-        max_weekly_hours: Number(p.maxHours),
-        available: Object.fromEntries(p.days.map((d) => [d, [p.start, p.end]])),
-      }))
+      const workers = rosterWorkers(people)
       setStored(null)
       setConfirmed(null)
       let data: RosterOptions

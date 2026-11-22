@@ -4,7 +4,7 @@
 // 하던 일 이어하기·저장한 계획도 원래 업무 화면으로 넘기지 않고 이 화면 안(#/work, #/plans)에서 연다.
 // 근거: 시니어 사장님 화면 간소화 레퍼런스 조사(결론을 위로, 근거는 한 단계 아래, 이미 아는 값은 확인만,
 // 행동형 버튼 문구, 확정 전 요약 확인).
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import { loadOperationResult, runOperation } from '../api/operationApi'
 import { workflowApi } from '../api/workflowApi'
@@ -23,11 +23,16 @@ import { currentStep, markTourSeen, TOUR_TOTAL, tourSeen } from '../features/eas
 import TourOverlay from '../features/easy/TourOverlay'
 import { Card, OperationView, Pick, PurchaseView } from '../features/easy/views'
 import type { Prepared } from '../features/easy/views'
+import { isRosterResult, ROSTER_MODE } from '../features/operation/easy/rosterSwitch'
+import type { RosterOpened } from '../features/operation/easy/EasyRoster'
 import type { OperationResult } from '../features/operation/types'
 import { won } from '../features/operation/workspace/format'
 import type { OperationPlan } from '../types/api'
 import type { JsonObject, PurchaseResult } from '../types/workflow'
 import '../features/easy/easy.css'
+
+// 점심 인원 2번(추천 근무표). 고를 때만 불러온다(가게 파일 읽기 도구가 커서 첫 화면 번들에 넣지 않는다).
+const EasyRoster = lazy(() => import('../features/operation/easy/EasyRoster'))
 
 type Bubble = { role: 'owner' | 'agent'; text: string }
 type Phase = 'start' | 'ask' | 'confirm' | 'running' | 'result' | 'error' | 'loading'
@@ -118,6 +123,9 @@ export default function EasyPage() {
   const [screenNo, setScreenNo] = useState(0)
   const [context, setContext] = useState<Context | null>(null)
   const [prepared, setPrepared] = useState<Prepared | null>(null)
+  // 점심 인원을 추천 근무표(2번)로 볼지. 새로 시작하면 주소(?mode=roster)로, 이어서 열면 결과 종류로 정한다.
+  const [roster, setRoster] = useState(false)
+  const [rosterOpened, setRosterOpened] = useState<RosterOpened | null>(null)
   const [purchase, setPurchase] = useState<PurchaseResult | null>(null)
   const [operation, setOperation] = useState<OperationResult | null>(null)
   const [saved, setSaved] = useState('')
@@ -186,7 +194,7 @@ export default function EasyPage() {
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
-    resumeRef.current = null; setContext(null); setPrepared(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
     shownResultRef.current = null
   }
 
@@ -267,6 +275,13 @@ export default function EasyPage() {
       const values = fill(kind, session.current_input ?? null)
       setFeature(kind)
       setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
+      if (kind === 'operation' && (await isRosterResult(session.latest_result_id, session.current_input ?? null))) {
+        if (token !== tokenRef.current) return
+        // 추천 근무표 업무: 조각이 결과(있으면)나 조건 확인을 열고 단계를 알려 준다.
+        setRoster(true)
+        setRosterOpened({ sessionId: id, resultId: session.latest_result_id })
+        return
+      }
       resumeRef.current = { sessionId: id, versionId: session.current_version_id, versionNo: session.current_version, confirmed: session.input_confirmed, values }
       if (session.latest_result_id) {
         const result = await loadResult(kind, session.latest_result_id)
@@ -296,6 +311,16 @@ export default function EasyPage() {
       if (token !== tokenRef.current) return
       if (plan.feature_type !== 'purchase' && plan.feature_type !== 'operation') throw new Error('쉬운 화면에서 열 수 없는 계획이에요.')
       const kind: EasyFeature = plan.feature_type
+      if (kind === 'operation' && (await isRosterResult(plan.result_id, null))) {
+        const gone = await workflowApi.context(plan.session_id).then(() => false, () => true)
+        if (token !== tokenRef.current) return
+        setFeature(kind)
+        setContext({ kind: 'plan', feature: kind, title: CHOICE[plan.selected_choice_key] ?? plan.selected_choice_key, sessionId: plan.session_id, sessionGone: gone })
+        setSavedChoice(plan.selected_choice_key)
+        setRoster(true)
+        setRosterOpened({ sessionId: plan.session_id, resultId: plan.result_id, savedChoice: plan.selected_choice_key, savedNote: `${when(plan.confirmed_at)}에 저장한 계획이에요`, readOnly: true })
+        return
+      }
       const result = await loadResult(kind, plan.result_id)
       // 업무를 지웠어도 저장한 계획은 남는다(서버 규칙). 그때는 "이 업무 열기" 대신 지워졌다고 알려 준다.
       const sessionGone = await workflowApi.context(plan.session_id).then(() => false, () => true)
@@ -316,6 +341,7 @@ export default function EasyPage() {
 
   function begin(next: EasyFeature) {
     setFeature(next)
+    setRoster(next === 'operation' && ROSTER_MODE)
     setBase(next === 'purchase' ? PURCHASE_INPUT : NEW_OPERATION)
     setPhase('confirm')
     say('agent', next === 'purchase'
@@ -614,7 +640,26 @@ export default function EasyPage() {
           </Card>
         )}
 
-        {inFlow && phase === 'confirm' && feature === 'operation' && (
+        {feature === 'operation' && roster && (inFlow || route.kind === 'plan') && (
+          <Suspense fallback={null}>
+            <EasyRoster
+              key={screenNo}
+              phase={phase}
+              onPhase={setPhase}
+              opened={rosterOpened}
+              onSession={(id) => {
+                // 새 업무를 만들면 주소를 그 업무로 바꿔, 새로 고쳐도 "하던 일"로 다시 열리게 한다.
+                if (route.kind !== 'session') {
+                  window.history.replaceState(null, '', routeHash({ kind: 'session', id }))
+                  setRoute({ kind: 'session', id })
+                  setStartedHere(true)
+                }
+              }}
+            />
+          </Suspense>
+        )}
+
+        {inFlow && phase === 'confirm' && feature === 'operation' && !roster && (
           <Card title="이 조건이 맞나요?" tour="confirm">
             {operationForm ? (
               <ul className="easy-facts">
@@ -647,7 +692,7 @@ export default function EasyPage() {
           </Card>
         )}
 
-        {phase === 'running' && (
+        {phase === 'running' && !roster && (
           <div className="easy-running" role="status">
             <span className="easy-spinner" aria-hidden />
             <span>{feature === 'operation' ? '30번 돌려 보는 중이에요' : '가장 싼 조합을 찾는 중이에요'}</span>
@@ -655,7 +700,7 @@ export default function EasyPage() {
           </div>
         )}
 
-        {phase === 'error' && (
+        {phase === 'error' && !(feature === 'operation' && roster) && (
           !feature ? (
             <Card title="열지 못했어요">
               <p>{error}</p>

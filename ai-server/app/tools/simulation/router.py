@@ -26,6 +26,7 @@ from .week_plan import plan as week_plan
 from .menu_types import classify as classify_menus
 from .roster_chat import chat as roster_chat, explain as roster_explain
 from .roster_options import plan as roster_options
+from .roster_replay import replay as roster_replay
 
 # 근무표 계산(하루·일주일·추천 3안)은 같은 이벤트를 같은 순서로 처리하는 가벼운 스케줄러로 돌린다.
 # SimPy와 결과가 숫자 하나까지 같고(tests/test_roster_engine.py), 이벤트마다 SimPy 프로세스를 만들지 않아 약 30% 빠르다.
@@ -262,6 +263,22 @@ def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(ge
         data = roster_options(request, engine=ROSTER_ENGINE)
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"추천 근무표 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.post("/roster-replay", response_model=ApiResponse[dict])
+def roster_replay_run(body: dict, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """저장한 추천 근무표의 하루를 한 번 다시 돌려 줄 서는 모습 기록(operation.trace.v2)을 만든다. 저장하지 않는다."""
+    roster = body.get("roster")
+    if isinstance(roster, dict):
+        roster = {k: v for k, v in roster.items() if k not in _NOT_FOR_ENGINE}
+        if roster.get("roster_rules") == {}:
+            roster.pop("roster_rules")
+    try:
+        data = roster_replay({**body, "roster": roster}, engine=ROSTER_ENGINE)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"줄 서는 모습 입력 오류: {exc}") from exc
     data["request_key"] = request_key
     return ok(data)
 

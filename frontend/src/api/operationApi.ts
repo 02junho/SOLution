@@ -72,3 +72,8 @@ export function rosterChat(body: JsonObject) {
 export function rosterExplain(body: { result: JsonObject; fallback: string }) {
   return request<{ source: 'LLM' | 'TEMPLATE'; text: string }>('/v1/operation/roster-explain', { method: 'POST', body: JSON.stringify(body) })
 }
+
+// 저장한 추천 근무표의 줄 서는 모습(재생 기록). 조건·근무조는 서버가 저장된 결과에서 꺼낸다. 저장하지 않는다.
+export function rosterReplay(resultId: number, day: string, choice: string) {
+  return request<OperationTrace>(`/v1/operation/results/${resultId}/roster-replay?day=${encodeURIComponent(day)}&choice=${encodeURIComponent(choice)}`)
+}

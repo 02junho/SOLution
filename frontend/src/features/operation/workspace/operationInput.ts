@@ -216,7 +216,16 @@ const equipmentOf = (form: JsonObject): Equipment | undefined => {
   if (typeof form.target_wait_sec === 'number') out.targetWaitSec = form.target_wait_sec
   return Object.keys(out).length ? out : undefined
 }
-const equipmentBody = (e: Equipment | undefined): JsonObject => ({
+/** 화면 값(머신·블렌더 대수, 목표 대기 초) → Equipment. 기본값(1대·1대·기본 목표)과 같으면 빼서 저장 본문이 지금과 같게 한다.
+ *  실험실과 쉬운 화면이 같이 쓴다. */
+export const equipmentFrom = (espresso: number, blenders: number, targetWaitSec: number): Equipment => ({
+  ...(espresso !== 1 ? { espressoMachines: espresso } : {}),
+  ...(blenders !== 1 ? { blenders } : {}),
+  ...(targetWaitSec !== DEFAULT_TARGET_WAIT_SEC ? { targetWaitSec } : {}),
+})
+
+/** 기계·목표 대기 → 계산 본문 칸. 값이 없으면 칸을 빼서 서버 기본값을 쓴다. */
+export const equipmentBody = (e: Equipment | undefined): JsonObject => ({
   ...(e?.espressoMachines != null ? { espresso_machines: e.espressoMachines } : {}),
   ...(e?.blenders != null ? { blenders: e.blenders } : {}),
   ...(e?.targetWaitSec != null ? { target_wait_sec: e.targetWaitSec } : {}),

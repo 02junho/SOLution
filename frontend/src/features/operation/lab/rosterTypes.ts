@@ -94,7 +94,7 @@ export type MenuTypes = { model_version: string; source: 'LLM' | 'UNAVAILABLE'; 
 
 /** ai-server /tools/simulation/roster-options 응답(operation.roster_options.v1). */
 export type OptionKey = 'SAVE' | 'RECOMMENDED' | 'ROOMY'
-export type OptionDay = WeekPlanDay & { peak_wait_sec: number | null; by_window_sec: (number | null)[] }
+export type OptionDay = WeekPlanDay & { peak_wait_sec: number | null; by_window_sec: (number | null)[]; /** 이 요일을 몇 번 돌려 평균 냈는지 */ repetitions?: number }
 export type RosterOptions = {
   model_version: string
   min_gain_sec: number

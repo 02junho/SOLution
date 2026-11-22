@@ -15,6 +15,7 @@ import com.solution.common.response.ApiResponse;
 import com.solution.operation.service.input.MenuTypeService;
 import com.solution.operation.service.roster.DailyRosterService;
 import com.solution.operation.service.roster.RosterChatService;
+import com.solution.operation.service.roster.RosterReplayService;
 import com.solution.operation.service.roster.RosterResultService;
 
 /**
@@ -30,13 +31,25 @@ public class OperationRosterController {
 	private final MenuTypeService menuTypes;
 	private final RosterResultService results;
 	private final RosterChatService chats;
+	private final RosterReplayService replays;
 
 	public OperationRosterController(DailyRosterService service, MenuTypeService menuTypes, RosterResultService results,
-			RosterChatService chats) {
+			RosterChatService chats, RosterReplayService replays) {
 		this.service = service;
 		this.menuTypes = menuTypes;
 		this.results = results;
 		this.chats = chats;
+		this.replays = replays;
+	}
+
+	/**
+	 * 저장한 추천 근무표의 줄 서는 모습(재생 기록, operation.trace.v2). 조건·근무조는 저장된 결과에서 꺼낸다.
+	 * day = MON~SUN, choice = SAVE / RECOMMENDED / ROOMY. 저장하지 않는다.
+	 */
+	@GetMapping("/results/{resultId}/roster-replay")
+	public ApiResponse<Map<String, Object>> rosterReplay(@PathVariable long resultId, @RequestParam("day") String day,
+			@RequestParam("choice") String choice) {
+		return replays.replay(resultId, day, choice);
 	}
 
 	/** 말로 고치기: {"message", "fields", "state", "workers", "result"} → intent·바꿀 칸·답장. 저장하지 않는다. */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { classifyMenuTypes, rosterExplain } from '../../../api/operationApi'
 import { workflowApi } from '../../../api/workflowApi'
-import { DEFAULT_TARGET_WAIT_SEC, draftBody, DEFAULT_CLOSE, DEFAULT_OPEN, draftOperationInput, formInput, MACHINE_COUNTS, MENUS, TARGET_WAIT_MINUTES, wageFloor } from '../workspace/operationInput'
+import { DEFAULT_TARGET_WAIT_SEC, draftBody, DEFAULT_CLOSE, DEFAULT_OPEN, draftOperationInput, equipmentFrom, formInput, MACHINE_COUNTS, MENUS, TARGET_WAIT_MINUTES, wageFloor } from '../workspace/operationInput'
 import type { Equipment } from '../workspace/operationInput'
 import { analyzeTable, CARD_SHARE_MIN, MENU_TYPES, planFrom, readTable, typeLabel, typeSeconds, WEEKDAY_LABEL, WEEKDAYS } from '../workspace/storeFile'
 import type { DayBasis, MenuHow, StoreImport } from '../workspace/storeFile'
@@ -108,11 +108,7 @@ function LabMain() {
     : ''
   const manufacture = makeProblem ? {} : Object.fromEntries(Object.entries(makeSec).map(([id, v]) => [id, Number(v)]))
   // 기본값과 같으면 보내지 않는다(저장 본문이 지금과 같게).
-  const equipment: Equipment = {
-    ...(espresso !== 1 ? { espressoMachines: espresso } : {}),
-    ...(blenders !== 1 ? { blenders } : {}),
-    ...(targetWait !== DEFAULT_TARGET_WAIT_SEC ? { targetWaitSec: targetWait } : {}),
-  }
+  const equipment: Equipment = equipmentFrom(espresso, blenders, targetWait)
 
   async function load(file: File) {
     setReadError('')
