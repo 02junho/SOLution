@@ -43,10 +43,10 @@ export const example = (wage: string, open: string, close: string): Person[] => 
     { id: 1, name: '직원 A', wage, minor: false, days: WEEKDAYS_ONLY, start: open, end: am, maxHours: '40' },
     { id: 2, name: '직원 B', wage, minor: false, days: WEEKDAYS_ONLY, start: pm, end: close, maxHours: '40' },
     { id: 3, name: '직원 C', wage, minor: false, days: ALL_DAYS, start: open, end: close, maxHours: '30' },
-    { id: 4, name: '직원 D (학생)', wage, minor: false, days: WEEKDAYS_ONLY, start: open, end: am, maxHours: '14' },
+    { id: 4, name: '직원 D', wage, minor: false, days: WEEKDAYS_ONLY, start: open, end: am, maxHours: '14' },
     { id: 5, name: '직원 E', wage, minor: false, days: ALL_DAYS, start: pm, end: close, maxHours: '20' },
     { id: 6, name: '직원 F', wage, minor: false, days: ['TUE', 'THU', 'SAT', 'SUN'], start: open, end: close, maxHours: '14' },
-    { id: 7, name: '직원 G (학생)', wage, minor: false, days: ['MON', 'WED', 'FRI', 'SAT', 'SUN'], start: open, end: close, maxHours: '14' },
+    { id: 7, name: '직원 G', wage, minor: false, days: ['MON', 'WED', 'FRI', 'SAT', 'SUN'], start: open, end: close, maxHours: '14' },
     { id: 8, name: '직원 H', wage, minor: false, days: ALL_DAYS, start: open, end: close, maxHours: '14' },
   ]
 }

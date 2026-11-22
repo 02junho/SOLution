@@ -9,7 +9,7 @@ import type { Weekday } from '../workspace/storeFile'
 
 type Option = RosterOptions['options'][number]
 
-export const OPTION_NAME: Record<OptionKey, string> = { SAVE: '아끼는 근무표', RECOMMENDED: '추천 근무표', ROOMY: '여유 근무표' }
+export { OPTION_NAME } from './rosterNames'
 
 /** 대기(초) → 사장님이 읽기 쉬운 말. 1분 안은 "1분 안", 그 위는 반올림한 분. */
 export function waitText(sec: number | null | undefined): string {
@@ -74,7 +74,8 @@ export function ladderBars(data: RosterOptions, day: Weekday): LadderBar[] {
 }
 
 export type WeekCell = { start: string; end: string; breaks: string[] } | null
-export type WeekRow = { key: string; name: string; owner: boolean; hours: number | null; cells: WeekCell[] }
+/** hire = 명단으로 못 채워 새로 뽑을 알바 줄(서버 new_hires) */
+export type WeekRow = { key: string; name: string; owner: boolean; hire?: boolean; hours: number | null; cells: WeekCell[] }
 
 /** 일주일 근무표 줄: 사장님 줄(일하는 날이 있으면) + 일하는 직원 줄. 칸은 days 순서. */
 export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
@@ -93,21 +94,35 @@ export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
       cells: days.map((d) => {
         const a = option.weekly.assignments.find((x) => x.worker_key === w.worker_key && x.day === d)
         return a
-          ? { start: a.start_time, end: a.end_time, breaks: breaksOf(option, a.slot_id).map((b) => rangeText(b.start_time, b.end_time)) }
+          ? { start: a.start_time, end: a.end_time, breaks: breaksOf(option, a.slot_id).map((b) => shiftText(b.start_time, b.end_time)) }
           : null
+      }),
+    })
+  }
+  // 새로 뽑을 알바: 서버가 못 채운 자리를 같은 규칙(하루 한 근무, 주 15시간 미만)으로 나눠 준 그대로 보여 준다.
+  for (const h of option.new_hires ?? []) {
+    rows.push({
+      key: h.worker_key,
+      name: h.name,
+      owner: false,
+      hire: true,
+      hours: h.weekly_work_hours,
+      cells: days.map((d) => {
+        const a = h.assignments.find((x) => x.day === d)
+        return a ? { start: a.start_time, end: a.end_time, breaks: breaksOf(option, a.slot_id).map((b) => shiftText(b.start_time, b.end_time)) } : null
       }),
     })
   }
   return rows
 }
 
-/** 못 채운 자리(요일 칸마다 "시작~끝"). 없으면 null. */
+/** 못 채운 자리(요일 칸마다 "시작~끝"). 새 알바 줄(new_hires)로 보여 주면 null. 예전에 저장한 결과에만 나온다. */
 export function unfilledCells(option: Option, days: Weekday[]): string[] | null {
-  if (!option.weekly.unfilled.length) return null
+  if (!option.weekly.unfilled.length || option.new_hires) return null
   return days.map((d) =>
     option.weekly.unfilled
       .filter((u) => u.day === d)
-      .map((u) => rangeText(u.start_time, u.end_time))
+      .map((u) => shiftText(u.start_time, u.end_time))
       .join(', '),
   )
 }
@@ -121,7 +136,18 @@ export function clock(hhmm: string): string {
   return `${half} ${hour}시${m ? ` ${m}분` : ''}`
 }
 
-/** 근무 시간 글자. 둘 다 정시면 "7~16시", 아니면 "10:30~14:00". */
+/** 표 칸 근무 시간 글자: 늘 "7:00~16:30" 모양(칸끼리 표기가 섞이지 않게). */
+export function shiftText(start: string, end: string): string {
+  return shiftParts(start, end).join('')
+}
+
+/** 표 칸에서 줄을 바꿀 때 "~" 뒤에서만 바꾸도록 두 조각으로("7:00~", "12:00"). */
+export function shiftParts(start: string, end: string): [string, string] {
+  const t = (x: string) => `${Number(x.slice(0, 2))}:${x.slice(3, 5)}`
+  return [`${t(start)}~`, t(end)]
+}
+
+/** 문장 속 시간 글자. 둘 다 정시면 "7~16시", 아니면 "10:30~14:00". */
 export function rangeText(start: string, end: string): string {
   const whole = start.endsWith(':00') && end.endsWith(':00')
   const h = (t: string) => String(Number(t.slice(0, 2)))

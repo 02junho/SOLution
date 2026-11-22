@@ -13,7 +13,7 @@ DEFAULT_MAX_PROCESSES = 2
 LIMIT = 7  # 요일 수보다 많이 띄울 일은 없다
 
 
-def _from_env_file() -> str | None:
+def _from_env_file(name: str) -> str | None:
     """docker compose는 .env를 환경 변수로 넣어 주지만, 로컬에서 바로 띄우면 파일에서 읽는다."""
     try:
         from dotenv import dotenv_values
@@ -21,11 +21,16 @@ def _from_env_file() -> str | None:
         from app.core.config import REPO_ROOT_ENV
     except ImportError:
         return None
-    return dotenv_values(REPO_ROOT_ENV).get("ROSTER_MAX_PROCESSES")
+    return dotenv_values(REPO_ROOT_ENV).get(name)
+
+
+def env_setting(name: str) -> str | None:
+    """설정 하나 읽기(환경 변수 먼저, 없으면 .env 파일). 요일 동시 계산 수와 요일 기억 크기가 같이 쓴다."""
+    return os.environ.get(name) or _from_env_file(name)
 
 
 def max_processes() -> int:
-    raw = os.environ.get("ROSTER_MAX_PROCESSES") or _from_env_file()
+    raw = env_setting("ROSTER_MAX_PROCESSES")
     try:
         value = int(raw) if raw not in (None, "") else DEFAULT_MAX_PROCESSES
     except ValueError:

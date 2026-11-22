@@ -16,7 +16,7 @@ def test_설정값과_코어_요일_수_중_가장_작은_값(monkeypatch):
 
 
 def test_비었거나_이상한_값은_기본값_범위는_1에서_7(monkeypatch):
-    monkeypatch.setattr(parallel, "_from_env_file", lambda: None)
+    monkeypatch.setattr(parallel, "_from_env_file", lambda name: None)
     monkeypatch.delenv("ROSTER_MAX_PROCESSES", raising=False)
     assert parallel.max_processes() == parallel.DEFAULT_MAX_PROCESSES
     monkeypatch.setenv("ROSTER_MAX_PROCESSES", "많이")

@@ -128,7 +128,7 @@ public class RosterResultService {
 	}
 
 	/**
-	 * 계산 시작. 요청: {"input_version_id", "days", "workers", "min_gain_sec"(선택)}, 요청 키 필수.
+	 * 계산 시작. 요청: {"input_version_id", "days", "workers", "min_gain_sec"(선택), "compare_holiday_pay"(선택)}, 요청 키 필수.
 	 * 같은 요청 키로 다시 보내면 새로 시작하지 않고 지금 상태(RUNNING / DONE / FAILED)를 돌려준다.
 	 */
 	public ApiResponse<Map<String, Object>> start(long sessionId, Map<String, Object> body, String requestKey) {
@@ -196,6 +196,11 @@ public class RosterResultService {
 	private void forgetOldFailures() {
 		Instant cutoff = Instant.now().minus(FAILED_KEEP);
 		jobs.entrySet().removeIf(entry -> "FAILED".equals(entry.getValue().state()) && entry.getValue().at().isBefore(cutoff));
+	}
+
+	/** 지금 이 서버에서 도는 진짜 계산 수. 미리 계산(RosterWarmService)은 이 값이 0일 때만 시작한다. */
+	public long runningCount() {
+		return jobs.values().stream().filter(job -> "RUNNING".equals(job.state())).count();
 	}
 
 	/** 테스트용: 지금 남아 있는 기록 수. */
@@ -324,8 +329,11 @@ public class RosterResultService {
 		summary.put("recommended_choice_key", "RECOMMENDED");
 		summary.put("choices", choices);
 		summary.put("warnings", warnings);
-		summary.put("holiday_compare", Map.of("choice_key", "RECOMMENDED", "weekly_cost_krw", holiday.get("plan_cost_krw"),
-				"people_used", ((Map<String, Object>) holiday.get("weekly")).get("people_used")));
+		// 주휴 비교를 안 했으면(쉬운 화면) 요약에도 넣지 않는다.
+		if (holiday != null) {
+			summary.put("holiday_compare", Map.of("choice_key", "RECOMMENDED", "weekly_cost_krw", holiday.get("plan_cost_krw"),
+					"people_used", ((Map<String, Object>) holiday.get("weekly")).get("people_used")));
+		}
 		summary.put("message", message(Objects.requireNonNull(recommended), Objects.requireNonNull(save)));
 		return summary;
 	}
@@ -391,8 +399,11 @@ public class RosterResultService {
 		Map<String, Object> request = new LinkedHashMap<>();
 		request.put("days", body.get("days"));
 		request.put("workers", body.get("workers"));
-		if (body.get("min_gain_sec") != null) {
-			request.put("min_gain_sec", body.get("min_gain_sec"));
+		// 다시 불러와 계산할 때 같은 조건으로 돌리게 선택 값도 남긴다.
+		for (String key : List.of("min_gain_sec", "compare_holiday_pay")) {
+			if (body.get(key) != null) {
+				request.put(key, body.get(key));
+			}
 		}
 		detail.put("request", request);
 		return detail;

@@ -54,12 +54,20 @@ public class DailyRosterService {
 	/**
 	 * 추천 근무표 3안(아끼는/추천/여유): 요청 모양은 weekPlan과 같다(요일별 폼 값 + 사장님 근무 + 직원 명단).
 	 * ai-server /tools/simulation/roster-options가 바쁜 시간(최대 2구간)에만 사람을 더해 비교하고, 세 안을 주 15시간 미만으로 배정한다.
-	 * min_gain_sec(선택)는 "한 명 더 쓸 만하다"고 보는 바쁜 시간 대기 감소(초). 저장하지 않는다.
+	 * min_gain_sec(선택)는 "한 명 더 쓸 만하다"고 보는 바쁜 시간 대기 감소(초), compare_holiday_pay(선택, 기본 true)는 주휴 비교 여부. 저장하지 않는다.
 	 */
 	public ApiResponse<Map<String, Object>> rosterOptions(Map<String, Object> body) {
 		Map<String, Object> request = weekRequest(body);
 		if (body.get("min_gain_sec") instanceof Number gain) {
 			request.put("min_gain_sec", gain);
+		}
+		// 주휴 비교(추천안을 긴 근무조로 한 번 더). 빼면 ai-server가 한다. 쉬운 화면은 false로 보내 계산을 줄인다.
+		if (body.get("compare_holiday_pay") instanceof Boolean holiday) {
+			request.put("compare_holiday_pay", holiday);
+		}
+		// 미리 계산(RosterWarmService)만 true: ai-server가 낮은 우선순위로 돌려 진짜 계산에 양보한다. 결과는 같다.
+		if (Boolean.TRUE.equals(body.get("background"))) {
+			request.put("background", true);
 		}
 		return call("/tools/simulation/roster-options", request, ":options", "추천 근무표 응답을 받지 못했습니다.");
 	}

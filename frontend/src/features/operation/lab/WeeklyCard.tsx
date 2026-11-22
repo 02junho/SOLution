@@ -373,7 +373,9 @@ export function OptionsView({
 }) {
   const option = data.options.find((o) => o.key === chosen) ?? data.options[0]
   const rec = data.options.find((o) => o.key === 'RECOMMENDED')!
-  const holiday = data.holiday_compare.weekly
+  // 주휴 비교는 실험실 계산에만 있다(쉬운 화면에서 만든 결과를 열면 null).
+  const compare = data.holiday_compare
+  const holiday = compare?.weekly
   const maxExtra = Math.max(...shown.map((d) => data.days[d].ladder.length - 1))
   const warnings = save
     ? save.summary.warnings.filter((w) => w.choice_keys === null || w.choice_keys.includes(option.key))
@@ -468,14 +470,16 @@ export function OptionsView({
           )
         })}
       </div>
-      <p className="lab-muted">
-        추천안을 주휴를 주고 긴 근무조로 짜면 직원 {holiday.people_used}명, 주 {won(data.holiday_compare.plan_cost_krw)}(주휴수당{' '}
-        {won(holiday.holiday_pay_krw)} 포함)이에요.{' '}
-        {data.holiday_compare.plan_cost_krw >= rec.plan_cost_krw
-          ? `주 15시간 미만으로 나누면 주 ${won(data.holiday_compare.plan_cost_krw - rec.plan_cost_krw)} 덜 들어요.`
-          : `이 가게는 주휴를 주는 쪽이 주 ${won(rec.plan_cost_krw - data.holiday_compare.plan_cost_krw)} 덜 들어요. 짧은 조로 잘게 나누면 겹치는 시간이 생겨 유급 시간이 늘기 때문이에요(15시간 미만 안 ${rec.days ? Object.values(rec.days).reduce((t, d) => t + d.cost.employee_paid_hours, 0) : 0}시간 / 주휴 안 ${Object.values(data.holiday_compare.days).reduce((t, d) => t + d.cost.employee_paid_hours, 0)}시간).`}
-        {holiday.unfilled.length > 0 && ' (주휴 안도 명단으로 다 못 채웠어요.)'}
-      </p>
+      {compare && holiday && (
+        <p className="lab-muted">
+          추천안을 주휴를 주고 긴 근무조로 짜면 직원 {holiday.people_used}명, 주 {won(compare.plan_cost_krw)}(주휴수당{' '}
+          {won(holiday.holiday_pay_krw)} 포함)이에요.{' '}
+          {compare.plan_cost_krw >= rec.plan_cost_krw
+            ? `주 15시간 미만으로 나누면 주 ${won(compare.plan_cost_krw - rec.plan_cost_krw)} 덜 들어요.`
+            : `이 가게는 주휴를 주는 쪽이 주 ${won(rec.plan_cost_krw - compare.plan_cost_krw)} 덜 들어요. 짧은 조로 잘게 나누면 겹치는 시간이 생겨 유급 시간이 늘기 때문이에요(15시간 미만 안 ${rec.days ? Object.values(rec.days).reduce((t, d) => t + d.cost.employee_paid_hours, 0) : 0}시간 / 주휴 안 ${Object.values(compare.days).reduce((t, d) => t + d.cost.employee_paid_hours, 0)}시간).`}
+          {holiday.unfilled.length > 0 && ' (주휴 안도 명단으로 다 못 채웠어요.)'}
+        </p>
+      )}
 
       {option.shortfall.more_people_under_15h > 0 && onAddPeople && (
         <div className="lab-warn">

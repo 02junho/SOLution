@@ -267,6 +267,40 @@ def assign(slots: list[dict], workers: list[dict], mode: str) -> dict:
     }
 
 
+def new_hires(unfilled: list[dict], cap_hours: float, prefix: str = "새 알바") -> list[dict]:
+    """명단으로 못 채운 자리를 새로 뽑을 알바에 나눠 넣는다(추천 근무표 6번: 결과가 원하는 근무표를 끝까지 채워 보여 주기).
+
+    배정과 같은 규칙: 한 사람은 하루 한 근무, 주 근무시간은 cap_hours 이하(15시간 미만 안이면 14.5).
+    긴 자리부터, 넣을 수 있는 사람 중 앞 사람에게(같은 입력이면 늘 같은 결과). 가능 시간은 새로 뽑는 사람이라 따지지 않는다.
+    반환: [{"worker_key": "NEW_1", "name": "새 알바 1", "weekly_work_hours", "assignments": [자리...]}]
+    """
+    cap = round(cap_hours * 60)
+    order = sorted(unfilled, key=lambda u: (-u["work_hours"], DAYS.index(u["day"]), u["start_time"]))
+    hires: list[dict] = []
+    for slot in order:
+        minutes = round(slot["work_hours"] * 60)
+        if minutes > cap:
+            raise ValueError(f"{DAY_LABEL[slot['day']]}요일 {slot['start_time']} 자리는 한 사람 주 한도보다 길어요.")
+        home = next((h for h in hires if slot["day"] not in h["days"] and h["minutes"] + minutes <= cap), None)
+        if home is None:
+            n = len(hires) + 1
+            home = {"worker_key": f"NEW_{n}", "name": f"{prefix} {n}", "days": set(), "minutes": 0, "slots": []}
+            hires.append(home)
+        home["days"].add(slot["day"])
+        home["minutes"] += minutes
+        home["slots"].append(slot)
+    by_day = lambda u: (DAYS.index(u["day"]), u["start_time"])  # noqa: E731
+    return [
+        {
+            "worker_key": h["worker_key"],
+            "name": h["name"],
+            "weekly_work_hours": h["minutes"] / 60,
+            "assignments": [{**u, "worker_key": h["worker_key"], "name": h["name"]} for u in sorted(h["slots"], key=by_day)],
+        }
+        for h in hires
+    ]
+
+
 def plan(body: dict) -> dict:
     if not isinstance(body, dict):
         raise ValueError("JSON 객체를 보내 주세요.")

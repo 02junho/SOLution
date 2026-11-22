@@ -1,6 +1,5 @@
 """추천 근무표 3안: 바쁜 시간 2구간, 바쁜 시간에만 더하기, 추천 고르기, 주 15시간 미만 배정."""
 
-import math
 
 import pytest
 
@@ -91,7 +90,13 @@ def test_세_안과_주휴_비교를_한_번에_만든다():
         assert all(w["weekly_work_hours"] < 15 for w in o["weekly"]["workers"])
         assert o["weekly"]["holiday_pay_krw"] == 0
         hours = sum(u["work_hours"] for u in o["weekly"]["unfilled"])
-        assert o["shortfall"] == {"unfilled_hours": hours, "more_people_under_15h": math.ceil(hours / 14.5)}
+        assert o["shortfall"] == {"unfilled_hours": hours, "more_people_under_15h": len(o["new_hires"])}
+        # 새 알바: 못 채운 자리를 빠짐없이, 하루 한 근무, 주 14.5시간 이하
+        placed = [a["slot_id"] for h in o["new_hires"] for a in h["assignments"]]
+        assert sorted(placed) == sorted(u["slot_id"] for u in o["weekly"]["unfilled"])
+        for h in o["new_hires"]:
+            days = [a["day"] for a in h["assignments"]]
+            assert len(days) == len(set(days)) and h["weekly_work_hours"] <= 14.5
     assert out["holiday_compare"]["key"] == "RECOMMENDED"
     assert out["days"]["MON"]["windows"][0]["start_time"] == "07:00"  # 아침 구간도 잡음
     assert len(out["days"]["MON"]["ladder"]) >= 2
@@ -109,3 +114,19 @@ def test_더하기_비교는_여유_안_다음에서_멈춘다():
     day = out["days"]["MON"]
     # 마지막으로 돌린 단계가 여유 안이거나, 최대(+3)까지 간 경우다.
     assert len(day["ladder"]) - 1 in (day["picks"]["ROOMY"], ro.MAX_EXTRA)
+
+
+def test_새_알바는_하루_한_근무_주_한도_안에서_긴_자리부터():
+    from app.tools.simulation.weekly_roster import new_hires
+
+    u = lambda sid, day, start, end, h: {"slot_id": sid, "day": day, "start_time": start, "end_time": end, "work_hours": h}  # noqa: E731
+    hires = new_hires([u("MON-1", "MON", "07:00", "12:00", 4.5), u("MON-2", "MON", "12:00", "15:30", 3.5),
+                       u("TUE-1", "TUE", "07:00", "12:00", 4.5), u("WED-1", "WED", "07:00", "12:00", 4.5),
+                       u("THU-1", "THU", "07:00", "12:00", 4.5)], 14.5)
+    assert [h["name"] for h in hires] == ["새 알바 1", "새 알바 2"]
+    # 1번: 월·화·수 4.5시간씩 13.5시간(목요일을 더하면 18시간이라 2번에게)
+    assert [a["slot_id"] for a in hires[0]["assignments"]] == ["MON-1", "TUE-1", "WED-1"]
+    assert [a["slot_id"] for a in hires[1]["assignments"]] == ["MON-2", "THU-1"]
+    assert new_hires([], 14.5) == []
+    with pytest.raises(ValueError):
+        new_hires([u("MON-1", "MON", "07:00", "23:00", 15.5)], 14.5)

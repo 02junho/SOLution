@@ -28,23 +28,39 @@
 .er-bar.pick span { color: var(--blue-dark); font-weight: 700; }
 
 /* 일주일 근무표 */
+/* 요일 칸은 같은 너비(글자 길이와 상관없이). 좁은 화면은 옆으로 밀어 보고 이름 칸은 왼쪽에 붙어 있다. */
 .er-week-wrap { overflow-x: auto; }
-.er-week { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 3px; font-size: 0.84em; }
+.er-week { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: separate; border-spacing: 3px; font-size: 0.84em; }
+.er-week thead th:first-child { width: 7.5em; }
+.er-week tbody th, .er-week thead th:first-child { position: sticky; left: 0; z-index: 1; background: #fff; }
 .er-week th { font-weight: 700; color: var(--gray-2); text-align: center; padding: 4px; }
 .er-week th small { display: block; color: var(--blue-dark); font-weight: 600; font-size: 0.82em; }
 .er-week tbody th { text-align: left; color: var(--ink-2); white-space: nowrap; }
 .er-week tbody th small { color: var(--good); }
-.er-week td { min-width: 4.2em; height: 46px; padding: 0; vertical-align: middle; }
+.er-week td { height: 46px; padding: 0; vertical-align: middle; }
+/* 시각은 숫자 중간에서 끊지 않고, 칸이 좁으면 "~" 뒤에서만 줄을 바꾼다 */
+.er-time { display: flex; flex-wrap: wrap; }
+.er-time span { white-space: nowrap; }
 .er-shift { display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 44px; padding: 3px 6px; border-radius: 8px; background: #e5f6ec; line-height: 1.3; }
 .er-shift small { color: var(--gray-2); font-size: 0.82em; }
 .er-shift.rest { background-image: repeating-linear-gradient(135deg, transparent 0 5px, #b9c0cc 5px 6px); background-size: 100% 4px; background-repeat: no-repeat; background-position: bottom; }
 .er-week tr.owner .er-shift { background: var(--blue-soft); }
+.er-week tr.hire .er-shift { background: #fff; border: 1.5px dashed #6fbf8f; }
+.er-week tr.hire th { color: var(--accent); }
 .er-week tr.need th, .er-week tr.need td { color: var(--accent); font-weight: 700; font-size: 0.9em; line-height: 1.4; }
 .er-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 0.82em; color: var(--gray); }
 .er-legend i { display: inline-block; width: 14px; height: 10px; margin-right: 4px; border-radius: 3px; background: #e5f6ec; vertical-align: middle; }
 .er-legend i.owner { background: var(--blue-soft); }
+.er-legend i.hire { background: #fff; border: 1.5px dashed #6fbf8f; }
 .er-legend i.rest { background: repeating-linear-gradient(135deg, #fff 0 3px, #9aa1ae 3px 4px); }
 .er-warn { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid #f4dfb0; color: #6b4b00; }
+
+/* 저장하기 버튼은 오른쪽(열면 상자는 전체 너비) */
+.er-save > .easy-primary { display: block; margin-left: auto; }
+
+/* 줄 서는 모습 재생 속도 */
+.er-speed { display: inline-flex; align-items: center; gap: 6px; }
+.er-speed-label { color: var(--gray); font-size: 0.9em; }
 
 /* 세 근무표 비교 */
 .er-compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }

@@ -8,7 +8,7 @@ import type { Weekday } from '../workspace/storeFile'
 import { clock, OPTION_NAME, staffText } from './easyRosterModel'
 
 /*
- * 줄 서는 모습: 같은 요일·같은 손님으로 "아끼는 근무표"와 고른 근무표를 번갈아 재생한다.
+ * 줄 서는 모습: 같은 요일·같은 손님으로 "인건비 절약 근무표"와 고른 근무표를 번갈아 재생한다.
  * 기록은 저장하지 않고 열 때 서버가 그 하루를 한 번 다시 돌려 만든다(결과 숫자를 낸 반복 중 첫 판).
  * 그림은 쉬운 화면의 줄 서는 모습과 같은 칸·스타일(easy-queue-*)을 쓴다.
  */
@@ -64,7 +64,7 @@ export default function RosterQueue({
         <button type="button" className="easy-secondary" onClick={() => setOpen(true)}>
           ▶ 줄 서는 모습으로 보기
         </button>
-        <span className="easy-muted">같은 손님으로 아끼는 근무표와 {OPTION_NAME[pair[1]]}의 줄을 비교해요.</span>
+        <span className="easy-muted">같은 손님으로 {OPTION_NAME.SAVE}와 {OPTION_NAME[pair[1]]}의 줄을 비교해요.</span>
       </div>
     )
 
@@ -89,6 +89,13 @@ export default function RosterQueue({
   )
 }
 
+// 재생 속도: 1초에 흘러가는 시뮬레이션 초. 1번 화면(QueueReplay)의 배속과 같은 방식, 쉬운 화면은 버튼 셋만.
+const SPEEDS = [
+  { perSec: 60, label: '보통', hint: '1초에 1분씩 흘러가요.' },
+  { perSec: 300, label: '빠르게', hint: '1초에 5분씩 흘러가요.' },
+  { perSec: 900, label: '아주 빠르게', hint: '1초에 15분씩 흘러가요.' },
+]
+
 function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_time: string; end_time: string }[] }) {
   const origin = seconds(trace.time_origin)
   const duration = trace.events.reduce((last, e) => Math.max(last, e.at_seconds), trace.observation_window?.end_seconds ?? 0)
@@ -97,13 +104,14 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
   const first = windows[0]?.start_time ?? trace.time_origin.slice(0, 5)
   const [time, setTime] = useState(() => at(first))
   const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(SPEEDS[0].perSec)
   useEffect(() => {
     if (!playing) return
     let frame = 0
     const start = performance.now()
     const initial = time
     const tick = (now: number) => {
-      const next = Math.min(duration, initial + ((now - start) / 1000) * 60) // 1초에 1분
+      const next = Math.min(duration, initial + ((now - start) / 1000) * speed)
       setTime(next)
       if (next >= duration) setPlaying(false)
       else frame = requestAnimationFrame(tick)
@@ -112,7 +120,7 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
     return () => cancelAnimationFrame(frame)
     // 재생을 시작할 때의 시각에서 이어 간다(프레임마다 다시 시작하지 않게).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, duration])
+  }, [playing, duration, speed])
   const state = stateAt(trace, time)
   const counts = BOXES.map((box) => [...state.customers.values()].filter((stage) => box.stages.includes(stage)).length)
   const waiting = counts[0] + counts[2]
@@ -166,6 +174,14 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
         >
           {playing ? '■ 멈추기' : '▶ 재생'}
         </button>
+        <div className="easy-pick er-speed" role="group" aria-label="재생 속도">
+          <span className="er-speed-label">속도</span>
+          {SPEEDS.map((s) => (
+            <button key={s.perSec} type="button" aria-pressed={speed === s.perSec} className={speed === s.perSec ? 'on' : ''} onClick={() => setSpeed(s.perSec)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
         {jumps.map((jump) => (
           <button
             key={jump.label}
@@ -180,7 +196,7 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
           </button>
         ))}
       </div>
-      <p className="easy-queue-hint">1초에 1분씩 흘러가요. 막대를 끌어서 원하는 시각을 볼 수도 있어요.</p>
+      <p className="easy-queue-hint">{SPEEDS.find((s) => s.perSec === speed)?.hint} 막대를 끌어서 원하는 시각을 볼 수도 있어요.</p>
     </div>
   )
 }

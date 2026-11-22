@@ -72,6 +72,19 @@ class RosterResultServiceTest {
 	}
 
 	@Test
+	void 주휴_비교를_안_했으면_요약에도_없다() {
+		Map<String, Object> noHoliday = new java.util.HashMap<>(options());
+		noHoliday.remove("holiday_compare");
+		Map<String, Object> summary = RosterResultService.summary(noHoliday);
+		assertThat(summary).doesNotContainKey("holiday_compare").containsEntry("result_kind", "ROSTER_OPTIONS");
+		Map<String, Object> body = Map.of("days", List.of(Map.of("day", "MON")), "workers", List.of(Map.of("name", "A")),
+				"compare_holiday_pay", false);
+		// 다시 불러와 계산할 때 같은 조건이 되게 요청에 남긴다
+		assertThat((Map<String, Object>) RosterResultService.detail(noHoliday, body).get("request"))
+				.containsEntry("compare_holiday_pay", false);
+	}
+
+	@Test
 	void 상세에는_근무표_전체와_계산에_쓴_조건을_남긴다() {
 		Map<String, Object> body = Map.of("input_version_id", 7, "days", List.of(Map.of("day", "MON")), "workers", List.of(Map.of("name", "A")));
 		Map<String, Object> detail = RosterResultService.detail(options(), body);

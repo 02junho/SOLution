@@ -257,8 +257,9 @@ def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(ge
     """추천 근무표 3안: 요일별 꼭 필요한 인원 → 바쁜 시간에만 0~3명 더해 비교 → 아끼는/추천/여유 안(주 15시간 미만). 저장하지 않는다."""
     raw = body.model_dump(exclude_none=True)
     request = {"days": _engine_days(raw["days"]), "workers": raw["workers"]}
-    if "min_gain_sec" in raw:
-        request["min_gain_sec"] = raw["min_gain_sec"]
+    for key in ("min_gain_sec", "compare_holiday_pay", "background"):
+        if key in raw:
+            request[key] = raw[key]
     try:
         data = roster_options(request, engine=ROSTER_ENGINE)
     except (ValueError, KeyError, TypeError) as exc:

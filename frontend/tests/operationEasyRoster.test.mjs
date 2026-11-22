@@ -7,6 +7,7 @@ const server = await createServer({ server: { middlewareMode: true, hmr: false }
 const model = await server.ssrLoadModule('/src/features/operation/easy/easyRosterModel.ts')
 const chat = await server.ssrLoadModule('/src/features/operation/easy/easyRosterChat.ts')
 const restore = await server.ssrLoadModule('/src/features/operation/easy/easyRosterRestore.ts')
+const warm = await server.ssrLoadModule('/src/features/operation/easy/rosterWarm.ts')
 after(async () => {
   await server.close()
 })
@@ -77,7 +78,7 @@ test('일주일 표: 사장님 줄 + 일한 직원만, 휴게는 그날 직원 �
   assert.deepEqual(rows.map((r) => r.name), ['사장님', '직원 A', '직원 B'])
   assert.equal(rows[0].cells[0].start, '07:00')
   assert.equal(rows[0].cells[1], null)
-  assert.deepEqual(rows[2].cells[0].breaks, ['16:00~16:30'])
+  assert.deepEqual(rows[2].cells[0].breaks, ['16:00~16:30'], '표 칸 시간은 늘 시:분')
   assert.deepEqual(rows[1].cells[0].breaks, [])
   assert.equal(model.unfilledCells(data.options[1], ['MON', 'TUE']), null)
 })
@@ -85,6 +86,38 @@ test('일주일 표: 사장님 줄 + 일한 직원만, 휴게는 그날 직원 �
 test('근무 시간 글자: 정시면 짧게', () => {
   assert.equal(model.rangeText('07:00', '16:00'), '7~16시')
   assert.equal(model.rangeText('10:30', '14:00'), '10:30~14:00')
+})
+
+test('표 칸 시간은 정시도 시:분으로(칸끼리 표기가 섞이지 않게)', () => {
+  assert.equal(model.shiftText('12:00', '16:00'), '12:00~16:00')
+  assert.equal(model.shiftText('07:00', '10:30'), '7:00~10:30')
+})
+
+test('새로 뽑을 알바: 서버가 나눈 그대로 줄로, 빈 자리 줄은 안 나옴', () => {
+  const base = data.options[1]
+  const option = {
+    ...base,
+    weekly: { ...base.weekly, unfilled: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5 }] },
+    new_hires: [{ worker_key: 'NEW_1', name: '새 알바 1', weekly_work_hours: 4.5, assignments: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5 }] }],
+  }
+  const rows = model.weekRows(option, ['MON', 'TUE'])
+  const hire = rows.at(-1)
+  assert.equal(hire.name, '새 알바 1')
+  assert.equal(hire.hire, true)
+  assert.equal(hire.cells[0], null)
+  assert.equal(hire.cells[1].start, '07:00')
+  assert.equal(model.unfilledCells(option, ['MON', 'TUE']), null)
+  // 예전 결과(new_hires 없음)는 빈 자리 줄로
+  const { new_hires: _, ...old } = option
+  assert.deepEqual(model.unfilledCells(old, ['MON', 'TUE']), ['', '7:00~12:00'])
+})
+
+test('세 안 이름은 한 곳에서: 저장한 계획 목록도 같은 이름', async () => {
+  const names = await server.ssrLoadModule('/src/features/operation/easy/rosterNames.ts')
+  const recent = await server.ssrLoadModule('/src/features/easy/recentFormat.ts')
+  assert.equal(names.OPTION_NAME.SAVE, '인건비 절약 근무표')
+  assert.equal(recent.CHOICE.RECOMMENDED, '추천 근무표')
+  assert.equal(model.OPTION_NAME.ROOMY, recent.CHOICE.ROOMY)
 })
 
 test('줄 서는 모습의 일하는 사람: 이름 없이 사장님·직원 수', () => {
@@ -200,4 +233,15 @@ test('다시 계산 본문: 지금 값으로 덮고, 사장님 근무는 그날 
   assert.deepEqual(tue.operation_form.orders_by_slot, stored.days[0].operation_form.orders_by_slot, '가게 숫자는 그대로')
   assert.equal(days[2].operation_form.is_owner_working, false)
   assert.ok(!('owner_start_time' in days[2]))
+})
+
+test('미리 계산 순서: 조건 카드는 지금 조건, 결과 화면은 다른 목표 대기를 가까운 것부터', () => {
+  assert.deepEqual(warm.otherWaits(5, [3, 5, 7]), [3, 7], '5분이면 3분(같은 거리면 짧은 쪽) 다음 7분')
+  assert.deepEqual(warm.otherWaits(3, [3, 5, 7]), [5, 7])
+  assert.deepEqual(warm.otherWaits(4, [3, 5, 7]), [3, 5, 7], '목록에 없는 값이면 셋 다')
+  const cond = { targetWaitSec: 300, espresso: 1, blenders: 1, owner: true, wage: '10320', team: { people: [] } }
+  assert.deepEqual(warm.warmConditions('confirm', cond, [3, 5, 7]), [cond])
+  const later = warm.warmConditions('result', cond, [3, 5, 7])
+  assert.deepEqual(later.map((c) => c.targetWaitSec), [180, 420])
+  assert.equal(later[0].wage, '10320', '목표 대기만 바꾼다')
 })

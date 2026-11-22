@@ -117,6 +117,16 @@ class DailyRosterServiceTest {
 		ArgumentCaptor<Map<String, Object>> sent = ArgumentCaptor.forClass(Map.class);
 		verify(client).post(eq("/tools/simulation/roster-options"), sent.capture(), any(), any());
 		assertThat(sent.getValue()).containsOnlyKeys("days", "workers", "min_gain_sec").containsEntry("min_gain_sec", 45);
+		// 쉬운 화면: 주휴 비교 끄기는 그대로 넘긴다
+		service.rosterOptions(Map.of("days", java.util.List.of(mon), "workers", java.util.List.of(Map.of("worker_key", "A")),
+				"compare_holiday_pay", false));
+		verify(client, org.mockito.Mockito.times(2)).post(eq("/tools/simulation/roster-options"), sent.capture(), any(), any());
+		assertThat(sent.getValue()).containsOnlyKeys("days", "workers", "compare_holiday_pay").containsEntry("compare_holiday_pay", false);
+		// 미리 계산 표시는 true일 때만 넘긴다
+		service.rosterOptions(Map.of("days", java.util.List.of(mon), "workers", java.util.List.of(Map.of("worker_key", "A")),
+				"background", true));
+		verify(client, org.mockito.Mockito.times(3)).post(eq("/tools/simulation/roster-options"), sent.capture(), any(), any());
+		assertThat(sent.getValue()).containsEntry("background", true);
 		assertThatThrownBy(() -> service.rosterOptions(Map.of("days", java.util.List.of(), "workers", java.util.List.of())))
 				.hasMessageContaining("직원 명단");
 	}

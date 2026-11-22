@@ -166,6 +166,10 @@ class RosterOptionsRequest(BaseModel):
     days: list[WeekPlanDay] = Field(min_length=1, max_length=7)
     workers: list[dict] = Field(min_length=1, max_length=20)
     min_gain_sec: float | None = Field(default=None, ge=10, le=300)
+    # 주휴 비교(추천안을 긴 근무조로 한 번 더). 빼면 한다. 쉬운 화면은 false.
+    compare_holiday_pay: bool | None = None
+    # 미리 계산이면 true: 낮은 우선순위로 돌려 진짜 계산에 양보한다(결과는 같다).
+    background: bool | None = None
     request_key: str | None = Field(default=None, max_length=111)
 
 

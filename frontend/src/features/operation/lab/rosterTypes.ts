@@ -116,11 +116,19 @@ export type RosterOptions = {
     days: Record<string, OptionDay>
     weekly: Omit<WeeklyResult, 'mode'>
     shortfall: { unfilled_hours: number; more_people_under_15h: number }
+    /** 명단으로 못 채운 자리를 나눠 넣은 새 알바(하루 한 근무, 주 15시간 미만). 예전 결과에는 없다. */
+    new_hires?: {
+      worker_key: string
+      name: string
+      weekly_work_hours: number
+      assignments: { slot_id: string; day: string; start_time: string; end_time: string; work_hours: number }[]
+    }[]
     daily_cost_krw: Record<string, number>
     peak_wait_sec: Record<string, number | null>
     plan_cost_krw: number
   }[]
-  holiday_compare: { key: OptionKey; days: Record<string, OptionDay>; weekly: Omit<WeeklyResult, 'mode'>; plan_cost_krw: number }
+  /** 주휴 비교. 쉬운 화면처럼 compare_holiday_pay=false로 계산했으면 null */
+  holiday_compare: { key: OptionKey; days: Record<string, OptionDay>; weekly: Omit<WeeklyResult, 'mode'>; plan_cost_krw: number } | null
   assumptions: string[]
 }
 
@@ -160,7 +168,7 @@ export type StoredRosterResult = {
   summary: RosterSummary
   detail: Omit<RosterOptions, 'options' | 'model_version'> & {
     choices: (Omit<RosterOptions['options'][number], 'key'> & { choice_key: OptionKey })[]
-    request: { days: JsonObject[]; workers: JsonObject[] }
+    request: { days: JsonObject[]; workers: JsonObject[]; min_gain_sec?: number; compare_holiday_pay?: boolean }
   }
 }
 
@@ -170,7 +178,7 @@ export const optionsFromStored = (stored: StoredRosterResult): RosterOptions => 
   min_gain_sec: stored.detail.min_gain_sec,
   skipped_days: stored.detail.skipped_days,
   days: stored.detail.days,
-  holiday_compare: stored.detail.holiday_compare,
+  holiday_compare: stored.detail.holiday_compare ?? null,
   assumptions: stored.detail.assumptions,
   options: stored.detail.choices.map(({ choice_key, ...rest }) => ({ ...rest, key: choice_key })),
 })
@@ -215,6 +223,9 @@ export function rosterDigest(data: RosterOptions): JsonObject {
       more_people_needed: o.shortfall.more_people_under_15h,
       extra_by_day: o.extra_by_day,
     })),
-    holiday_pay_compare: { option: 'RECOMMENDED', weekly_cost_krw: data.holiday_compare.plan_cost_krw, people_used: data.holiday_compare.weekly.people_used },
+    // 주휴 비교를 안 했으면 AI에도 보내지 않는다(없는 숫자를 지어내지 않게).
+    ...(data.holiday_compare
+      ? { holiday_pay_compare: { option: 'RECOMMENDED', weekly_cost_krw: data.holiday_compare.plan_cost_krw, people_used: data.holiday_compare.weekly.people_used } }
+      : {}),
   }
 }

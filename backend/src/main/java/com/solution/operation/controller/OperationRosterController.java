@@ -17,6 +17,7 @@ import com.solution.operation.service.roster.DailyRosterService;
 import com.solution.operation.service.roster.RosterChatService;
 import com.solution.operation.service.roster.RosterReplayService;
 import com.solution.operation.service.roster.RosterResultService;
+import com.solution.operation.service.roster.RosterWarmService;
 
 /**
  * 하루 근무표 만들기(미리보기, 저장 없음).
@@ -32,14 +33,25 @@ public class OperationRosterController {
 	private final RosterResultService results;
 	private final RosterChatService chats;
 	private final RosterReplayService replays;
+	private final RosterWarmService warms;
 
 	public OperationRosterController(DailyRosterService service, MenuTypeService menuTypes, RosterResultService results,
-			RosterChatService chats, RosterReplayService replays) {
+			RosterChatService chats, RosterReplayService replays, RosterWarmService warms) {
 		this.service = service;
 		this.menuTypes = menuTypes;
 		this.results = results;
 		this.chats = chats;
 		this.replays = replays;
+		this.warms = warms;
+	}
+
+	/**
+	 * 추천 근무표 미리 계산(저장 없음). 조건 확인 카드를 읽는 동안 뒤에서 계산해 두면 "만들기"를 누를 때 빨리 끝난다.
+	 * 요청은 roster-results와 같고 input_version_id는 필요 없다. 바로 {"state": "STARTED" | "SKIPPED"}를 돌려준다.
+	 */
+	@PostMapping("/roster-warm")
+	public ApiResponse<Map<String, Object>> rosterWarm(@RequestBody Map<String, Object> body) {
+		return warms.warm(body);
 	}
 
 	/**
@@ -66,7 +78,7 @@ public class OperationRosterController {
 
 	/**
 	 * 추천 근무표 3안 계산을 시작한다(뒤에서 계산해 업무 결과로 저장, 1~2분). 바로 state=RUNNING을 돌려준다.
-	 * 요청: {"input_version_id", "days", "workers", "min_gain_sec"(선택)}, 헤더 Idempotency-Key 필수.
+	 * 요청: {"input_version_id", "days", "workers", "min_gain_sec"(선택), "compare_holiday_pay"(선택, 기본 true)}, 헤더 Idempotency-Key 필수.
 	 * 같은 키로 다시 보내면 새로 시작하지 않고 상태를 돌려준다. 고른 안은 공통 확정 API로 저장한다.
 	 */
 	@PostMapping("/sessions/{sessionId}/roster-results")

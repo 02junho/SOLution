@@ -46,6 +46,13 @@ export function planRosterOptions(body: { days: JsonObject[]; workers: JsonObjec
 }
 
 // 추천 근무표 3안 계산 시작(확인한 입력 버전에 붙음). 서버가 뒤에서 계산해 업무 결과로 저장한다. 바로 state=RUNNING.
+// 미리 계산(저장 없음): 바로 STARTED / SKIPPED를 돌려준다. 결과는 서버의 요일 기억에만 남는다.
+export function warmRoster(body: JsonObject) {
+  return request<{ state: 'STARTED' | 'SKIPPED'; reason?: string }>('/v1/operation/roster-warm', {
+    method: 'POST', body: JSON.stringify(body),
+  })
+}
+
 export function startRosterResult(sessionId: number, body: JsonObject, requestKey: string) {
   return request<RosterJob>(`/v1/operation/sessions/${sessionId}/roster-results`, {
     method: 'POST', headers: { 'Idempotency-Key': requestKey }, body: JSON.stringify(body),

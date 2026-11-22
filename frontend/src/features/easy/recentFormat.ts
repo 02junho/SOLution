@@ -1,3 +1,4 @@
+import { OPTION_NAME } from '../operation/easy/rosterNames.ts'
 // 최근 업무·저장한 계획 표시 형식
 
 /** "[쉬운 화면] 점심 인원 배치" → "점심 인원 배치" */
@@ -20,6 +21,8 @@ export const CHOICE: Record<string, string> = {
   // 결과 화면(views.tsx)의 이름과 같게: 매입 CHOICE_NAME, 운영 PLAN_TITLE
   purchase_1: '가장 싸게', purchase_2: '한 곳에서 한 번에',
   CURRENT: '지금 그대로', ALT_A: '바쁠 때 서로 돕기', ALT_C: '점심에 한 명 더',
+  // 점심 인원 추천 근무표(운영 2번): 근무표 화면과 같은 이름
+  ...OPTION_NAME,
 }
 
 /** 업무 조건 한 줄 요약. 제목이 같은 업무("점심 인원 배치" 여러 개)를 목록에서 구분하게 한다. */

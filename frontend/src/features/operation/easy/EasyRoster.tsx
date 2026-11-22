@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { classifyMenuTypes, loadRosterResult, rosterChat, rosterExplain, startRosterResult } from '../../../api/operationApi'
+import { classifyMenuTypes, loadRosterResult, rosterChat, rosterExplain, startRosterResult, warmRoster } from '../../../api/operationApi'
 import { workflowApi } from '../../../api/workflowApi'
 import type { JsonObject } from '../../../types/workflow'
 import { Card, Pick } from '../../easy/views'
@@ -19,6 +19,8 @@ import type { RosterConditions } from './easyRosterChat'
 import { clock, OPTION_NAME, won } from './easyRosterModel'
 import { equipmentOf, patchForm, restoreConditions, restoredDayBodies, restoredFacts } from './easyRosterRestore'
 import type { RestoredFacts, StoredRequest } from './easyRosterRestore'
+import { warmConditions } from './rosterWarm'
+import type { WarmStage } from './rosterWarm'
 import './easyRoster.css'
 
 /*
@@ -41,6 +43,10 @@ const SAMPLES = [
 const WAIT_CHOICES = TARGET_WAIT_MINUTES.filter((m) => m === 3 || m === 5 || m === 7)
 // 시급 빠른 선택: 올해 최저시급 + 쉬운 화면 다른 업무와 같은 두 값(직접 바꾸려면 말로 고치기)
 const WAGE_STEPS = [11000, 12000]
+// 미리 계산: 조건이 마지막으로 바뀐 뒤 기다리는 시간, 다른 미리 계산이 돌 때 다시 묻는 간격과 횟수(한 건에 약 1분 반)
+const WARM_DELAY_MS = 3000
+const WARM_RETRY_MS = 10000
+const WARM_RETRIES = 9
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback)
 
 export default function EasyRoster({
@@ -137,21 +143,28 @@ export default function EasyRoster({
     await readFile(new File([await response.blob()], file), label)
   }
 
-  // 처음: 저장된 결과가 있으면 그 결과를, 없으면 예시 가게 데이터로 조건 확인부터.
+  // 처음: 저장된 결과가 있으면 그 결과부터(예시 파일을 읽고 AI 메뉴 분류를 기다리지 않고 바로 연다).
+  // 저장된 조건으로 다시 불러오지 못한 예전 결과만, 결과를 띄운 뒤 예시 가게 데이터를 읽어 둔다("조건 다시 보기"용).
+  // 결과가 없으면 예시 가게 데이터로 조건 확인부터.
   const started = useRef(false)
   useEffect(() => {
     if (started.current) return
     started.current = true
     void (async () => {
+      if (opened?.resultId) {
+        const back = await showSaved(opened.resultId)
+        if (!back && !opened.readOnly) await readSample(SAMPLES[0].file, SAMPLES[0].label)
+        return
+      }
       await readSample(SAMPLES[0].file, SAMPLES[0].label)
-      if (opened?.resultId) await showSaved(opened.resultId)
-      else onPhase('confirm')
+      onPhase('confirm')
     })()
     // 처음 한 번만. 다른 업무를 열면 쉬운 화면이 이 조각을 새로 만든다(key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function showSaved(resultId: number) {
+  /** 저장된 결과 열기. 저장된 조건으로 다시 불러왔으면 true. */
+  async function showSaved(resultId: number): Promise<boolean> {
     try {
       const detail = await loadRosterResult(resultId)
       if (detail.status !== 'ok' || !detail.data) throw new Error(detail.message ?? '근무표를 불러오지 못했어요.')
@@ -159,7 +172,7 @@ export default function EasyRoster({
       if (data.summary?.result_kind !== 'ROSTER_OPTIONS') {
         setLegacy(true)
         onPhase('result')
-        return
+        return false
       }
       show(data)
       // 다시 불러오기: 그때의 조건·직원으로 채운다(저장한 계획 보기는 고칠 수 없어 건너뜀).
@@ -174,9 +187,11 @@ export default function EasyRoster({
         setSaved(opened?.savedNote ?? `${OPTION_NAME[choice]}로 저장한 업무예요`)
       }
       onPhase('result')
+      return Boolean(back && !opened?.readOnly)
     } catch (cause) {
       setError(errorText(cause, '근무표를 불러오지 못했어요.'))
       onPhase('error')
+      return false
     }
   }
 
@@ -201,6 +216,83 @@ export default function EasyRoster({
 
   // ---------------------------------------------------------------- 계산
   const equipment = equipmentOf
+
+  /** 계산에 보낼 요일별 조건·직원 명단. 진짜 계산과 미리 계산이 같은 값을 보내야 서버의 요일 기억을 같이 쓴다. */
+  function rosterBody(c: RosterConditions): JsonObject {
+    const people = { isOwnerWorking: c.owner, hourlyWage: Number(c.wage) }
+    const days =
+      restored || !imp
+        ? restoredDayBodies((restored as { request: StoredRequest }).request, c)
+        : rosterDays(
+            dataDays,
+            (day) => planFrom(imp, day, null, {}, 1, aiTypes),
+            (p) => draftBody(formFromPlan(imp, p, people, equipment(c))),
+            c.owner,
+            c.team,
+          ).days
+    // 쉬운 화면은 주휴 비교를 보여 주지 않으므로 계산하지 않는다(요일마다 근무표 하나를 덜 짜서 빨라진다).
+    return { days, workers: rosterWorkers(c.team.people), compare_holiday_pay: false }
+  }
+
+  // ---------------------------------------------------------------- 미리 계산(E·G)
+  // 서버가 미리 계산해 두면(저장 없음) "만들기"·말로 고치기를 할 때 끝난 요일은 바로, 도는 요일은 이어받는다.
+  // - 조건 확인 카드(E): 지금 조건. 고치는 중에는 보내지 않고, 마지막으로 바뀐 뒤 WARM_DELAY_MS가 지나야 보낸다.
+  // - 결과 화면(G): 목표 대기의 다른 값(3·5·7분)을 하나씩 차례로. 서버는 미리 계산을 한 번에 1건만 받아서
+  //   앞 계산이 도는 동안은 WARM_RETRY_MS마다 다시 묻는다. 진짜 계산이 돌면 서버가 건너뛰고 여기서도 멈춘다.
+  const warmSent = useRef(new Set<string>())
+  const warmStage: WarmStage | null =
+    readOnly || !cond || stops.length || !(restored || (imp && plan))
+      ? null
+      : phase === 'confirm' && !editing
+        ? 'confirm'
+        : phase === 'result' && options && !legacy
+          ? 'result'
+          : null
+  const warmBodies = useMemo(() => {
+    if (!warmStage || !cond) return []
+    try {
+      return warmConditions(warmStage, cond, WAIT_CHOICES)
+        .map((c) => rosterBody(c))
+        .filter((b) => (b.days as JsonObject[]).length)
+    } catch {
+      return []
+    }
+    // rosterBody는 아래 값들로만 정해진다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warmStage, cond, restored, imp, aiTypes])
+  useEffect(() => {
+    const queue = warmBodies.map((body) => ({ body, signature: JSON.stringify(body) })).filter((w) => !warmSent.current.has(w.signature))
+    if (!queue.length) return
+    let timer = 0
+    let stopped = false
+    let tries = 0
+    const send = async () => {
+      const next = queue[0]
+      if (stopped || !next) return
+      tries += 1
+      try {
+        const answer = await warmRoster(next.body)
+        if (stopped) return
+        if (answer.data?.state === 'STARTED') {
+          warmSent.current.add(next.signature)
+          queue.shift()
+          tries = 0
+          if (queue.length) timer = window.setTimeout(send, WARM_RETRY_MS)
+        } else if (answer.data?.reason === 'WARM_RUNNING' && tries < WARM_RETRIES) {
+          // 앞 미리 계산이 아직 도는 중: 조금 뒤 다시
+          timer = window.setTimeout(send, WARM_RETRY_MS)
+        }
+        // REAL_RUNNING(진짜 계산 중)·INVALID면 멈춘다.
+      } catch {
+        // 미리 계산은 실패해도 진짜 계산에 영향이 없다.
+      }
+    }
+    timer = window.setTimeout(send, WARM_DELAY_MS)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
+  }, [warmBodies])
 
   async function run(c: RosterConditions | null = cond) {
     if (!c || stops.length || (!restored && (!imp || !plan))) return
@@ -233,19 +325,10 @@ export default function EasyRoster({
       const versionNo = Number(data?.version_no)
       if (!versionId || !versionNo) throw new Error('조건을 저장하지 못했어요.')
       await workflowApi.confirmInput(versionId, versionNo)
-      const days =
-        restored || !imp
-          ? restoredDayBodies((restored as { request: StoredRequest }).request, c)
-          : rosterDays(
-              dataDays,
-              (day) => planFrom(imp, day, null, {}, 1, aiTypes),
-              (p) => draftBody(formFromPlan(imp, p, people, equipment(c))),
-              c.owner,
-              c.team,
-            ).days
-      if (!days.length) throw new Error('근무표를 만들 요일 데이터가 없어요.')
+      const body = rosterBody(c)
+      if (!(body.days as JsonObject[]).length) throw new Error('근무표를 만들 요일 데이터가 없어요.')
       const key = crypto.randomUUID()
-      const begun = await startRosterResult(sessionId, { input_version_id: versionId, days, workers: rosterWorkers(c.team.people) }, key)
+      const begun = await startRosterResult(sessionId, { input_version_id: versionId, ...body }, key)
       if (begun.status !== 'ok' || !begun.data) throw new Error(begun.message ?? '계산을 시작하지 못했어요.')
       const job = begun.data.state === 'DONE' ? begun.data : await waitRoster({ sessionId, versionId, key }, setSeconds, stop)
       if (!job || stop.stopped) return

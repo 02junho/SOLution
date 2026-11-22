@@ -4,7 +4,7 @@ import type { OptionKey, RosterOptions, RosterSummary } from '../lab/rosterTypes
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shownDays, unfilledCells, waitText, weekRows, won } from './easyRosterModel'
+import { averagePeak, busiestDay, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, waitText, weekRows, won } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -124,7 +124,7 @@ export default function EasyRosterResult({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} className={r.owner ? 'owner' : ''}>
+                <tr key={r.key} className={r.owner ? 'owner' : r.hire ? 'hire' : ''}>
                   <th scope="row">
                     {r.name}
                     {r.hours != null && <small>주 {r.hours}시간</small>}
@@ -133,7 +133,11 @@ export default function EasyRosterResult({
                     <td key={days[i]}>
                       {c && (
                         <span className={`er-shift${c.breaks.length ? ' rest' : ''}`}>
-                          {range(c.start, c.end)}
+                          <span className="er-time">
+                            {shiftParts(c.start, c.end).map((part) => (
+                              <span key={part}>{part}</span>
+                            ))}
+                          </span>
                           {c.breaks.length > 0 && <small>휴게 {c.breaks.join(', ')}</small>}
                         </span>
                       )}
@@ -155,11 +159,14 @@ export default function EasyRosterResult({
         <p className="easy-legend er-legend">
           <span><i className="owner" />사장님</span>
           <span><i />알바</span>
+          {(option.new_hires?.length ?? 0) > 0 && <span><i className="hire" />새로 뽑을 알바</span>}
           <span><i className="rest" />휴게 있음(4시간 넘게 일하면 30분, 무급)</span>
         </p>
         {option.shortfall.more_people_under_15h > 0 && (
           <p className="er-warn">
-            지금 알바 명단으로는 {option.shortfall.unfilled_hours}시간이 비어요. 주 15시간 미만으로 채우려면 알바 {option.shortfall.more_people_under_15h}명이 더 필요해요.
+            {option.new_hires
+              ? `지금 알바 명단으로는 ${option.shortfall.unfilled_hours}시간이 비어서, 알바 ${option.shortfall.more_people_under_15h}명을 더 뽑으면 이 근무표대로 돌아가요(모두 주 15시간 미만).`
+              : `지금 알바 명단으로는 ${option.shortfall.unfilled_hours}시간이 비어요. 주 15시간 미만으로 채우려면 알바 ${option.shortfall.more_people_under_15h}명이 더 필요해요.`}
           </p>
         )}
         <p className="easy-print-only easy-print-sign">확인 ____________</p>
@@ -189,7 +196,7 @@ export default function EasyRosterResult({
 
       {!readOnly && chat}
 
-      <section className="easy-card easy-noprint" data-tour="save">
+      <section className="easy-card easy-noprint er-save" data-tour="save">
         {readOnly ? (
           <p className="easy-done">{saved}</p>
         ) : (
@@ -197,7 +204,7 @@ export default function EasyRosterResult({
             key={option.key}
             lines={[
               `${OPTION_NAME[option.key]} · 바쁜 시간 가장 긴 대기 ${waitText(peak)}`,
-              `주 인건비 ${won(option.plan_cost_krw)} · 알바 ${option.weekly.people_used}명(모두 주 15시간 미만)`,
+              `주 인건비 ${won(option.plan_cost_krw)} · 알바 ${option.weekly.people_used}명${option.shortfall.more_people_under_15h > 0 ? ` + 새로 뽑을 알바 ${option.shortfall.more_people_under_15h}명` : ''}(모두 주 15시간 미만)`,
               ...notes.map((n) => n.message),
             ]}
             warnings={warnings}
