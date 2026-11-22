@@ -67,7 +67,8 @@ type Option = RosterOptions['options'][number]
 export function breaksOf(option: Option, slotId: string): { start_time: string; end_time: string }[] {
   const cut = slotId.lastIndexOf('-')
   const day = slotId.slice(0, cut)
-  const index = Number(slotId.slice(cut + 1))
+  // 서버(weekly_roster._slots)는 그날 직원 근무조를 1부터 센다: "MON-1" = 월요일 첫 번째 근무조
+  const index = Number(slotId.slice(cut + 1)) - 1
   const shifts = option.days[day]?.shifts.filter((s) => !s.is_owner) ?? []
   return shifts[index]?.breaks ?? []
 }

@@ -144,9 +144,11 @@ export default function EasyPage() {
 
   // 대화 중에는 마지막 말이 보이게, 결과가 나오면 추천 문장부터 보이게(스크롤하지 않아도 결론이 보이도록).
   useEffect(() => {
-    if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'start' })
+    // 점심 인원 추천 근무표(2번)는 결과 화면 맨 위(결론)부터 보이게 한다(결과 자리 표시가 근무표 화면 아래에 있어서).
+    if (phase === 'result' && feature === 'operation' && roster) window.scrollTo({ top: 0 })
+    else if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'start' })
     else endRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [bubbles, phase])
+  }, [bubbles, phase, feature, roster])
 
   function startTour() {
     restart()
@@ -556,7 +558,8 @@ export default function EasyPage() {
           </section>
         )}
 
-        {inFlow && (
+        {/* 추천 근무표(2번)는 대화 말풍선 없이 조건 카드·결과만(시작할 때 보낸 예시 말은 사장님이 쓴 말이 아니다) */}
+        {inFlow && !(feature === 'operation' && roster) && (
           <div className="easy-chat" role="log" aria-live="polite">
             {bubbles.map((bubble, i) => (
               <p key={i} className={`easy-bubble ${bubble.role}`}>{bubble.text}</p>

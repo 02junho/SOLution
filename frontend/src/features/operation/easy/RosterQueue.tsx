@@ -6,6 +6,7 @@ import type { OperationTrace } from '../types'
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
 import { clock, OPTION_NAME, staffText } from './easyRosterModel'
+import Info from './Info'
 
 /*
  * 줄 서는 모습: 같은 요일·같은 손님으로 "인건비 절약 근무표"와 고른 근무표를 번갈아 재생한다.
@@ -84,7 +85,9 @@ export default function RosterQueue({
       ) : (
         <Queue key={key} trace={loaded} windows={windows} />
       )}
-      <p className="easy-queue-hint">근무표 숫자를 낸 {repetitions ? `${repetitions}번` : '여러 번'} 계산 중 첫 번째 판이에요. 위의 가장 긴 대기와 조금 다를 수 있어요.</p>
+      <Info title="이 줄은 어떻게 나온 건가요?">
+        근무표 숫자를 낸 {repetitions ? `${repetitions}번` : '여러 번'} 계산 중 첫 번째 판이에요. 위의 가장 긴 대기(여러 번 평균)와 조금 다를 수 있어요.
+      </Info>
     </div>
   )
 }

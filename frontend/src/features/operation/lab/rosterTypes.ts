@@ -51,7 +51,8 @@ export type DailyRoster = {
 /** ai-server /tools/simulation/weekly-roster 응답(operation.weekly_roster.v1). */
 export type WeeklyResult = {
   mode: 'UNDER_15H' | 'WITH_HOLIDAY_PAY'
-  assignments: { slot_id: string; day: string; worker_key: string; name: string; start_time: string; end_time: string; work_hours: number }[]
+  /** breaks: 서버가 자리마다 실어 주는 휴게(없으면 근무조 순서로 찾는다) */
+  assignments: { slot_id: string; day: string; worker_key: string; name: string; start_time: string; end_time: string; work_hours: number; breaks?: { start_time: string; end_time: string }[] }[]
   unfilled: { slot_id: string; day: string; start_time: string; end_time: string; work_hours: number }[]
   workers: {
     worker_key: string
@@ -121,7 +122,9 @@ export type RosterOptions = {
       worker_key: string
       name: string
       weekly_work_hours: number
-      assignments: { slot_id: string; day: string; start_time: string; end_time: string; work_hours: number }[]
+      /** 주 예상 급여(주 근무시간 × 시급, 주휴 없음). 예전 결과에는 없다 */
+      base_wage_krw?: number
+      assignments: { slot_id: string; day: string; start_time: string; end_time: string; work_hours: number; breaks?: { start_time: string; end_time: string }[] }[]
     }[]
     daily_cost_krw: Record<string, number>
     peak_wait_sec: Record<string, number | null>

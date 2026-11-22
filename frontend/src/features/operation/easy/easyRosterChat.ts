@@ -38,6 +38,21 @@ export function chatFields(open: string, close: string, dataDays: Weekday[]): Ch
 
 const aliasOf = (i: number) => `P${i + 1}`
 
+/**
+ * 사장님이 쓴 말 속 직원 이름 → 별칭(P1…). AI에는 이름을 보내지 않는다("직원 G가 토요일에 못 나온대" → "P7이 …").
+ * 긴 이름부터 바꿔 "직원 A"가 "직원 AB" 안에서 먼저 바뀌지 않게 한다.
+ */
+export function toAliases(text: string, people: Person[]): string {
+  const named = people.map((p, i) => ({ name: p.name.trim(), alias: aliasOf(i) })).filter((x) => x.name)
+  named.sort((a, b) => b.name.length - a.name.length)
+  return named.reduce((out, x) => out.split(x.name).join(x.alias), text)
+}
+
+/** AI 답장 속 별칭(P1…) → 화면에 보이는 직원 이름. 명단에 없는 번호는 그대로 둔다. */
+export function toNames(text: string, people: Person[]): string {
+  return text.replace(/\bP(\d{1,2})\b/g, (whole, n: string) => people[Number(n) - 1]?.name || whole)
+}
+
 /** 직원은 이름 없이 별칭(P1…)만 보낸다. */
 export const chatWorkers = (people: Person[]): JsonObject[] =>
   people.map((p, i) => ({ alias: aliasOf(i), days: p.days, start: p.start, end: p.end, max_hours: Number(p.maxHours), minor: p.minor }))

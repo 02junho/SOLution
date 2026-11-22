@@ -257,7 +257,7 @@ def assign(slots: list[dict], workers: list[dict], mode: str) -> dict:
         ],
         "unfilled": [
             {"slot_id": s["slot_id"], "day": s["day"], "start_time": s["start_time"], "end_time": s["end_time"],
-             "work_hours": s["work_min"] / 60}
+             "breaks": s["breaks"], "work_hours": s["work_min"] / 60}
             for s in sorted(unfilled, key=key)
         ],
         "workers": rows,
@@ -267,12 +267,13 @@ def assign(slots: list[dict], workers: list[dict], mode: str) -> dict:
     }
 
 
-def new_hires(unfilled: list[dict], cap_hours: float, prefix: str = "새 알바") -> list[dict]:
+def new_hires(unfilled: list[dict], cap_hours: float, prefix: str = "새 알바", wage: float | None = None) -> list[dict]:
     """명단으로 못 채운 자리를 새로 뽑을 알바에 나눠 넣는다(추천 근무표 6번: 결과가 원하는 근무표를 끝까지 채워 보여 주기).
 
     배정과 같은 규칙: 한 사람은 하루 한 근무, 주 근무시간은 cap_hours 이하(15시간 미만 안이면 14.5).
     긴 자리부터, 넣을 수 있는 사람 중 앞 사람에게(같은 입력이면 늘 같은 결과). 가능 시간은 새로 뽑는 사람이라 따지지 않는다.
-    반환: [{"worker_key": "NEW_1", "name": "새 알바 1", "weekly_work_hours", "assignments": [자리...]}]
+    wage(시급)가 있으면 주 예상 급여(base_wage_krw = 주 근무시간 × 시급, 주휴 없음)도 붙인다. 배정한 직원과 같은 식(_won).
+    반환: [{"worker_key": "NEW_1", "name": "새 알바 1", "weekly_work_hours", "base_wage_krw"?, "assignments": [자리...]}]
     """
     cap = round(cap_hours * 60)
     order = sorted(unfilled, key=lambda u: (-u["work_hours"], DAYS.index(u["day"]), u["start_time"]))
@@ -295,6 +296,7 @@ def new_hires(unfilled: list[dict], cap_hours: float, prefix: str = "새 알바"
             "worker_key": h["worker_key"],
             "name": h["name"],
             "weekly_work_hours": h["minutes"] / 60,
+            **({"base_wage_krw": _won(Decimal(h["minutes"]) / 60 * Decimal(str(wage)))} if wage else {}),
             "assignments": [{**u, "worker_key": h["worker_key"], "name": h["name"]} for u in sorted(h["slots"], key=by_day)],
         }
         for h in hires

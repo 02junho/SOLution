@@ -333,6 +333,12 @@ def _assign(day_views, workers, mode):
     return weekly_roster.assign(weekly_roster._slots(days), workers, mode)
 
 
+def _hire_wage(days):
+    """새로 뽑을 알바의 시급: 요일 조건의 직원 시급(쉬운 화면은 요일마다 같다). 없으면 None(급여 칸 없이)."""
+    wages = [d["roster"].get("hourly_wage_krw") for d in days if isinstance(d.get("roster"), dict)]
+    return next((w for w in wages if type(w) in (int, float) and w > 0), None)
+
+
 def _shortfall(weekly, hires):
     """못 채운 자리와, 그 자리를 주 15시간 미만 새 알바에 실제로 나눠 넣었을 때 몇 명이 더 필요한지(new_hires 줄 수와 같다)."""
     hours = sum(u["work_hours"] for u in weekly["unfilled"])
@@ -372,7 +378,7 @@ def plan(body: dict, engine: str = "simpy") -> dict:
         views = {n: r["rosters"][str(r["picks"][key])] for n, r in done.items()}
         weekly = _assign(views, workers, "UNDER_15H")
         # 명단으로 못 채운 자리는 새로 뽑을 알바에 나눠 넣어 근무표를 끝까지 채운다(지금 직원 배정은 그대로).
-        hires = weekly_roster.new_hires(weekly["unfilled"], UNDER_15H_MAX_HOURS)
+        hires = weekly_roster.new_hires(weekly["unfilled"], UNDER_15H_MAX_HOURS, wage=_hire_wage(days))
         options.append(
             {
                 "key": key,

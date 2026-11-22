@@ -14,7 +14,7 @@ import { DEFAULT_CLOSE, DEFAULT_OPEN, DEFAULT_TARGET_WAIT_SEC, draftBody, draftO
 import { analyzeTable, MENU_TYPES, planFrom, readTable, WEEKDAY_LABEL, WEEKDAYS } from '../workspace/storeFile'
 import type { StoreImport, Weekday } from '../workspace/storeFile'
 import EasyRosterResult from './EasyRosterResult'
-import { applyReply, chatFields, chatState, chatWorkers } from './easyRosterChat'
+import { applyReply, chatFields, chatState, chatWorkers, toAliases, toNames } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
 import { clock, OPTION_NAME, won } from './easyRosterModel'
 import { equipmentOf, patchForm, restoreConditions, restoredDayBodies, restoredFacts } from './easyRosterRestore'
@@ -35,6 +35,8 @@ export type RosterPhase = 'start' | 'ask' | 'loading' | 'confirm' | 'running' | 
 export type RosterOpened = { sessionId: number; resultId: number | null; savedChoice?: string | null; savedNote?: string; readOnly?: boolean }
 
 // 시연용 가상 매장 데이터(마이샵에서 받을 데이터를 가정한 예시). 모양은 서울시 상권분석서비스 분기 중앙값에 맞췄다.
+// 첫 단계 "어떤 데이터로 만들까요?"의 기본: 마이샵에 연결된 매출(시연에서는 연동이 없어 첫 예시 가게 데이터를 쓴다).
+const MYSHOP_LABEL = '마이샵 매출 데이터'
 const SAMPLES = [
   { file: 'shinhan_pattern_pos.xlsx', label: '예시 가게 (상권 평균 모양)' },
   { file: 'busy_cafe_pos.xlsx', label: '바쁜 예시 가게 (아침·점심 모두 붐빔)' },
@@ -83,6 +85,9 @@ export default function EasyRoster({
   const [seconds, setSeconds] = useState(0)
   const stopRef = useRef<{ stopped: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // 새로 시작하면 먼저 데이터를 고른다(한 화면에 하나만 묻기). 이어서 열거나 다시 계산할 때는 건너뛴다.
+  const [pickData, setPickData] = useState(!opened?.resultId)
+  const [showSamples, setShowSamples] = useState(false)
 
   const imp = source?.imp ?? null
   const plan = useMemo(() => (imp ? planFrom(imp, 'AVERAGE', null, {}, 1, aiTypes) : null), [imp, aiTypes])
@@ -96,7 +101,8 @@ export default function EasyRoster({
   const readOnly = Boolean(opened?.readOnly)
 
   // ---------------------------------------------------------------- 데이터 읽기
-  async function readFile(file: File, label: string) {
+  /** 판매 내역 읽기. 읽었으면 true. */
+  async function readFile(file: File, label: string): Promise<boolean> {
     setError('')
     try {
       const next = analyzeTable(await readTable(file), file.name)
@@ -130,17 +136,26 @@ export default function EasyRoster({
           setAiCount(Object.keys(picked).length)
         }
       }
+      return true
     } catch (cause) {
       setError(errorText(cause, '가게 데이터를 읽지 못했어요.'))
+      return false
     }
   }
-  async function readSample(file: string, label: string) {
+  async function readSample(file: string, label: string): Promise<boolean> {
     const response = await fetch(`/samples/${file}`)
     if (!response.ok) {
       setError('예시 가게 데이터를 불러오지 못했어요.')
-      return
+      return false
     }
-    await readFile(new File([await response.blob()], file), label)
+    return readFile(new File([await response.blob()], file), label)
+  }
+  /** 첫 단계에서 고른 데이터로 조건 확인 카드로 넘어간다. */
+  async function chooseData(read: () => Promise<boolean>) {
+    if (await read()) {
+      setPickData(false)
+      setShowSamples(false)
+    }
   }
 
   // 처음: 저장된 결과가 있으면 그 결과부터(예시 파일을 읽고 AI 메뉴 분류를 기다리지 않고 바로 연다).
@@ -153,10 +168,10 @@ export default function EasyRoster({
     void (async () => {
       if (opened?.resultId) {
         const back = await showSaved(opened.resultId)
-        if (!back && !opened.readOnly) await readSample(SAMPLES[0].file, SAMPLES[0].label)
+        if (!back && !opened.readOnly) await readSample(SAMPLES[0].file, MYSHOP_LABEL)
         return
       }
-      await readSample(SAMPLES[0].file, SAMPLES[0].label)
+      await readSample(SAMPLES[0].file, MYSHOP_LABEL)
       onPhase('confirm')
     })()
     // 처음 한 번만. 다른 업무를 열면 쉬운 화면이 이 조각을 새로 만든다(key).
@@ -243,7 +258,7 @@ export default function EasyRoster({
   const warmStage: WarmStage | null =
     readOnly || !cond || stops.length || !(restored || (imp && plan))
       ? null
-      : phase === 'confirm' && !editing
+      : phase === 'confirm' && !editing && !pickData
         ? 'confirm'
         : phase === 'result' && options && !legacy
           ? 'result'
@@ -372,7 +387,8 @@ export default function EasyRoster({
     setChatReply(null)
     try {
       const response = await rosterChat({
-        message,
+        // 직원 이름은 별칭으로 바꿔 보내고(AI에 이름이 가지 않게), 답장은 다시 이름으로 바꿔 보여 준다.
+        message: toAliases(message, cond.team.people),
         fields: chatFields(open, close, dataDays),
         state: chatState(cond, { open, close, busy: peakNow ? `${peakNow.start}~${peakNow.end}` : null, dailyOrders: dailyNow }),
         workers: chatWorkers(cond.team.people),
@@ -382,7 +398,7 @@ export default function EasyRoster({
       const reply = response.data
       const applied = applyReply(cond, reply, { open, close })
       setChatText('')
-      setChatReply({ text: reply.reply, ok: applied.changed })
+      setChatReply({ text: toNames(reply.reply, cond.team.people), ok: applied.changed })
       if (applied.changed) {
         setCond(applied.next)
         setChangedRows(applied.rows)
@@ -495,13 +511,74 @@ export default function EasyRoster({
     : '매장에서 일하지 않아요'
   const withCurrent = (list: number[], v: number) => [...new Set([...list, v])].sort((a, b) => a - b)
   const wageNumber = Number(cond.wage)
+  // 파일 고르기 창(첫 단계와 고치기에서 같이 쓴다)
+  const fileInput = (
+    <input
+      ref={fileRef}
+      type="file"
+      accept=".xlsx,.csv"
+      hidden
+      onChange={(e) => {
+        const file = e.target.files?.[0]
+        if (file) void chooseData(() => readFile(file, `내 판매 내역 (${file.name})`))
+        e.target.value = ''
+      }}
+    />
+  )
+  if (pickData)
+    return (
+      <Card title="어떤 데이터로 근무표를 만들까요?" tour="confirm">
+        {fileInput}
+        <div className="er-source">
+          <button type="button" className="er-source-main" onClick={() => void chooseData(() => readSample(SAMPLES[0].file, MYSHOP_LABEL))}>
+            <span aria-hidden>🔗</span>
+            <span>
+              <b>
+                마이샵 매출 데이터로 만들기 <em className="er-badge-inline">추천</em>
+              </b>
+              <small>연결된 카드 매출로 바로 계산해요 · 시연은 예시 데이터</small>
+            </span>
+            <i aria-hidden>›</i>
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()}>
+            <span aria-hidden>📁</span>
+            <span>
+              <b>내 판매 내역 파일 올리기</b>
+              <small>포스기에서 받은 엑셀·CSV</small>
+            </span>
+            <i aria-hidden>›</i>
+          </button>
+          <button type="button" aria-expanded={showSamples} onClick={() => setShowSamples((v) => !v)}>
+            <span aria-hidden>🧪</span>
+            <span>
+              <b>예시 가게로 먼저 해 보기</b>
+              <small>내 데이터 없이 체험해요</small>
+            </span>
+            <i aria-hidden>{showSamples ? '⌄' : '›'}</i>
+          </button>
+          {showSamples && (
+            <div className="easy-pick er-source-samples" role="group" aria-label="예시 가게">
+              {SAMPLES.map((s) => (
+                <button key={s.file} type="button" onClick={() => void chooseData(() => readSample(s.file, s.label))}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="easy-muted er-source-note">파일은 이 브라우저 안에서만 읽고, 시간대별 주문 수 같은 정리한 숫자만 저장해요.</p>
+        {error && <p className="easy-error">{error}</p>}
+      </Card>
+    )
+  const sourceTag = facts ? '지난번 조건' : source?.label === MYSHOP_LABEL ? '마이샵' : source?.label.startsWith('내 판매 내역') ? '내 파일' : '예시'
   return (
     <>
+      {fileInput}
       <Card title="이 조건이 맞나요?" tour="confirm">
         <ul className="easy-facts er-facts">
           <li>
             <span>
-              가게 데이터 <em className="er-tag">{facts ? '지난번 조건' : '예시'}</em>
+              가게 데이터 <em className="er-tag">{sourceTag}</em>
             </span>
             <b>
               {facts ? `지난번에 쓴 데이터${facts.dataDays ? ` · ${facts.dataDays}일치 판매 내역` : ''}` : `${source?.label} · ${plan?.days ?? 0}일치 판매 내역`}
@@ -558,17 +635,6 @@ export default function EasyRoster({
             />
             <p className="er-file">
               <button type="button" className="easy-text-button" onClick={() => fileRef.current?.click()}>내 판매 내역 파일 올리기 (엑셀·CSV)</button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".xlsx,.csv"
-                hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void readFile(file, `올린 파일 (${file.name})`)
-                  e.target.value = ''
-                }}
-              />
               <small>파일은 이 브라우저 안에서만 읽고, 시간대별 주문 수 같은 정리한 숫자만 저장해요.</small>
             </p>
           </div>

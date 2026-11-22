@@ -23,9 +23,10 @@ const option = (key, extra) => ({
   },
   weekly: {
     assignments: [
-      { slot_id: 'MON-0', day: 'MON', worker_key: 'A', name: '직원 A', start_time: '11:00', end_time: '14:00', work_hours: 3 },
-      { slot_id: 'MON-1', day: 'MON', worker_key: 'B', name: '직원 B', start_time: '14:00', end_time: '19:00', work_hours: 4.5 },
-      { slot_id: 'TUE-0', day: 'TUE', worker_key: 'A', name: '직원 A', start_time: '11:00', end_time: '14:00', work_hours: 3 },
+      // 서버와 같게 그날 직원 근무조를 1부터 센다(MON-1 = 월요일 첫 근무조). 예전 결과처럼 breaks는 없음
+      { slot_id: 'MON-1', day: 'MON', worker_key: 'A', name: '직원 A', start_time: '11:00', end_time: '14:00', work_hours: 3 },
+      { slot_id: 'MON-2', day: 'MON', worker_key: 'B', name: '직원 B', start_time: '14:00', end_time: '19:00', work_hours: 4.5 },
+      { slot_id: 'TUE-1', day: 'TUE', worker_key: 'A', name: '직원 A', start_time: '11:00', end_time: '14:00', work_hours: 3 },
     ],
     unfilled: [],
     workers: [
@@ -98,14 +99,16 @@ test('새로 뽑을 알바: 서버가 나눈 그대로 줄로, 빈 자리 줄은
   const option = {
     ...base,
     weekly: { ...base.weekly, unfilled: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5 }] },
-    new_hires: [{ worker_key: 'NEW_1', name: '새 알바 1', weekly_work_hours: 4.5, assignments: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5 }] }],
+    new_hires: [{ worker_key: 'NEW_1', name: '새 알바 1', weekly_work_hours: 4.5, base_wage_krw: 46_440, assignments: [{ slot_id: 'TUE-2', day: 'TUE', start_time: '07:00', end_time: '12:00', work_hours: 4.5, breaks: [{ start_time: '09:30', end_time: '10:00' }] }] }],
   }
   const rows = model.weekRows(option, ['MON', 'TUE'])
   const hire = rows.at(-1)
   assert.equal(hire.name, '새 알바 1')
   assert.equal(hire.hire, true)
+  assert.equal(hire.pay, 46_440, '주 예상 급여는 서버 값 그대로')
   assert.equal(hire.cells[0], null)
   assert.equal(hire.cells[1].start, '07:00')
+  assert.deepEqual(hire.cells[1].breaks, ['9:30~10:00'], '서버가 실어 준 휴게를 그대로')
   assert.equal(model.unfilledCells(option, ['MON', 'TUE']), null)
   // 예전 결과(new_hires 없음)는 빈 자리 줄로
   const { new_hires: _, ...old } = option
@@ -244,4 +247,38 @@ test('미리 계산 순서: 조건 카드는 지금 조건, 결과 화면은 다
   const later = warm.warmConditions('result', cond, [3, 5, 7])
   assert.deepEqual(later.map((c) => c.targetWaitSec), [180, 420])
   assert.equal(later[0].wage, '10320', '목표 대기만 바꾼다')
+})
+
+test('휴게는 그 근무조 것: 서버 번호(1부터)로 찾고, 서버가 실어 준 값이 있으면 그것', () => {
+  const base = data.options[1]
+  const rows = model.weekRows(base, ['MON'])
+  assert.deepEqual(rows.find((r) => r.name === '직원 A').cells[0].breaks, [], '월 첫 근무조(11~14시)는 휴게 없음')
+  assert.deepEqual(rows.find((r) => r.name === '직원 B').cells[0].breaks, ['16:00~16:30'], '월 둘째 근무조(14~19시)의 휴게')
+  const given = { ...base, weekly: { ...base.weekly, assignments: base.weekly.assignments.map((a) => (a.slot_id === 'MON-1' ? { ...a, breaks: [{ start_time: '12:00', end_time: '12:30' }] } : a)) } }
+  assert.deepEqual(model.weekRows(given, ['MON']).find((r) => r.name === '직원 A').cells[0].breaks, ['12:00~12:30'])
+})
+
+test('말로 고치기: 이름은 별칭으로 보내고, 답장의 별칭은 이름으로', () => {
+  const people = [{ id: 1, name: '직원 A' }, { id: 2, name: '직원 AB' }, { id: 3, name: '김민지' }]
+  assert.equal(chat.toAliases('직원 AB랑 김민지가 토요일에 못 나온대, 직원 A는 돼', people), 'P2랑 P3가 토요일에 못 나온대, P1는 돼')
+  assert.equal(chat.toNames('P3은 토요일 근무를 뺐어요. P9는 없어요.', people), '김민지은 토요일 근무를 뺐어요. P9는 없어요.')
+  assert.equal(chat.toNames('P1~P2 중 누구인가요?', people), '직원 A~직원 AB 중 누구인가요?')
+})
+
+test('비교 카드: 추천과 견준 한 줄(몇 초 차이는 거의 같음)', () => {
+  const days = ['MON', 'TUE']
+  const rec = { key: 'RECOMMENDED', plan_cost_krw: 1_000_000, peak_wait_sec: { MON: 120, TUE: 120 } }
+  const save = { key: 'SAVE', plan_cost_krw: 700_000, peak_wait_sec: { MON: 180, TUE: 160 } }
+  const roomy = { key: 'ROOMY', plan_cost_krw: 1_400_000, peak_wait_sec: { MON: 116, TUE: 118 } }
+  assert.equal(model.versusText(rec, rec, days), null)
+  assert.equal(model.versusText(save, rec, days), '추천보다 대기 +50초 · 인건비 −300,000원')
+  assert.equal(model.versusText(roomy, rec, days), '추천보다 대기는 거의 같아요 · 인건비 +400,000원')
+})
+
+test('목록 요약: 바꾼 목표 대기·시급이 보여 같은 가게 근무표끼리 구분된다', async () => {
+  const recent = await server.ssrLoadModule('/src/features/easy/recentFormat.ts')
+  const form = { daily_orders: 142, is_owner_working: true, target_wait_sec: 180, hourly_wage_krw: 12000, orders_by_slot: { '07:00-08:00': 5 } }
+  assert.equal(recent.inputSummary('operation', { operation_form: form }), '주문 142건 · 사장님 같이 일함 · 목표 대기 3분 · 시급 12,000원')
+  // 1번(시간대 주문 없음)은 예전 그대로
+  assert.equal(recent.inputSummary('operation', { operation_form: { daily_orders: 150, is_owner_working: true, hourly_wage_krw: 10320 } }), '보통 날(150건) · 사장님 같이 일함')
 })

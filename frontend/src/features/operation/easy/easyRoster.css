@@ -36,7 +36,8 @@
 .er-week th { font-weight: 700; color: var(--gray-2); text-align: center; padding: 4px; }
 .er-week th small { display: block; color: var(--blue-dark); font-weight: 600; font-size: 0.82em; }
 .er-week tbody th { text-align: left; color: var(--ink-2); white-space: nowrap; }
-.er-week tbody th small { color: var(--good); }
+.er-week tbody th small { display: block; color: var(--good); }
+.er-week tbody th small.er-pay { color: var(--gray-2); font-weight: 500; }
 .er-week td { height: 46px; padding: 0; vertical-align: middle; }
 /* 시각은 숫자 중간에서 끊지 않고, 칸이 좁으면 "~" 뒤에서만 줄을 바꾼다 */
 .er-time { display: flex; flex-wrap: wrap; }
@@ -45,18 +46,59 @@
 .er-shift small { color: var(--gray-2); font-size: 0.82em; }
 .er-shift.rest { background-image: repeating-linear-gradient(135deg, transparent 0 5px, #b9c0cc 5px 6px); background-size: 100% 4px; background-repeat: no-repeat; background-position: bottom; }
 .er-week tr.owner .er-shift { background: var(--blue-soft); }
-.er-week tr.hire .er-shift { background: #fff; border: 1.5px dashed #6fbf8f; }
+.er-week tr.hire .er-shift { background: #fff7d6; border: 1.5px dashed #c99a1c; }
 .er-week tr.hire th { color: var(--accent); }
 .er-week tr.need th, .er-week tr.need td { color: var(--accent); font-weight: 700; font-size: 0.9em; line-height: 1.4; }
 .er-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 0.82em; color: var(--gray); }
 .er-legend i { display: inline-block; width: 14px; height: 10px; margin-right: 4px; border-radius: 3px; background: #e5f6ec; vertical-align: middle; }
 .er-legend i.owner { background: var(--blue-soft); }
-.er-legend i.hire { background: #fff; border: 1.5px dashed #6fbf8f; }
+.er-legend i.hire { background: #fff7d6; border: 1.5px dashed #c99a1c; }
 .er-legend i.rest { background: repeating-linear-gradient(135deg, #fff 0 3px, #9aa1ae 3px 4px); }
 .er-warn { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid #f4dfb0; color: #6b4b00; }
 
 /* 저장하기 버튼은 오른쪽(열면 상자는 전체 너비) */
 .er-save > .easy-primary { display: block; margin-left: auto; }
+.er-save .easy-save .easy-actions { justify-content: flex-end; }
+
+/* 첫 단계: 어떤 데이터로 만들까요(추천은 파란 테두리·연한 배경만, 셋 다 고를 수 있게) */
+.er-source { display: grid; gap: 10px; }
+.er-source > button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: left; color: var(--ink); }
+.er-source > button > span:first-child { font-size: 1.5em; flex: none; }
+.er-source > button b { display: block; font-size: 1.05em; margin-bottom: 2px; }
+.er-source > button small { color: var(--gray-2); font-size: 0.9em; }
+.er-source > button i { margin-left: auto; color: var(--gray); font-style: normal; font-size: 1.3em; }
+.er-source > button:hover { border-color: var(--ink); }
+.er-source > .er-source-main { border: 2px solid var(--blue); background: var(--blue-soft); padding: 13px 17px; }
+.er-source-main b { color: var(--blue-dark); }
+.er-badge-inline { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--blue); color: #fff; font-size: 0.75em; font-style: normal; font-weight: 700; vertical-align: 2px; }
+.er-source-samples { padding-left: 52px; }
+.er-source-note { margin-top: 12px; font-size: 0.85em; }
+
+/* 비교 카드의 "추천보다 …" 한 줄 */
+.er-versus { margin-top: 6px; color: var(--blue-dark); font-style: normal; font-weight: 700; font-size: 0.92em; }
+
+/* 접어 둔 짧은 설명(ⓘ) */
+.er-info { margin-top: 12px; color: var(--gray-2); font-size: 0.9em; }
+.er-info summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; color: var(--blue-dark); font-weight: 700; }
+.er-info > div { margin-top: 6px; padding: 10px 12px; border-radius: 10px; background: var(--fill); line-height: 1.6; }
+.er-info ul { margin: 0; padding-left: 1.1em; }
+
+/* 인쇄: 확인 칸은 맨 위, 표는 한 장에 들어가게 작게. 길면 줄 단위로 넘기고 머리줄을 다시 찍는다 */
+.er-sign { margin: -6px 0 10px !important; }
+@media print {
+  .easy .easy-print.er-print { break-inside: auto; padding: 7mm 10mm; }
+  .er-print h2 { margin: 0 0 2px; font-size: 1.25em; }
+  .er-sign { margin: 0 0 4px !important; }
+  .er-week { min-width: 0; font-size: 0.68em; border-spacing: 2px; }
+  .er-week td { height: 22px; }
+  .er-week tbody th { line-height: 1.05; padding: 2px 4px; }
+  .er-week tbody th small { font-size: 0.78em; }
+  .er-shift { min-height: 20px; padding: 1px 4px; line-height: 1.15; }
+  .er-legend { margin-top: 4px; }
+  .er-week tbody th, .er-week thead th:first-child { position: static; }
+  .er-week tr { break-inside: avoid; }
+  .er-week thead { display: table-header-group; }
+}
 
 /* 줄 서는 모습 재생 속도 */
 .er-speed { display: inline-flex; align-items: center; gap: 6px; }

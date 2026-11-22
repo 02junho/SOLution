@@ -3,8 +3,9 @@ import { Pick, SaveBox } from '../../easy/views'
 import type { OptionKey, RosterOptions, RosterSummary } from '../lab/rosterTypes'
 import { WEEKDAY_LABEL } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
+import Info from './Info'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, waitText, weekRows, won } from './easyRosterModel'
+import { averagePeak, busiestDay, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -50,6 +51,8 @@ export default function EasyRosterResult({
   const rows = weekRows(option, days)
   const holes = unfilledCells(option, days)
   const peak = averagePeak(option, days)
+  const recommended = data.options.find((o) => o.key === 'RECOMMENDED') ?? option
+  const rules = option.days[days[0]]?.rules as { short_shift_hours?: number; long_shift_hours?: number } | undefined
   const warnings = (summary?.warnings ?? []).filter((w) => w.requires_ack && (w.choice_keys === null || w.choice_keys.includes(option.key)))
   const notes = (summary?.warnings ?? []).filter((w) => !w.requires_ack && (w.choice_keys === null || w.choice_keys.includes(option.key)))
 
@@ -107,8 +110,9 @@ export default function EasyRosterResult({
         </section>
       )}
 
-      <section className="easy-card easy-print" data-tour="detail">
+      <section className="easy-card easy-print er-print" data-tour="detail">
         <h2>{OPTION_NAME[option.key]} · 일주일</h2>
+        <p className="easy-print-only easy-print-sign er-sign">확인 ____________</p>
         <div className="er-week-wrap">
           <table className="er-week">
             <thead>
@@ -128,6 +132,7 @@ export default function EasyRosterResult({
                   <th scope="row">
                     {r.name}
                     {r.hours != null && <small>주 {r.hours}시간</small>}
+                    {r.pay != null && <small className="er-pay">{won(r.pay)}</small>}
                   </th>
                   {r.cells.map((c, i) => (
                     <td key={days[i]}>
@@ -163,13 +168,25 @@ export default function EasyRosterResult({
           <span><i className="rest" />휴게 있음(4시간 넘게 일하면 30분, 무급)</span>
         </p>
         {option.shortfall.more_people_under_15h > 0 && (
-          <p className="er-warn">
+          <p className="er-warn easy-noprint">
             {option.new_hires
-              ? `지금 알바 명단으로는 ${option.shortfall.unfilled_hours}시간이 비어서, 알바 ${option.shortfall.more_people_under_15h}명을 더 뽑으면 이 근무표대로 돌아가요(모두 주 15시간 미만).`
-              : `지금 알바 명단으로는 ${option.shortfall.unfilled_hours}시간이 비어요. 주 15시간 미만으로 채우려면 알바 ${option.shortfall.more_people_under_15h}명이 더 필요해요.`}
+              ? `지금 직원 ${option.weekly.workers.length}명으로는 일주일에 ${option.shortfall.unfilled_hours}시간이 비어요. 알바 ${option.shortfall.more_people_under_15h}명을 더 뽑으면 이 근무표대로 돌아가요.`
+              : `지금 직원 ${option.weekly.workers.length}명으로는 일주일에 ${option.shortfall.unfilled_hours}시간이 비어요. 알바 ${option.shortfall.more_people_under_15h}명이 더 필요해요.`}
           </p>
         )}
-        <p className="easy-print-only easy-print-sign">확인 ____________</p>
+        <div className="easy-noprint">
+          <Info title="알바는 이렇게 일해요">
+            <ul>
+              <li>
+                한 번에 {rules?.short_shift_hours ?? 3.5}~{rules?.long_shift_hours ?? 5}시간씩, 하루에 한 번만 일해요(바쁜 시간에 맞춰 짧게 나눠요).
+              </li>
+              <li>직원마다 일할 수 있는 요일·시간 안에서만 넣어요.</li>
+              <li>모두 주 15시간 미만이라 주휴수당이 없어요. 새로 뽑을 알바도 같아요.</li>
+              <li>4시간 넘게 일하면 30분 쉬어요(무급). 바쁜 시간을 피해 넣었고, 근무 중간이면 옮겨도 돼요(처음·끝은 안 돼요).</li>
+              <li>"주 ○시간"은 쉬는 시간을 뺀, 실제로 돈을 받는 시간이에요. 옆의 금액은 이 근무표대로 일할 때 주 예상 급여예요(세전, 보험·가산수당 빼고).</li>
+            </ul>
+          </Info>
+        </div>
         {!readOnly && (
           <div className="easy-actions easy-noprint">
             <button type="button" className="easy-secondary" onClick={() => window.print()}>근무표 인쇄</button>
@@ -189,6 +206,7 @@ export default function EasyRosterResult({
               <span>주 인건비</span>
               <strong>{won(o.plan_cost_krw)}</strong>
               <span>알바 {o.weekly.people_used}명{o.shortfall.more_people_under_15h > 0 ? ` · ${o.shortfall.more_people_under_15h}명 더 필요` : ''}</span>
+              {versusText(o, recommended, days) && <em className="er-versus">{versusText(o, recommended, days)}</em>}
             </button>
           ))}
         </div>

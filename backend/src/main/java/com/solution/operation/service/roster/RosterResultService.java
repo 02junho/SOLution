@@ -319,7 +319,7 @@ public class RosterResultService {
 				"가게 데이터로 만든 평균 하루를 30번씩 돌린 계획 근무표예요. 실제 근무 기록이 아니에요."));
 		if (!short15.isEmpty()) {
 			warnings.add(warning(UNFILLED_SHIFTS, true, short15,
-					"직원 명단으로 다 못 채운 자리가 있어요. 알바를 더 구하거나 가능 시간을 넓혀야 해요."));
+					"지금 직원 명단으로는 다 못 채워요. 알바를 더 뽑거나, 지금 직원이 일할 수 있는 요일·시간을 늘리면 채울 수 있어요."));
 		}
 		Map<String, Object> holiday = (Map<String, Object>) options.get("holiday_compare");
 		Map<String, Object> summary = new LinkedHashMap<>();

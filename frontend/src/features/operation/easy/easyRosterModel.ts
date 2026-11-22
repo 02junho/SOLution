@@ -74,8 +74,14 @@ export function ladderBars(data: RosterOptions, day: Weekday): LadderBar[] {
 }
 
 export type WeekCell = { start: string; end: string; breaks: string[] } | null
+/** 그 자리의 휴게: 서버가 자리마다 실어 준 값(breaks)을 먼저 쓰고, 예전 결과(값 없음)만 근무조 순서로 찾는다. */
+function breaksFor(option: Option, a: { slot_id: string; breaks?: { start_time: string; end_time: string }[] }) {
+  return a.breaks ?? breaksOf(option, a.slot_id)
+}
+
 /** hire = 명단으로 못 채워 새로 뽑을 알바 줄(서버 new_hires) */
-export type WeekRow = { key: string; name: string; owner: boolean; hire?: boolean; hours: number | null; cells: WeekCell[] }
+/** pay = 주 예상 급여(서버 값: 주 근무시간 × 시급, 세전·주휴 없음). 사장님 줄은 null */
+export type WeekRow = { key: string; name: string; owner: boolean; hire?: boolean; hours: number | null; pay?: number | null; cells: WeekCell[] }
 
 /** 일주일 근무표 줄: 사장님 줄(일하는 날이 있으면) + 일하는 직원 줄. 칸은 days 순서. */
 export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
@@ -91,10 +97,11 @@ export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
       name: w.name,
       owner: false,
       hours: w.weekly_work_hours,
+      pay: w.base_wage_krw ?? null,
       cells: days.map((d) => {
         const a = option.weekly.assignments.find((x) => x.worker_key === w.worker_key && x.day === d)
         return a
-          ? { start: a.start_time, end: a.end_time, breaks: breaksOf(option, a.slot_id).map((b) => shiftText(b.start_time, b.end_time)) }
+          ? { start: a.start_time, end: a.end_time, breaks: breaksFor(option, a).map((b) => shiftText(b.start_time, b.end_time)) }
           : null
       }),
     })
@@ -107,9 +114,10 @@ export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
       owner: false,
       hire: true,
       hours: h.weekly_work_hours,
+      pay: h.base_wage_krw ?? null,
       cells: days.map((d) => {
         const a = h.assignments.find((x) => x.day === d)
-        return a ? { start: a.start_time, end: a.end_time, breaks: breaksOf(option, a.slot_id).map((b) => shiftText(b.start_time, b.end_time)) } : null
+        return a ? { start: a.start_time, end: a.end_time, breaks: breaksFor(option, a).map((b) => shiftText(b.start_time, b.end_time)) } : null
       }),
     })
   }
@@ -135,6 +143,22 @@ export function clock(hhmm: string): string {
   const hour = h % 12 === 0 ? 12 : h % 12
   return `${half} ${hour}시${m ? ` ${m}분` : ''}`
 }
+
+/** 세 근무표 비교 카드: 추천 근무표와 견준 한 줄("추천보다 대기 +40초 · 인건비 −320,000원"). 추천 자신이면 null. */
+export function versusText(option: Option, recommended: Option, days: Weekday[]): string | null {
+  if (option.key === recommended.key) return null
+  const a = averagePeak(option, days)
+  const b = averagePeak(recommended, days)
+  const sec = a != null && b != null ? Math.round(a - b) : null
+  // 몇 초 차이는 사장님이 느끼기 어려워 "거의 같아요"로(화면의 대기도 분 단위로 반올림해 보인다)
+  const wait = sec == null ? null : Math.abs(sec) < SAME_WAIT_SEC ? '대기는 거의 같아요' : `대기 ${sec > 0 ? '+' : '−'}${Math.abs(sec)}초`
+  const diff = option.plan_cost_krw - recommended.plan_cost_krw
+  const cost = diff === 0 ? '인건비 같음' : `인건비 ${diff > 0 ? '+' : '−'}${won(Math.abs(diff))}`
+  return `추천보다 ${[wait, cost].filter(Boolean).join(' · ')}`
+}
+
+/** 이보다 작은 대기 차이(초)는 "거의 같아요"로 보인다. */
+export const SAME_WAIT_SEC = 10
 
 /** 표 칸 근무 시간 글자: 늘 "7:00~16:30" 모양(칸끼리 표기가 섞이지 않게). */
 export function shiftText(start: string, end: string): string {

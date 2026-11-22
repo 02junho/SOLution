@@ -3,6 +3,9 @@ import type { RosterJob } from './rosterTypes'
 
 /** 상태를 이만큼마다 확인한다. */
 export const POLL_MS = 3000
+/** 처음 몇 초는 더 자주 묻는다: 기억해 둔 요일로 금방 끝나는 계산(시급만 바꿈 등)을 3초씩 기다리지 않게. */
+export const FAST_POLL_MS = 1000
+export const FAST_FOR_MS = 5000
 /** 이보다 오래 걸리면 기다리기를 멈추고 "나중에 다시 열기"를 안내한다(계산은 서버에서 계속된다). */
 export const GIVE_UP_MS = 10 * 60 * 1000
 
@@ -44,6 +47,6 @@ export async function waitRoster(
       throw new Error('계산이 오래 걸리고 있어요. 계산은 서버에서 계속되니 잠시 뒤 이 주소를 다시 열어 주세요.')
     }
     onTick(Math.round((Date.now() - began) / 1000))
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+    await new Promise((resolve) => setTimeout(resolve, Date.now() - began < FAST_FOR_MS ? FAST_POLL_MS : POLL_MS))
   }
 }

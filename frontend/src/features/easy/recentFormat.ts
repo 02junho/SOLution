@@ -46,7 +46,11 @@ export function inputSummary(feature: string, input: Record<string, unknown> | n
     const orders = num(f.daily_orders)
     const day = orders === null ? '' : orders === 150 ? '보통 날(150건)' : orders === 276 ? '바쁜 날(276건)' : `주문 ${orders}건`
     const owner = f.is_owner_working === true ? '사장님 같이 일함' : f.is_owner_working === false ? '직원만' : ''
-    return [day, owner].filter(Boolean).join(' · ')
+    // 추천 근무표(2번)는 같은 가게로 여러 번 계산하니 바꾼 조건(목표 대기·시급)도 보여 구분한다. 기본값이면 칸이 없다.
+    const wait = num(f.target_wait_sec)
+    const wage = num(f.hourly_wage_krw)
+    const extra = [wait ? `목표 대기 ${Math.round(wait / 60)}분` : '', wage && f.orders_by_slot ? `시급 ${wage.toLocaleString('ko-KR')}원` : '']
+    return [day, owner, ...extra].filter(Boolean).join(' · ')
   }
   return ''
 }

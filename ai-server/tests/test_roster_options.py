@@ -94,9 +94,13 @@ def test_세_안과_주휴_비교를_한_번에_만든다():
         # 새 알바: 못 채운 자리를 빠짐없이, 하루 한 근무, 주 14.5시간 이하
         placed = [a["slot_id"] for h in o["new_hires"] for a in h["assignments"]]
         assert sorted(placed) == sorted(u["slot_id"] for u in o["weekly"]["unfilled"])
+        # 못 채운 자리도 휴게를 실어 보낸다(화면이 근무조 순서로 다시 찾지 않게)
+        assert all("breaks" in u for u in o["weekly"]["unfilled"])
         for h in o["new_hires"]:
             days = [a["day"] for a in h["assignments"]]
             assert len(days) == len(set(days)) and h["weekly_work_hours"] <= 14.5
+            # 주 예상 급여 = 주 근무시간 × 요일 조건의 시급(배정한 직원과 같은 식)
+            assert h["base_wage_krw"] == round(h["weekly_work_hours"] * 10320)
     assert out["holiday_compare"]["key"] == "RECOMMENDED"
     assert out["days"]["MON"]["windows"][0]["start_time"] == "07:00"  # 아침 구간도 잡음
     assert len(out["days"]["MON"]["ladder"]) >= 2
