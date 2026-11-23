@@ -54,9 +54,13 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
     seeded.current = true
   }
   async function analyzeOne(name: string, body: string) {
-    const batch = await api.analyze(body.trim(), name.trim(), true)
+    // 이름 칸이 비면 서버가 이름 없는 줄을 "거래처"로 채운다(거래처 없는 줄은 계산에서 빠지므로).
+    const typed = name.trim()
+    const batch = await api.analyze(body.trim(), typed || '거래처', true)
     // 한 번에 한 거래처씩 받는다. 여러 거래처가 섞이면 한 곳만 고치거나 뺄 수 없어서다.
-    if (supplierNames(batch).length > 1) throw new Error(`한 번에 한 거래처 견적만 넣어 주세요. 이 문자에는 ${supplierNames(batch).join(', ')}가 함께 있어요.`)
+    // 이름을 안 적어 채운 "거래처"·"거래처 모름"은 따로 세지 않고, 서로 다른 이름이 둘 이상일 때만 막는다.
+    const named = supplierNames(batch).filter((n) => n !== '거래처 모름' && (typed !== '' || n !== '거래처'))
+    if (named.length > 1) throw new Error(`한 번에 한 거래처 견적만 넣어 주세요. 이 문자에는 ${named.join(', ')}가 함께 있어요.`)
     // 같은 거래처 견적을 고쳐 다시 넣으면 예전 견적은 빼고 새 견적만 쓴다(옛 가격으로 계산되지 않게).
     const mine = supplierNames(batch)
     setBatches((list) => upsertBatch(list.filter((old) => old.quote_batch_id === batch.quote_batch_id || !supplierNames(old).some((n) => mine.includes(n))), batch))
@@ -76,7 +80,7 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
       </label>
       <div className="easy-actions">
         <button type="button" className="easy-primary" disabled={!!busy || !text.trim()}
-          onClick={() => void work('견적을 정리하는 중이에요', async () => { await seed(); await analyzeOne(supplier || '거래처', text); setText(''); setSupplier('') })}>
+          onClick={() => void work('견적을 정리하는 중이에요', async () => { await seed(); await analyzeOne(supplier, text); setText(''); setSupplier('') })}>
           정리하기
         </button>
         {nextSample && (
