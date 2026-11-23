@@ -148,6 +148,11 @@ class OperationInputBuilderTest {
 				Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
 		assertThat(OperationInputBuilder.missingFormFields(full)).isEmpty();
 		assertThat(OperationInputBuilder.missingFormFields(OperationInputBuilder.build(form(true), DAY))).isEmpty();
+		// 빈 맵은 주문 입력이 아니다(계산할 때 hasOrders와 같은 기준)
+		Map<String, Object> empty = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("menu_cups", Map.of(), "orders_by_slot", Map.of(), "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThat(OperationInputBuilder.missingFormFields(empty).stream().map(row -> row.get("path")).toList())
+				.containsExactly("operation_form.daily_orders");
 	}
 
 	@Test
@@ -273,5 +278,190 @@ class OperationInputBuilderTest {
 		// 07-19시 근무는 연소자 하루 7시간 한도를 넘어 노동 계산에서 막힌다.
 		var minor = new OperationInputDraftRequest(null, 150, null, null, false, 10320, true, null, null, null);
 		assertThatThrownBy(() -> OperationInputBuilder.build(minor, DAY)).hasMessageContaining("연소자");
+	}
+
+	// ---------------------------------------------------------------- 가게 데이터 버전
+
+	private static OperationInputDraftRequest store(String open, String close, Map<String, Integer> cups,
+			Map<String, Integer> manufacture) {
+		return new OperationInputDraftRequest(null, null, null, null, true, 10320, null, null, null, null, open, close,
+				cups, manufacture);
+	}
+
+	private static Map<String, Object> simulation(Map<String, Object> input) {
+		return (Map<String, Object>) input.get("simulation");
+	}
+
+	@Test
+	void 영업시간을_안_넣으면_지금_버전과_같은_입력이다() {
+		var now = OperationInputBuilder.build(form(true), DAY);
+		var withNulls = OperationInputBuilder.build(new OperationInputDraftRequest(null, 150, null, null, true, 10320,
+				null, null, null, null, null, null, null, null), DAY);
+		assertThat(withNulls).isEqualTo(now);
+		assertThat((Map<String, Object>) simulation(now).get("scenario")).doesNotContainKeys("start_time", "end_time");
+	}
+
+	@Test
+	void 영업시간을_바꾸면_근무와_라스트_오더가_따라간다() {
+		var input = OperationInputBuilder.build(store("08:00", "20:00", Map.of("iced_americano", 100), null), DAY);
+		Map<String, Object> scenario = (Map<String, Object>) simulation(input).get("scenario");
+		assertThat(scenario).containsEntry("start_time", "08:00").containsEntry("end_time", "20:00")
+				.containsEntry("last_order_time", "19:45");
+		assertThat(shifts(input, "CURRENT")).extracting(s -> s.get("start_time") + "-" + s.get("end_time"))
+				.containsExactly("08:00-20:00", "08:00-20:00");
+		assertThat(shifts(input, "ALT_A")).extracting(s -> s.get("start_time") + "-" + s.get("end_time"))
+				.containsExactly("08:00-11:00", "11:00-14:00", "14:00-20:00", "08:00-11:00", "11:00-14:00", "14:00-20:00");
+		assertThat(OperationResultContract.staffing(labor(input).get("plans"))).hasSize(3);
+	}
+
+	@Test
+	void 영업시간은_상권_데이터_범위와_30분_단위만_받는다() {
+		for (String[] bad : new String[][] {{"05:30", "19:00"}, {"11:00", "19:00"}, {"07:15", "19:00"},
+				{"07:00", "17:00"}, {"07:00", "21:30"}}) {
+			assertThatThrownBy(() -> OperationInputBuilder.build(store(bad[0], bad[1], Map.of("iced_americano", 50), null), DAY))
+					.isInstanceOf(ApiException.class).hasMessageContaining("시각은");
+		}
+		var late = new OperationInputDraftRequest(null, 100, "19:00", null, true, 10320, null, null, null, null,
+				"08:00", "20:00", null, null);
+		assertThatThrownBy(() -> OperationInputBuilder.build(late, DAY)).hasMessageContaining("19:30~20:00");
+	}
+
+	@Test
+	void 메뉴별_잔_수로_하루_주문과_판매_비중을_정한다() {
+		var cups = new HashMap<String, Integer>();
+		cups.put("iced_americano", 60);
+		cups.put("iced_cafe_latte", 30);
+		cups.put("hot_americano", 10);
+		cups.put("iced_milk_tea", 0);
+		var input = OperationInputBuilder.build(store(null, null, cups, null), DAY);
+		Map<String, Object> sim = simulation(input);
+		assertThat((Map<String, Object>) sim.get("scenario")).containsEntry("daily_orders", 100);
+		assertThat(sim.get("selected_menu_ids")).isEqualTo(List.of("hot_americano", "iced_americano", "iced_cafe_latte"));
+		assertThat((Map<String, Object>) sim.get("menu_weights")).containsEntry("iced_americano", 0.6)
+				.containsEntry("iced_cafe_latte", 0.3).containsEntry("hot_americano", 0.1);
+	}
+
+	@Test
+	void 잔_수_합계도_300잔까지다() {
+		assertThatThrownBy(() -> OperationInputBuilder.build(store(null, null, Map.of("iced_americano", 301), null), DAY))
+				.hasMessageContaining("1~300잔");
+		assertThatThrownBy(() -> OperationInputBuilder.build(store(null, null, Map.of("latte", 10), null), DAY))
+				.hasMessageContaining("메뉴");
+	}
+
+	@Test
+	void 메뉴별_제조시간은_파는_메뉴에만_10초에서_600초() {
+		var input = OperationInputBuilder.build(store(null, null, Map.of("iced_americano", 80, "hot_americano", 20),
+				Map.of("iced_americano", 75)), DAY);
+		assertThat((Map<String, Object>) simulation(input).get("manufacture_sec_by_menu")).containsEntry("iced_americano", 75);
+		assertThatThrownBy(() -> OperationInputBuilder.build(store(null, null, Map.of("iced_americano", 80),
+				Map.of("hot_americano", 75)), DAY)).hasMessageContaining("파는 메뉴");
+		assertThatThrownBy(() -> OperationInputBuilder.build(store(null, null, Map.of("iced_americano", 80),
+				Map.of("iced_americano", 5)), DAY)).hasMessageContaining("10~600초");
+	}
+
+	@Test
+	void 저장된_가게_데이터를_읽어_계산_입력을_만든다() {
+		Map<String, Object> form = new HashMap<>();
+		form.put("is_owner_working", true);
+		form.put("hourly_wage_krw", 10320);
+		form.put("open_time", "08:00");
+		form.put("close_time", "20:00");
+		form.put("menu_cups", Map.of("iced_americano", 70, "iced_cafe_latte", 30));
+		form.put("manufacture_sec_by_menu", Map.of("iced_cafe_latte", 90.0));
+		Map<String, Object> stored = Map.of(OperationInputBuilder.FORM_KEY, form);
+		assertThat(OperationInputBuilder.missingFormFields(stored)).isEmpty();
+		Map<String, Object> input = OperationInputBuilder.expand(stored, DAY);
+		assertThat((Map<String, Object>) simulation(input).get("scenario")).containsEntry("daily_orders", 100)
+				.containsEntry("start_time", "08:00");
+		assertThat((Map<String, Object>) simulation(input).get("manufacture_sec_by_menu")).containsEntry("iced_cafe_latte", 90);
+	}
+
+	// ---------------------------------------------------------------- 가게 시간대·바쁜 시간
+
+	private static Map<String, Integer> hourly() {
+		Map<String, Integer> slots = new java.util.LinkedHashMap<>();
+		int[] counts = {12, 15, 10, 8, 20, 18, 9, 6, 5, 6, 4, 3};
+		for (int i = 0; i < counts.length; i++) {
+			slots.put(String.format("%02d:00-%02d:00", 8 + i, 9 + i), counts[i]);
+		}
+		return slots;
+	}
+
+	private static OperationInputDraftRequest slotted(Map<String, Integer> slots, String peakStart, String peakEnd,
+			Map<String, Integer> cups) {
+		return new OperationInputDraftRequest(null, null, null, null, true, 10320, null, null, null, null, null, null,
+				cups, null, slots, peakStart, peakEnd);
+	}
+
+	@Test
+	void 시간대별_주문으로_영업시간과_하루_주문을_정한다() {
+		var input = OperationInputBuilder.build(slotted(hourly(), "12:00", "14:00", Map.of("iced_americano", 7, "hot_americano", 3)), DAY);
+		Map<String, Object> scenario = (Map<String, Object>) simulation(input).get("scenario");
+		assertThat(scenario).doesNotContainKey("daily_orders").containsEntry("start_time", "08:00")
+				.containsEntry("end_time", "20:00").containsEntry("last_order_time", "19:45")
+				.containsEntry("peak_start_time", "12:00").containsEntry("peak_end_time", "14:00");
+		assertThat((Map<String, Object>) scenario.get("orders_by_slot")).hasSize(12).containsEntry("12:00-13:00", 20);
+		// 잔 수는 판매 비중에만 쓴다(하루 주문은 시간대 합계 116건).
+		assertThat((Map<String, Object>) simulation(input).get("menu_weights")).containsEntry("iced_americano", 0.7);
+		assertThat(shifts(input, "ALT_C").get(2)).containsEntry("start_time", "12:00").containsEntry("end_time", "14:00");
+		assertThat(shifts(input, "ALT_A")).extracting(s -> s.get("start_time") + "-" + s.get("end_time"))
+				.containsExactly("08:00-12:00", "12:00-14:00", "14:00-20:00", "08:00-12:00", "12:00-14:00", "14:00-20:00");
+		assertThat((List<Map<String, Object>>) labor(input).get("avoid_break_windows"))
+				.containsExactly(Map.of("start_time", "12:00", "end_time", "14:00"));
+	}
+
+	@Test
+	void 시간대는_이어지고_바쁜_시간은_경계_위여야_한다() {
+		Map<String, Integer> gap = new java.util.LinkedHashMap<>(hourly());
+		gap.remove("10:00-11:00");
+		assertThatThrownBy(() -> OperationInputBuilder.build(slotted(gap, null, null, null), DAY)).hasMessageContaining("빈틈");
+		assertThatThrownBy(() -> OperationInputBuilder.build(slotted(hourly(), "12:30", "14:00", null), DAY))
+				.hasMessageContaining("바쁜 시간");
+		assertThatThrownBy(() -> OperationInputBuilder.build(slotted(Map.of("08:00-10:00", 5), null, null, null), DAY))
+				.hasMessageContaining("시간 이상");
+		Map<String, Integer> many = new java.util.LinkedHashMap<>(hourly());
+		many.put("12:00-13:00", 300);
+		assertThatThrownBy(() -> OperationInputBuilder.build(slotted(many, null, null, null), DAY)).hasMessageContaining("1~300건");
+	}
+
+	@Test
+	void 바쁜_시간만_바꿔도_근무표가_따라간다() {
+		var input = OperationInputBuilder.build(new OperationInputDraftRequest(null, 120, null, null, true, 10320, null,
+				null, null, null, null, null, null, null, null, "14:00", "17:00"), DAY);
+		assertThat(shifts(input, "ALT_C").get(2)).containsEntry("start_time", "14:00").containsEntry("end_time", "17:00");
+		assertThat((Map<String, Object>) simulation(input).get("scenario")).containsEntry("peak_start_time", "14:00");
+	}
+
+	@Test
+	void 저장된_시간대별_주문만으로도_계산할_수_있다() {
+		Map<String, Object> form = new HashMap<>();
+		form.put("is_owner_working", true);
+		form.put("hourly_wage_krw", 10320);
+		form.put("orders_by_slot", hourly());
+		form.put("peak_start_time", "12:00");
+		form.put("peak_end_time", "14:00");
+		form.put("store_source", Map.of("file_name", "sales.csv", "rows_read", 1624));
+		Map<String, Object> stored = Map.of(OperationInputBuilder.FORM_KEY, form);
+		assertThat(OperationInputBuilder.missingFormFields(stored)).isEmpty();
+		assertThat((Map<String, Object>) simulation(OperationInputBuilder.expand(stored, DAY)).get("scenario"))
+				.containsKey("orders_by_slot");
+	}
+
+	@Test
+	void 기계_대수와_목표_대기를_엔진에_넘긴다() {
+		var form = new OperationInputDraftRequest(null, 150, null, null, true, 10320, null, null, null, null, null, null,
+				null, null, null, null, null, 2, 1, 180);
+		Map<String, Object> sim = simulation(OperationInputBuilder.build(form, DAY));
+		assertThat((Map<String, Object>) sim.get("equipment_counts")).containsEntry("espresso", 2).containsEntry("steam", 2)
+				.containsEntry("blender", 1);
+		assertThat((Map<String, Object>) sim.get("quality_targets")).containsEntry("max_p90_post_order_receipt_sec", 180);
+		var bad = new OperationInputDraftRequest(null, 150, null, null, true, 10320, null, null, null, null, null, null,
+				null, null, null, null, null, 4, null, null);
+		assertThatThrownBy(() -> OperationInputBuilder.build(bad, DAY)).hasMessageContaining("1~3대");
+		var slow = new OperationInputDraftRequest(null, 150, null, null, true, 10320, null, null, null, null, null, null,
+				null, null, null, null, null, null, null, 900);
+		assertThatThrownBy(() -> OperationInputBuilder.build(slow, DAY)).hasMessageContaining("2~10분");
+		assertThat(simulation(OperationInputBuilder.build(form(true), DAY))).doesNotContainKeys("equipment_counts", "quality_targets");
 	}
 }

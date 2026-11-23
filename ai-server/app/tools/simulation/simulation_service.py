@@ -1,10 +1,9 @@
-"""Three always-on public plans, per-slot recommendation, paired run statistics.
+"""늘 보여 주는 세 안, 시간대별 추천, 같은 손님으로 짝지은 반복 통계.
 
-Closing policy (11.16): new orders stop at the last order time (default 18:45) and the
-store closes at 19:00. Orders already accepted are still finished so their waits are
-measured, but this tail is a reference figure only: it is not a quality gate and it is
-not counted as staff hours. Quality = post-order receipt P90 within the limit for the
-whole day and for each slot with >= 10 orders, in >= min_run_pass_rate of the runs.
+마감 규칙(11.16): 라스트 오더(기본 18:45) 뒤에는 새 주문을 받지 않고 19:00에 닫는다.
+이미 받은 주문은 대기를 재려고 끝까지 만들지만, 마감 뒤 시간은 참고값일 뿐이다.
+합격 기준이 아니고 직원 근무시간에도 넣지 않는다. 합격 = 주문 후 받기까지 P90이 기준 안,
+하루 전체와 주문 10건 이상인 시간대마다, 반복 중 min_run_pass_rate 이상에서.
 """
 
 from __future__ import annotations
@@ -20,8 +19,8 @@ from .simulation_common import (
     MIN_SLOT_ORDERS,
 )
 from .day_simulation import DayCafe, roster_for_base, profile
-from .catalog import SLOTS
 from .demand import allocate
+from .day_window import day, using, from_scenario
 from .slot_plan import recommend_slots, slot_details, slot_roster
 from .stats import paired_difference
 from .staffing_input import simulated_staffing
@@ -31,7 +30,7 @@ QUALITY_KEYS = {"max_p90_post_order_receipt_sec", "min_run_pass_rate"}
 SIMULATED_CONDITIONS_MESSAGE = (
     "모의 조건: 가정에 근거한 값이며 실제 매장과 다를 수 있어요."
 )
-# Metrics compared run by run against CURRENT (URQ-CMP-001). Lower is better for all.
+# 반복마다 CURRENT와 견주는 지표(URQ-CMP-001). 모두 작을수록 좋다.
 COMPARED_METRICS = (
     "avg_total_time_sec",
     "p90_total_time_sec",
@@ -57,7 +56,7 @@ PER_RUN_FIELDS = {
 
 
 def _plans():
-    """The three public plans. Custom combinations go through slot_choices (per-slot plans)."""
+    """공개하는 세 안. 직접 고른 조합은 slot_choices(시간대별 안)로 받는다."""
     return {pid: roster_for_base(pid) for pid in BASE_PLANS}
 
 
@@ -210,7 +209,7 @@ def compare_to(current_per_run, per_run):
 
 
 def _rank(results):
-    """Recommendation order: plans meeting the target by staff hours, then the rest by reliability."""
+    """추천 순서: 기준을 지키는 안을 근무시간 순으로, 나머지는 안정성 순으로."""
 
     def mean(p, key):
         value = p["metrics"][key]["mean"]
@@ -264,11 +263,11 @@ def _choose(results, quality, repetitions):
 
 
 def _staffing(rows):
-    """Positions the simulation used, always on the four fixed slots. Not paid hours, breaks or a shift plan."""
+    """시뮬레이션이 하루 네 시간대에 둔 자리. 유급시간·휴게·근무조가 아니다."""
     if any("assignments" in r for r in rows):
         return simulated_staffing(rows)  # 받은 근무표: 구간이 네 칸으로 고정되지 않는다
     slots = []
-    for label in SLOTS:
+    for label in day().slots:
         start, end = label.split("-")
         row = next(r for r in rows if r["start"] <= start < r["end"])
         positions = []
@@ -322,7 +321,7 @@ def _presence(rows):
 def _slot_plan_result(choice_keys, records, rejected, quality, current, decisions=None):
     agg = _summarize_plan("SLOT_PLAN", records, rejected, quality, False)
     agg.pop("choice_key", None)
-    agg["slot_choice_keys"] = dict(zip(SLOTS, choice_keys))
+    agg["slot_choice_keys"] = dict(zip(day().slots, choice_keys))
     agg["slots"] = slot_details(choice_keys, records, quality)
     agg["comparison_to_current"] = compare_to(current["per_run"], agg["per_run"])
     if decisions is not None:
@@ -337,7 +336,24 @@ def compare(
     max_order_runs=MAX_ORDER_RUNS,
     plan_rosters=None,
 ):
-    """plan_rosters가 있으면(받은 근무표) 그 세 안으로 계산하고, 정해 둔 안 기준의 시간대별 추천은 만들지 않는다."""
+    """plan_rosters가 있으면(받은 근무표) 그 세 안으로 계산하고, 정해 둔 안 기준의 시간대별 추천은 만들지 않는다.
+
+    영업시간은 scenario의 start_time·end_time(기본 07:00~19:00)이다. plan_rosters는 같은 영업시간으로
+    만든 것이어야 한다(router가 같은 using() 안에서 만든다)."""
+    spec = body.get("scenario") if isinstance(body, dict) else None
+    with using(from_scenario(spec)):
+        return _compare(
+            body, engine, include_slot_recommendation, max_order_runs, plan_rosters
+        )
+
+
+def _compare(
+    body,
+    engine,
+    include_slot_recommendation,
+    max_order_runs,
+    plan_rosters,
+):
     quality = quality_from(body)
     repetitions, seed, conf = _validate(body)
     if engine not in ("reference", "simpy"):
@@ -352,7 +368,7 @@ def compare(
     custom = plan_rosters is not None
     selected = dict(plan_rosters) if custom else _plans()
     include_events = bool(body.get("include_events"))
-    # Common random numbers: every roster in one run sees the same customers.
+    # 공통 난수: 한 번의 반복 안에서는 모든 근무표가 같은 손님을 받는다.
     draws = [sample_menu_jobs(scn, seed + run, conf) for run in range(repetitions)]
     rejected = [r for _, r in draws]
     cache = {}
@@ -422,9 +438,10 @@ def compare(
     custom_slot_plan = None
     if body.get("slot_choices") is not None and current is not None and not custom:
         choices = body["slot_choices"]
-        if not isinstance(choices, dict) or set(choices) != set(SLOTS):
-            raise ValueError(f"slot_choices needs every slot: {', '.join(SLOTS)}")
-        keys = [choices[s] for s in SLOTS]
+        slots = day().slots
+        if not isinstance(choices, dict) or set(choices) != set(slots):
+            raise ValueError(f"slot_choices needs every slot: {', '.join(slots)}")
+        keys = [choices[s] for s in slots]
         custom_slot_plan = _slot_plan_result(
             keys, run_roster("SLOT_PLAN", slot_roster(keys)), rejected, quality, current
         )
@@ -474,7 +491,8 @@ def compare(
             "rejected_demand_is_redistributed": False,
         },
         "closing": {
-            "store_close_time": "19:00",
+            "store_open_time": scn["start"],
+            "store_close_time": scn["end"],
             "last_order_time": scn["last_order_time"],
             "accepted_orders_are_finished": True,
             "after_close_finish_is_quality_gate": False,
@@ -508,7 +526,7 @@ def compare(
     }
 
 
-# ---------------------------------------------------------------- sensitivity
+# ---------------------------------------------------------------- 민감도
 DEFAULT_VARIATIONS = [
     ["demand_scale", 0.8],
     ["demand_scale", 1.2],
@@ -527,7 +545,7 @@ DIMENSIONS = (
     "handoff_time_sec",
     "manufacture_variability_scale",
 )
-# Only these two become owner-facing suggestions (11.16 decision); the rest stay in the developer report.
+# 이 둘만 사장님께 보이는 제안이 된다(11.16 결정). 나머지는 개발자 보고서에만 둔다.
 USER_FACING = {
     ("demand_scale", 0.8),
     ("demand_scale", 1.2),
@@ -598,7 +616,9 @@ def _condition_text(key, value):
 
 def _slot_label(slot):
     start, end = slot.split("-")
-    return f"{int(start[:2])}~{int(end[:2])}시"
+    if start.endswith(":00") and end.endswith(":00"):
+        return f"{int(start[:2])}~{int(end[:2])}시"
+    return f"{start}~{end}"  # 분이 있는 경계는 그대로(08:00~08:30)
 
 
 def _join_slots(slots):
@@ -606,7 +626,7 @@ def _join_slots(slots):
 
 
 def _slot_suggestion(key, value, row, base_keys):
-    """Owner wording on the per-slot plan (the recommendation the owner actually sees)."""
+    """시간대별 안을 사장님 말로(사장님이 실제로 보는 추천)."""
     head = _condition_text(key, value)
     changes = row["slot_changes"]
     parts = []
@@ -645,14 +665,19 @@ def _slot_view(plan):
 
 
 def sensitivity(body, engine="simpy"):
-    """One factor at a time; every variant reuses the same seeds as the baseline.
+    spec = body.get("scenario") if isinstance(body, dict) else None
+    with using(from_scenario(spec)):
+        return _sensitivity(body, engine)
 
-    Main basis = the per-slot recommendation (what the owner sees). For the four owner-facing
-    conditions (demand ±20%, manufacture ±20%) the per-slot plan is recomputed, and the
-    baseline slot combination is re-verified under the changed condition. Meaningful = a slot
-    choice changes or the baseline combination stops meeting the target. Other conditions are
-    developer-only and judged on the day-level three-plan recommendation to keep runtime low.
-    Every plan's change against the baseline carries the paired 95% interval (CMP-002).
+
+def _sensitivity(body, engine):
+    """한 번에 조건 하나만 바꾸고, 모든 변형은 기준과 같은 seed를 쓴다.
+
+    기준 = 시간대별 추천(사장님이 보는 것). 사장님께 보이는 네 조건(손님 ±20%, 제조 ±20%)은
+    시간대별 안을 다시 계산하고, 기준 조합이 바뀐 조건에서도 맞는지 다시 확인한다.
+    의미 있음 = 시간대 선택이 바뀌거나 기준 조합이 기준을 못 지킴. 다른 조건은 개발자용이라
+    계산 시간을 줄이려고 하루 단위 세 안 추천으로만 본다.
+    모든 안의 기준 대비 변화에는 짝지은 95% 구간(CMP-002)을 붙인다.
     """
     core = {
         k: v
@@ -729,7 +754,7 @@ def sensitivity(body, engine="simpy"):
             "recommended_plan_now_fails": bool(
                 base_rec and plans[base_rec]["passes_quality_targets"] is not True
             ),
-            # other − baseline = recommended − runner-up: "better" means the recommended plan is faster.
+            # other − baseline = 추천안 − 2위안: "better"는 추천안이 더 빠르다는 뜻.
             "recommended_vs_runner_up_p90": top_two,
             "significant_changes": [
                 pid

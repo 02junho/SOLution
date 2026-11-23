@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.execution_log import LOG_STATUS, write_tool_log
 from app.core.request_key import get_request_key
@@ -19,6 +19,20 @@ from .trace_log import write_traces
 from .simulation_service import compare, sensitivity
 from .spring_contract import ContractError, build as to_contract
 from .staffing_input import parse as parse_staffing
+from .day_window import from_scenario, using
+from .daily_roster import plan as daily_roster
+from .weekly_roster import plan as weekly_roster
+from .week_plan import plan as week_plan
+from .menu_types import classify as classify_menus
+from .roster_chat import chat as roster_chat, explain as roster_explain
+from .roster_options import plan as roster_options, progress as roster_progress
+from .roster_replay import replay as roster_replay
+
+# 근무표 계산(하루·일주일·추천 3안)은 같은 이벤트를 같은 순서로 처리하는 가벼운 스케줄러로 돌린다.
+# SimPy와 결과가 숫자 하나까지 같고(tests/test_roster_engine.py), 이벤트마다 SimPy 프로세스를 만들지 않아 약 30% 빠르다.
+# 세 운영안 비교·민감도(운영 1번)는 그대로 SimPy.
+ROSTER_ENGINE = "reference"
+from app.schemas.simulation import DailyRosterRequest, RosterOptionsRequest, WeekPlanRequest, WeeklyRosterRequest
 
 router = APIRouter()
 
@@ -107,13 +121,15 @@ def compare_plans(
 
     raw = body.model_dump(exclude_none=True)
     try:
-        staffing = parse_staffing(raw)
-        computed = compare(
-            {k: v for k, v in raw.items() if k not in _NOT_FOR_ENGINE},
-            engine="simpy",
-            max_order_runs=SPRING_MAX_ORDER_RUNS,
-            plan_rosters=staffing.rosters if staffing is not None else None,
-        )
+        # 받은 근무표도 같은 영업시간(scenario.start_time·end_time) 기준으로 구간을 나눈다.
+        with using(from_scenario(raw.get("scenario"))):
+            staffing = parse_staffing(raw)
+            computed = compare(
+                {k: v for k, v in raw.items() if k not in _NOT_FOR_ENGINE},
+                engine="simpy",
+                max_order_runs=SPRING_MAX_ORDER_RUNS,
+                plan_rosters=staffing.rosters if staffing is not None else None,
+            )
         data = to_contract(computed, staffing) if staffing is not None else computed
     except ContractError as exc:
         return _needs_input(
@@ -161,6 +177,149 @@ def compare_plans(
             request_key=request_key,
         )
     _trace(body, request_key, started, "ok")
+    return ok(data)
+
+
+@router.post("/daily-roster", response_model=ApiResponse[dict])
+def daily_roster_plan(
+    body: DailyRosterRequest, request_key: str = Depends(get_request_key)
+) -> ApiResponse[dict]:
+    """하루 근무표 자동 생성: 시간대별 필요 인원 → 근무조로 덮기 → 휴게 → 휴게까지 넣어 다시 확인. 저장하지 않는다."""
+    started = time.perf_counter()
+    missing = _validate_demand(body)
+    if missing is not None:
+        _trace(body, request_key, started, "needs_input", "MISSING_DAILY_ORDERS")
+        return missing
+    raw = body.model_dump(exclude_none=True)
+    if raw.get("roster_rules") == {}:
+        raw.pop("roster_rules")
+    try:
+        data = daily_roster(
+            {k: v for k, v in raw.items() if k not in _NOT_FOR_ENGINE}, engine=ROSTER_ENGINE
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("NEEDS_INPUT:"):
+            return _needs_input(
+                body, request_key, started, "ROSTER_INPUT_REQUIRED",
+                message.removeprefix("NEEDS_INPUT:").strip(),
+            )
+        _trace(body, request_key, started, "error", "INVALID_INPUT")
+        raise HTTPException(status_code=400, detail=f"근무표 입력 오류: {message}") from exc
+    data["request_key"] = request_key
+    _trace(body, request_key, started, "ok")
+    return ok(data)
+
+
+@router.post("/weekly-roster", response_model=ApiResponse[dict])
+def weekly_roster_plan(
+    body: WeeklyRosterRequest, request_key: str = Depends(get_request_key)
+) -> ApiResponse[dict]:
+    """일주일 근무표: 요일별 근무조를 명단에 배정하고 주 15시간 미만 / 주휴 포함을 비교한다. 저장하지 않는다."""
+    try:
+        data = weekly_roster(body.model_dump(exclude_none=True))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"일주일 근무표 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.post("/week-plan", response_model=ApiResponse[dict])
+def week_plan_run(body: WeekPlanRequest, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """일주일 근무표 한 번에: 요일별 필요 인원 → 두 가지 근무조(주휴 포함 / 15시간 미만) → 명단 배정. 저장하지 않는다."""
+    raw = body.model_dump(exclude_none=True)
+    days = []
+    for d in raw["days"]:
+        roster = {k: v for k, v in d["roster"].items() if k not in _NOT_FOR_ENGINE}
+        if roster.get("roster_rules") == {}:
+            roster.pop("roster_rules")
+        days.append({"day": d["day"], "roster": roster})
+    try:
+        data = week_plan({"days": days, "workers": raw["workers"], "weekly_mode": raw["weekly_mode"]}, engine=ROSTER_ENGINE)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"일주일 근무표 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+def _engine_days(raw_days):
+    days = []
+    for d in raw_days:
+        roster = {k: v for k, v in d["roster"].items() if k not in _NOT_FOR_ENGINE}
+        if roster.get("roster_rules") == {}:
+            roster.pop("roster_rules")
+        days.append({"day": d["day"], "roster": roster})
+    return days
+
+
+@router.post("/roster-options", response_model=ApiResponse[dict])
+def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """추천 근무표 3안: 요일별 꼭 필요한 인원 → 바쁜 시간에만 0~3명 더해 비교 → 아끼는/추천/여유 안(주 15시간 미만). 저장하지 않는다."""
+    raw = body.model_dump(exclude_none=True)
+    request = {"days": _engine_days(raw["days"]), "workers": raw["workers"]}
+    for key in ("min_gain_sec", "compare_holiday_pay", "background", "progress_key"):
+        if key in raw:
+            request[key] = raw[key]
+    try:
+        data = roster_options(request, engine=ROSTER_ENGINE)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"추천 근무표 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.get("/roster-options/progress", response_model=ApiResponse[dict])
+def roster_options_progress(key: str = Query(min_length=1, max_length=128)) -> ApiResponse[dict]:
+    """계산 중인 추천 근무표에서 끝난 요일(추천안 요약). 모르는 키면 done 0(아직 시작 전이거나 이미 지워짐)."""
+    return ok(roster_progress(key) or {"total": None, "done": 0, "order": [], "days": {}})
+
+
+@router.post("/roster-replay", response_model=ApiResponse[dict])
+def roster_replay_run(body: dict, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """저장한 추천 근무표의 하루를 한 번 다시 돌려 줄 서는 모습 기록(operation.trace.v2)을 만든다. 저장하지 않는다."""
+    roster = body.get("roster")
+    if isinstance(roster, dict):
+        roster = {k: v for k, v in roster.items() if k not in _NOT_FOR_ENGINE}
+        if roster.get("roster_rules") == {}:
+            roster.pop("roster_rules")
+    try:
+        data = roster_replay({**body, "roster": roster}, engine=ROSTER_ENGINE)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"줄 서는 모습 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.post("/roster-chat", response_model=ApiResponse[dict])
+def roster_chat_run(body: dict, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """말로 고치기: 사장님 말 → 바꿀 칸(허용 목록 안, 코드가 범위 검사) / 결과 질문 답 / 다시 계산. 키가 없으면 source=UNAVAILABLE."""
+    try:
+        data = roster_chat(body)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"말로 고치기 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.post("/roster-explain", response_model=ApiResponse[dict])
+def roster_explain_run(body: dict, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """추천 근무표 결과 설명(두세 문장). 결과에 없는 숫자가 있으면 화면이 보낸 코드 문장(fallback)을 쓴다."""
+    try:
+        data = roster_explain(body)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"결과 설명 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
+    return ok(data)
+
+
+@router.post("/menu-types", response_model=ApiResponse[dict])
+def menu_types(body: dict, request_key: str = Depends(get_request_key)) -> ApiResponse[dict]:
+    """낱말 규칙으로 모른 메뉴 이름만 받아 제조 유형을 고른다. 키가 없거나 실패하면 모두 null(source=UNAVAILABLE)."""
+    try:
+        data = classify_menus(body)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"메뉴 유형 입력 오류: {exc}") from exc
+    data["request_key"] = request_key
     return ok(data)
 
 
