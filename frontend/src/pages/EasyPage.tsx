@@ -445,12 +445,16 @@ export default function EasyPage() {
   async function createSession(next: EasyFeature, input: JsonObject, values: string, screen: number) {
     const created = await workflowApi.create(STORE_ID, next, 'agent', next === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
     if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
-    const saved = await saveInput(created.session_id, null, input, values, screen, false)
+    markSession(created.session_id, screen)
+    return saveInput(created.session_id, null, input, values, screen, false)
+  }
+
+  /** 업무를 만들자마자 주소를 그 업무로 바꾼다(같은 화면일 때만). 조건 저장·계산이 실패하거나 멈춰도 새로 고치면 그 업무가 다시 열린다. */
+  function markSession(id: number, screen: number) {
     if (screen !== screenRef.current) return
-    window.history.replaceState(null, '', routeHash({ kind: 'session', id: created.session_id }))
-    setRoute({ kind: 'session', id: created.session_id })
+    window.history.replaceState(null, '', routeHash({ kind: 'session', id }))
+    setRoute({ kind: 'session', id })
     setStartedHere(true)
-    return saved
   }
 
   function send(value: string) {
@@ -500,6 +504,12 @@ export default function EasyPage() {
       }
       let resume = resumeRef.current
       if (!resume) throw new Error('업무를 아직 만들지 못했어요. "↺ 처음부터 다시"를 눌러 주세요.')
+      // 업무는 있는데 첫 조건 저장이 실패했으면(버전 없음) 화면 조건부터 저장한다. 안 그러면 AI가 빈 조건을 보고 답한다.
+      if (resume.versionId === null && !again && inputRef.current && !noInput) {
+        await saveInput(resume.sessionId, null, edited?.input ?? inputRef.current, edited?.values ?? valuesNow, screen, false)
+        if (screen !== screenRef.current) return
+        resume = resumeRef.current ?? resume
+      }
       let payload = body
       if (edited && resume.versionId !== null && resume.values !== edited.values) {
         await saveInput(resume.sessionId, resume.versionId, edited.input, edited.values, screen, false)
@@ -619,6 +629,7 @@ export default function EasyPage() {
       const created = await workflowApi.create(STORE_ID, kind, 'agent', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
       // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
       if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
+      markSession(created.session_id, screen)
       return saveInput(created.session_id, null, input, values, screen)
     }
     // changed: 확인 카드에 없는 칸(품목 보관 한도 등)만 바꾼 경우에도 새 조건으로 저장한다.
