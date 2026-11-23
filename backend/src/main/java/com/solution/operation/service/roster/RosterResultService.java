@@ -158,6 +158,11 @@ public class RosterResultService {
 				}
 				return state(job, requestKey);
 			}
+			// 잠금 밖에서 조회한 뒤 앞 계산이 저장을 끝내고 작업 기록을 지웠을 수 있어 한 번 더 확인한다
+			var saved = repository.findByRequestKey(sessionId, requestKey);
+			if (saved.isPresent()) {
+				return done(saved.get(), versionId);
+			}
 			// 계산 중 표시를 먼저 남기고(실패하면 시작하지 않음) 뒤에서 계산한다.
 			CalculationRuns.Run run = runs.start(sessionId, "operation", () -> checked(sessionId, versionId));
 			Job running = new Job(sessionId, versionId, "RUNNING", null, Instant.now());

@@ -132,10 +132,11 @@ def _slot_ok(slot_run, rows, index, limit, need):
             passed += int(result)
         left = total - k - 1
         # 남은 판이 모두 실패해도 통과 / 모두 통과해도 실패 → 판정이 정해졌다
-        if checked and passed / (checked + left) >= need:
+        # 조기 판정도 최종 판정과 같이 소수 넷째 자리로 반올림해 비교한다(경계값에서 판정이 갈리지 않게)
+        if checked and round(passed / (checked + left), 4) >= need:
             return True, None
         best = max(passed / checked if checked else 0.0, (passed + left) / (checked + left) if checked + left else 0.0)
-        if checked + left and best < need:
+        if checked + left and round(best, 4) < need:
             return False, None
     if not checked:
         return True, None
