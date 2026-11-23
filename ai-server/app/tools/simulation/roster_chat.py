@@ -83,6 +83,9 @@ def _check_field(spec: dict) -> dict:
     elif kind == "time":
         if not (_TIME.match(str(spec.get("min", ""))) and _TIME.match(str(spec.get("max", "")))):
             raise ValueError(f"{spec['key']}: time 칸은 min·max(HH:MM)가 필요해요.")
+        step = spec.get("step_min", 30)
+        if type(step) is not int or not 1 <= step <= 240:
+            raise ValueError(f"{spec['key']}: step_min은 1~240분 정수예요.")
     elif kind != "bool":
         raise ValueError(f"{spec['key']}: 모르는 type이에요.")
     return spec

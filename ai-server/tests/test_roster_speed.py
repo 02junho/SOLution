@@ -214,18 +214,24 @@ def test_미리_계산은_결과가_같고_값을_검사한다():
 def test_진행_상황은_끝난_요일_요약을_모은다():
     from app.tools.simulation import roster_options as ro
 
-    ro._progress_start("k1", ["MON", "TUE"])
+    entry = ro._progress_start("k1", ["MON", "TUE"])
     assert ro.progress("k1") == {"total": 2, "done": 0, "order": ["MON", "TUE"], "days": {}}
     day = {"picks": {"RECOMMENDED": 1}, "windows": [{"start_time": "11:00", "end_time": "14:00"}],
            "ladder": [{"peak_wait_sec": 200}, {"peak_wait_sec": 150}]}
-    ro._progress_day("k1", "TUE", day, None)
-    ro._progress_day("k1", "MON", None, "주문이 없어요")
+    ro._progress_day(entry, "TUE", day, None)
+    ro._progress_day(entry, "MON", None, "주문이 없어요")
     out = ro.progress("k1")
     assert out["done"] == 2 and list(out["days"]) == ["MON", "TUE"]  # 요일 순서대로
     assert out["days"]["TUE"] == {"windows": day["windows"], "extra": 1, "peak_wait_sec": 150}
     assert out["days"]["MON"] == {"failed": True}
     assert ro.progress("없는키") is None
-    ro._progress_start(None, ["MON"])  # 키가 없으면 아무것도 안 남긴다
+    assert ro._progress_start(None, ["MON"]) is None  # 키가 없으면 아무것도 안 남긴다
+    # 같은 키로 다시 계산하면 새 기록: 앞 실행이 늦게 끝낸 요일은 새 기록에 섞이지 않는다
+    again = ro._progress_start("k1", ["MON", "TUE"])
+    ro._progress_day(entry, "TUE", day, None)
+    assert ro.progress("k1")["done"] == 0
+    ro._progress_day(again, "TUE", day, None)
+    assert ro.progress("k1")["done"] == 1
 
 
 def test_계산하면서_진행_상황을_남긴다(calls):
@@ -248,7 +254,7 @@ def test_이어받은_요일은_끝나는_대로_진행에_잡힌다(monkeypatch
 
     def slow(args):
         if args[0] == "TUE":
-            gate.wait(5)  # 화요일만 붙잡아 둔다
+            gate.wait()  # 화요일만 붙잡아 둔다(테스트가 직접 풀 때까지)
         return real(args)
 
     monkeypatch.setattr(ro2, "_day_job", slow)
@@ -260,10 +266,13 @@ def test_이어받은_요일은_끝나는_대로_진행에_잡힌다(monkeypatch
     seen = {}
     job = threading.Thread(target=lambda: seen.update(out=ro2.plan({**body, "progress_key": "follow"})))
     job.start()
-    deadline = _time.time() + 20
-    while _time.time() < deadline and (ro2.progress("follow") or {}).get("done", 0) < 1:
-        _time.sleep(0.05)
-    assert ro2.progress("follow")["done"] == 1  # 월요일은 화요일을 기다리지 않고 잡힘
-    gate.set()
-    warm.join(20); job.join(20)
+    try:
+        deadline = _time.time() + 20
+        while _time.time() < deadline and (ro2.progress("follow") or {}).get("done", 0) < 1:
+            _time.sleep(0.05)
+        assert ro2.progress("follow")["done"] == 1  # 월요일은 화요일을 기다리지 않고 잡힘
+    finally:
+        gate.set()  # 확인이 실패해도 붙잡힌 계산을 풀어 스레드가 끝나게
+        warm.join(20)
+        job.join(20)
     assert ro2.progress("follow")["done"] == 2

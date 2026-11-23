@@ -269,7 +269,7 @@ def roster_options_run(body: RosterOptionsRequest, request_key: str = Depends(ge
 
 
 @router.get("/roster-options/progress", response_model=ApiResponse[dict])
-def roster_options_progress(key: str = Query(min_length=1, max_length=111)) -> ApiResponse[dict]:
+def roster_options_progress(key: str = Query(min_length=1, max_length=128)) -> ApiResponse[dict]:
     """계산 중인 추천 근무표에서 끝난 요일(추천안 요약). 모르는 키면 done 0(아직 시작 전이거나 이미 지워짐)."""
     return ok(roster_progress(key) or {"total": None, "done": 0, "order": [], "days": {}})
 

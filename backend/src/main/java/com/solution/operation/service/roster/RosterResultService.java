@@ -77,7 +77,7 @@ public class RosterResultService {
 
 	private final Map<String, Job> jobs = new ConcurrentHashMap<>();
 
-	/** 작업 기록 키: 같은 요청 키라도 업무가 다르면 다른 작업이다(DB 조회도 업무별). */
+	/** 작업 기록·진행 상황 키: 같은 요청 키라도 업무가 다르면 다른 작업이다(DB 조회도 업무별). 최대 120자(업무 번호 19 + 1 + 요청 키 100). */
 	private static String jobKey(long sessionId, String requestKey) {
 		return sessionId + ":" + requestKey;
 	}
@@ -196,7 +196,7 @@ public class RosterResultService {
 		if (job != null && job.sessionId() == sessionId) {
 			ApiResponse<Map<String, Object>> current = state(job, requestKey);
 			if ("RUNNING".equals(job.state())) {
-				Map<String, Object> progress = rosters.rosterProgress(requestKey);
+				Map<String, Object> progress = rosters.rosterProgress(jobKey(sessionId, requestKey));
 				if (progress != null) {
 					current.data().put("progress", progress);
 				}
@@ -232,7 +232,7 @@ public class RosterResultService {
 		try (run) {
 			// 작업의 요청 키를 진행 상황 키로 같이 보낸다(상태 조회가 이 키로 끝난 요일을 꺼낸다).
 			Map<String, Object> request = new LinkedHashMap<>(body);
-			request.put("progress_key", key);
+			request.put("progress_key", jobKey(sessionId, key)); // 상태 조회와 같은 업무별 키
 			Map<String, Object> options = rosters.rosterOptions(request).data();
 			run.requireActive();
 			save(sessionId, versionId, options, body, key);
@@ -255,7 +255,8 @@ public class RosterResultService {
 			transaction.executeWithoutResult(status -> {
 				requestKeyLock.lock("operation", versionId, key);
 				repository.lockSession(sessionId);
-				if (repository.findByRequestKey(sessionId, key).isEmpty()) {
+				// 같은 업무에서 다른 계산이 아직 돌고 있으면 그 계산의 "계산 중" 표시를 덮지 않는다(CalculationRuns.repairStep과 같은 기준).
+				if (repository.findByRequestKey(sessionId, key).isEmpty() && !runs.active(sessionId)) {
 					repository.markStep(sessionId, checked(sessionId, versionId).versionNo(), "review");
 				}
 			});

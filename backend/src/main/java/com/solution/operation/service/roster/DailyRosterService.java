@@ -20,6 +20,9 @@ import com.solution.operation.service.input.OperationInputBuilder;
 @Service
 public class DailyRosterService {
 
+	/** 진행 상황 키 최대 길이(ai-server progress_key와 같게). */
+	static final int PROGRESS_KEY_MAX = 128;
+
 	private static final ParameterizedTypeReference<ApiResponse<Map<String, Object>>> RESPONSE =
 			new ParameterizedTypeReference<>() { };
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
@@ -49,7 +52,7 @@ public class DailyRosterService {
 			request.put("background", true);
 		}
 		// 진행 상황 키(계산 작업의 요청 키). ai-server가 끝난 요일을 이 키로 모아 두고, 상태 조회 때 progress로 꺼낸다.
-		if (body.get("progress_key") instanceof String progressKey && !progressKey.isBlank() && progressKey.length() <= 111) {
+		if (body.get("progress_key") instanceof String progressKey && !progressKey.isBlank() && progressKey.length() <= PROGRESS_KEY_MAX) {
 			request.put("progress_key", progressKey);
 		}
 		return call("/tools/simulation/roster-options", request, ":options", "추천 근무표 응답을 받지 못했습니다.");

@@ -178,9 +178,9 @@ class RosterResultServiceTest {
 	}
 
 	@Test
-	void 계산_중_상태에는_끝난_요일_진행_상황이_붙고_요청_키를_진행_키로_보낸다() {
+	void 계산_중_상태에는_끝난_요일_진행_상황이_붙고_업무별_진행_키를_보낸다() {
 		var f = fixture(version(2, 2, true), true);
-		when(f.rosters().rosterProgress("key-p")).thenReturn(Map.of("total", 7, "done", 3));
+		when(f.rosters().rosterProgress("1:key-p")).thenReturn(Map.of("total", 7, "done", 3));
 		f.service().start(1L, BODY, "key-p");
 		var running = f.service().status(1L, 7L, "key-p");
 		assertThat(running.data()).containsEntry("state", "RUNNING").containsEntry("progress", Map.of("total", 7, "done", 3));
@@ -188,7 +188,7 @@ class RosterResultServiceTest {
 		@SuppressWarnings("unchecked")
 		ArgumentCaptor<Map<String, Object>> sent = ArgumentCaptor.forClass(Map.class);
 		verify(f.rosters()).rosterOptions(sent.capture());
-		assertThat(sent.getValue()).containsEntry("progress_key", "key-p");
+		assertThat(sent.getValue()).containsEntry("progress_key", "1:key-p");
 	}
 
 	@Test
@@ -203,6 +203,16 @@ class RosterResultServiceTest {
 		// 실패하면 단계를 running에서 review로 되돌린다(목록에 "계산 중"으로 남거나 삭제가 막히지 않게).
 		verify(f.repository()).markStep(1L, 2, "review");
 		assertThat(f.service().status(1L, 7L, "모르는-키").data()).containsEntry("state", "LOST");
+	}
+
+	@Test
+	void 같은_업무에서_다른_계산이_돌고_있으면_실패해도_계산_중_표시를_덮지_않는다() {
+		var f = fixture(version(2, 2, true), false);
+		when(f.rosters().rosterOptions(any())).thenThrow(new RuntimeException("ai-server down"));
+		when(f.runs().active(1L)).thenReturn(true);
+		f.service().start(1L, BODY, "key-7");
+		assertThat(f.service().status(1L, 7L, "key-7").data()).containsEntry("state", "FAILED");
+		verify(f.repository(), never()).markStep(1L, 2, "review");
 	}
 
 	@Test

@@ -87,6 +87,10 @@ def test_입력_검사():
         chat({"message": "가" * 301, "fields": FIELDS}, call=lambda s, u: None)
     with pytest.raises(ValueError):
         chat({"message": "a", "fields": [{"key": "x", "label": "x", "type": "int"}]}, call=lambda s, u: None)
+    for step in (0, -30, "30", 1.5):  # 시간 칸 간격이 이상하면 계산 전에 거절
+        with pytest.raises(ValueError):
+            chat({"message": "a", "fields": [{"key": "t", "label": "t", "type": "time", "min": "07:00", "max": "20:00", "step_min": step}]},
+                 call=lambda s, u: None)
 
 
 def test_결과_설명은_결과에_없는_숫자가_있으면_코드_문장을_쓴다():

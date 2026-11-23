@@ -39,21 +39,27 @@ _progress: dict[str, dict] = {}
 _progress_lock = threading.Lock()
 
 
-def _progress_start(key: str | None, days: list[str]) -> None:
+PROGRESS_KEY_MAX = 128  # Spring이 "업무번호:요청키"(최대 120자)로 보낸다
+
+
+def _progress_start(key: str | None, days: list[str]) -> dict | None:
+    """이번 실행의 진행 기록을 만들어 돌려준다. 같은 키로 다시 계산하면 새 기록으로 바뀌고, 앞 실행은 자기 기록에만 쓴다."""
     if not key:
-        return
+        return None
+    entry = {"total": len(days), "days": {}, "order": days}
     with _progress_lock:
-        _progress[key] = {"total": len(days), "days": {}, "order": days}
+        _progress.pop(key, None)  # 다시 넣어 가장 최근 것으로
+        _progress[key] = entry
         while len(_progress) > PROGRESS_KEEP:  # 오래된 것부터 지운다(dict는 넣은 순서를 지킨다)
             _progress.pop(next(iter(_progress)))
+    return entry
 
 
-def _progress_day(key: str | None, name: str, result: dict | None, err: str | None) -> None:
-    if not key:
+def _progress_day(entry: dict | None, name: str, result: dict | None, err: str | None) -> None:
+    if entry is None:
         return
     with _progress_lock:
-        entry = _progress.get(key)
-        if entry is None or name in entry["days"]:
+        if name in entry["days"]:
             return
         if err or not result:
             entry["days"][name] = {"failed": True}
@@ -452,7 +458,10 @@ def plan(body: dict, engine: str = "simpy") -> dict:
             raise ValueError("요일은 MON~SUN을 한 번씩, 각 요일에 roster(하루 근무표 조건)를 보내 주세요.")
         seen.add(name)
         # 반복 수: 따로 안 보냈으면 ROSTER_REPETITIONS(같은 seed에서 30번과 인건비 차이 5% 안팎, 시간 약 35% 덜 듦. 개발기록 65번)
-        jobs.append((name, {"repetitions": ROSTER_REPETITIONS, **d["roster"]}, engine, min_gain, holiday_on))
+        roster = {"repetitions": ROSTER_REPETITIONS, **d["roster"]}
+        # 날짜를 비우면 오늘로 채워 둔다: 요일 기억 키에 날짜가 들어가야 해가 바뀌어(최저시급·노동 규칙 연도) 예전 계산을 꺼내지 않는다.
+        roster.setdefault("business_date", date.today().isoformat())
+        jobs.append((name, roster, engine, min_gain, holiday_on))
     workers = weekly_roster._workers(body.get("workers"))
     # 미리 계산(쉬운 화면이 결과·조건을 읽는 동안 보내는 것): 낮은 우선순위 프로세스 하나로 돈다. 결과는 같다.
     background = body.get("background", False)
@@ -461,11 +470,11 @@ def plan(body: dict, engine: str = "simpy") -> dict:
 
     # 진행 상황 키(Spring이 계산 작업의 요청 키를 보낸다). 화면이 계산 중에 끝난 요일부터 보여 준다.
     progress_key = body.get("progress_key")
-    if progress_key is not None and (not isinstance(progress_key, str) or not 1 <= len(progress_key) <= 111):
-        raise ValueError("progress_key는 1~111자예요.")
-    _progress_start(progress_key, [j[0] for j in jobs])
+    if progress_key is not None and (not isinstance(progress_key, str) or not 1 <= len(progress_key) <= PROGRESS_KEY_MAX):
+        raise ValueError(f"progress_key는 1~{PROGRESS_KEY_MAX}자예요.")
+    entry = _progress_start(progress_key, [j[0] for j in jobs])
     finished = sorted(
-        _run_days(jobs, background, on_day=lambda name, result, err: _progress_day(progress_key, name, result, err)),
+        _run_days(jobs, background, on_day=lambda name, result, err: _progress_day(entry, name, result, err)),
         key=lambda r: weekly_roster.DAYS.index(r[0]),
     )
     skipped = [{"day": n, "reason": err} for n, _, err in finished if err]
