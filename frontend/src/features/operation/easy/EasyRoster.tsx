@@ -600,13 +600,16 @@ export default function EasyRoster({
       const answer = toNames(reply.reply, cond.team.people)
       const shown = applied.rejected ? (applied.changed ? `${answer} 단, ${applied.rejected}` : applied.rejected) : answer
       setChatReply({ text: shown, ok: applied.changed })
+      // 이번 말로 바꾼 것까지 합친 "모아 둔 변경"(바로 아래 setPending은 다음 렌더에야 보이므로 여기서 같이 계산해 둔다).
+      let pendingNow = pending
       if (applied.changed) {
         setCond(applied.next)
         setChangedRows(applied.rows)
         // 결과를 보고 있었으면 바로 계산하지 않고, 바꾼 내용을 보여 주고 "다시 계산할까요?"를 묻는다(더 고칠 수도 있게).
         if (phase === 'result') {
           // 제목이 이미 "이렇게 바꿨어요"라 앞말은 뺀다. 같은 칸을 또 바꾸면(시급 11,000 → 10,320) 마지막 값만 남긴다.
-          setPending((p) => ({ before: p?.before ?? cond, changes: mergeChanges(p?.changes ?? [], shown.replace(/^바꿨어요 — /, '')) }))
+          pendingNow = { before: pending?.before ?? cond, changes: mergeChanges(pending?.changes ?? [], shown.replace(/^바꿨어요 — /, '')) }
+          setPending(pendingNow)
           setChatReply(null)
           // AI가 "그럼 계산해 줘", "응"을 알아듣게, 화면이 물은 말도 앞 대화에 넣는다.
           chatHistory.current = pushHistory(chatHistory.current, { role: 'assistant', text: '바꾼 조건으로 아직 다시 계산하지 않았어요. 이대로 다시 계산할까요?' })
@@ -614,8 +617,8 @@ export default function EasyRoster({
       }
       // "다시 계산해 줘"처럼 계산해 달라고 직접 말했을 때만 바로 계산한다(모아 둔 변경이 있으면 같이).
       if (reply.intent === 'RUN' && (phase === 'result' || phase === 'confirm')) {
-        nextChange.current = pending ? changeOf(pending) : null
-        setRerunNote(pending ? `${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.` : shown)
+        nextChange.current = pendingNow ? changeOf(pendingNow) : null
+        setRerunNote(pendingNow ? `${pendingNow.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.` : shown)
         setPending(null)
         rerunNext.current = true
       }
