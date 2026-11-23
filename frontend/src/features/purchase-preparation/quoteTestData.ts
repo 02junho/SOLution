@@ -64,7 +64,7 @@ export function mergeBatches(list: Batch[]): Batch | null {
   list.forEach((b, i) => b.delivery.forEach(d => { if (d.supplier_name) lastDelivery.set(d.supplier_name, i) }))
   return {
     quote_batch_id: list[list.length - 1].quote_batch_id,
-    normalization: {items: list.flatMap((b, i) => b.normalization.items.map(r => ({...r, line_id: prefix(i, r.line_id),
+    normalization: {dictionary_version: 2, items: list.flatMap((b, i) => b.normalization.items.map(r => ({...r, line_id: prefix(i, r.line_id),
       issues: r.issues.map(x => ({...x, target_id: x.target_id ? prefix(i, x.target_id) : x.target_id}))})))},
     confirmations: Object.assign({}, ...list.map(b => b.confirmations)),
     delivery: list.flatMap((b, i) => b.delivery.filter(d => !d.supplier_name || lastDelivery.get(d.supplier_name) === i)),

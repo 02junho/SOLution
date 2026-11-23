@@ -20,3 +20,6 @@ langgraph==1.2.20
 # PuLP 4는 3.x와 API가 다름: 변수는 prob.add_variable("x", lowBound=0, cat="Integer")로 만듦.
 pulp[highs,cbc]==4.2.0
 simpy==4.1.2    # 운영 시뮬레이션
+
+# RAG
+sentence-transformers==6.3.0

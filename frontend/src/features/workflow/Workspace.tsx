@@ -446,26 +446,40 @@ export default function Workspace({
         </div>
       </div>
       <div className="workspace-toolbar">
+        
         <div className="feature-tabs" role="group" aria-label="업무 종류">
-          <button
-            aria-pressed={feature === 'purchase'}
-            className={feature === 'purchase' ? 'active' : ''}
-            disabled={!!busy}
-            onClick={() => onFeature('purchase')}
-          >
-            <Icon name="box" size={17} />
-            매입·재고
-          </button>
-          <button
-            aria-pressed={feature === 'operation'}
-            className={feature === 'operation' ? 'active' : ''}
-            disabled={!!busy}
-            onClick={() => onFeature('operation')}
-          >
-            <Icon name="clock" size={17} />
-            운영 실험
-          </button>
-        </div>
+  <button
+    aria-pressed={feature === 'purchase'}
+    className={feature === 'purchase' ? 'active' : ''}
+    disabled={!!busy}
+    onClick={() => onFeature('purchase')}
+  >
+    <Icon name="box" size={17} />
+    매입·재고
+  </button>
+
+  <button
+    aria-pressed={feature === 'operation'}
+    className={feature === 'operation' ? 'active' : ''}
+    disabled={!!busy}
+    onClick={() => onFeature('operation')}
+  >
+    <Icon name="clock" size={17} />
+    운영 실험
+  </button>
+
+  <button
+    disabled={!!busy}
+    onClick={() => {
+      window.location.href = '/?mode=quote'
+    }}
+  >
+    <Icon name="box" size={17} />
+    견적 정리
+  </button>
+</div>
+
+
         <div className="session-meta">
           {context ? (
             <>

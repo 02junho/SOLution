@@ -1,201 +1,1380 @@
-import {useRef, useState} from 'react'
+import {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback
+} from 'react'
+
 import type {FormEvent} from 'react'
-import {quoteIntegrationApi, QuoteRequestError} from '../api/quoteIntegrationApi'
-import type {Trace} from '../api/quoteIntegrationApi'
-import {MaterialsTable, QuotesTable, SalesTable} from '../features/purchase-preparation/Tables'
-import {dictionary, inventory, manualQuote, materialsTable, mergeBatches, presentIssues, quotesTable, recipes, sales as sampleSales, sampleQuotes, sampleText, tableWithActuals, upsertBatch} from '../features/purchase-preparation/quoteTestData'
-import type {Batch, Dictionary, ManualQuote, Preview, Sales} from '../types/quoteIntegration'
+
+import {quoteIntegrationApi} from '../api/quoteIntegrationApi'
+
+import {
+  MaterialsTable,
+  QuotesTable,
+  SalesTable
+} from '../features/purchase-preparation/Tables'
+
+import {
+  manualQuote,
+  materialsTable,
+  presentIssues,
+  quotesTable,
+  sampleText,
+  tableWithActuals
+} from '../features/purchase-preparation/quoteTestData'
+
+import type {
+  Batch,
+  Dictionary,
+  ManualQuote,
+  Preview,
+  Sales
+} from '../types/quoteIntegration'
+
 import '../features/purchase-preparation/styles.css'
 import '../features/purchase-preparation/integration.css'
 
-type Chat = {role: 'user' | 'assistant'; text: string}
-const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i
-const initial = new URLSearchParams(window.location.search)
-const json = (value: unknown) => JSON.stringify(value, null, 2)
-const errorText = (err: unknown) => err instanceof Error ? err.message : String(err)
+
+type Chat = {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+
+// 품목별 견적 집계 타입
+type GroupedQuote = {
+  itemId: string
+  itemName: string
+  suppliers: string[]
+  totalQuantity: number
+  unit: string
+  totalPrice: number
+  quantityMissing: boolean
+  priceMissing: boolean
+  priceCount: number
+  needsConfirmation: boolean
+}
+
+
+// 시연용 매장 ID 및 작업 UUID
+const STORE_ID = 'quote-test-e80ab4ba-4da'
+
+const PREPARATION_ID =
+  '87b31b51-d0b7-4e54-8013-f5f54b599929'
+
+
+const uuid =
+  /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i
+
+
+const json = (value: unknown) =>
+  JSON.stringify(value, null, 2)
+
+
+const errorText = (err: unknown) =>
+  err instanceof Error ? err.message : String(err)
+
+
+// 품목 ID에 따른 한글 이름
+const ITEM_NAMES: Record<string, string> = {
+  beans: '원두',
+  milk: '우유',
+  ice_cup: '아이스컵',
+  hot_cup: '핫컵',
+  lid: '컵뚜껑'
+}
+
+
+// 품목별 표준 단위
+const ITEM_UNITS: Record<string, string> = {
+  beans: 'g',
+  milk: 'ml',
+  ice_cup: '개',
+  hot_cup: '개',
+  lid: '개'
+}
+
+
+// 확정된 품목 ID 또는 RAG 추천 품목 ID 반환
+function resolveItemId(
+  itemId: string | null,
+  candidateItemIds: string[]
+): string | null {
+
+  // 확정된 품목 우선 사용
+  if (itemId) {
+    return itemId
+  }
+
+  // RAG 후보가 한 개이면 해당 품목으로 집계
+  if (candidateItemIds?.length === 1) {
+    return candidateItemIds[0]
+  }
+
+  // 후보가 없거나 여러 개인 경우
+  return null
+}
+
+
+// 표준 단위 수량 계산
+function calculateQuantity(
+  normalizedQuantity: number | string | null,
+  normalizedUnit: string | null,
+  quantityPerUnit: number | string | null,
+  quantityUnit: string | null,
+  unitsPerPack: number | null
+): {quantity: number; unit: string} | null {
+
+  // 서버에서 계산된 수량 우선 사용
+  if (
+    normalizedQuantity != null &&
+    normalizedUnit
+  ) {
+
+    const quantity = Number(normalizedQuantity)
+
+    if (Number.isFinite(quantity) && quantity > 0) {
+
+      return {
+        quantity,
+        unit: normalizedUnit
+      }
+    }
+  }
+
+  // 필요한 수량 정보가 누락된 경우
+  if (
+    quantityPerUnit == null ||
+    unitsPerPack == null ||
+    !quantityUnit
+  ) {
+    return null
+  }
+
+  const unitQuantity = Number(quantityPerUnit)
+
+  if (
+    !Number.isFinite(unitQuantity) ||
+    unitQuantity <= 0 ||
+    !Number.isInteger(unitsPerPack) ||
+    unitsPerPack <= 0
+  ) {
+    return null
+  }
+
+  const quantity = unitQuantity * unitsPerPack
+
+  if (!Number.isFinite(quantity)) {
+    return null
+  }
+
+  switch (quantityUnit) {
+
+    // kg → g
+    case 'kg':
+      return {
+        quantity: quantity * 1000,
+        unit: 'g'
+      }
+
+    // L → ml
+    case 'L':
+      return {
+        quantity: quantity * 1000,
+        unit: 'ml'
+      }
+
+    // 기존 표준 단위 유지
+    case 'g':
+    case 'ml':
+    case '개':
+      return {
+        quantity,
+        unit: quantityUnit
+      }
+
+    default:
+      return null
+  }
+}
+
+
+// 가격 표시
+function formatPrice(
+  price: number | string | null
+): string {
+
+  if (price == null) {
+    return '확인 필요'
+  }
+
+  const amount = Number(price)
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    return '확인 필요'
+  }
+
+  return amount.toLocaleString('ko-KR') + '원'
+}
+
 
 export default function QuoteIntegrationPage() {
-  const [store, setStore] = useState(() => initial.get('storeId') ?? 'quote-test-' + crypto.randomUUID().slice(0, 12))
-  const [id, setId] = useState(() => initial.get('preparationId') ?? crypto.randomUUID())
-  const [batchId, setBatchId] = useState('')
-  const [busy, setBusy] = useState('')
-  const running = useRef(false)
-  const [error, setError] = useState('')
-  const [log, setLog] = useState<Trace[]>([])
-  const [chat, setChat] = useState<Chat[]>([])
-  const [dict, setDict] = useState<Dictionary | null>(null)
-  const [sales, setSales] = useState<Sales | null>(null)
-  const [preview, setPreview] = useState<Preview | null>(null)
-  // 거래처마다 따로 분석한 견적 묶음. 구매안을 만들 때 모두 함께 넘긴다.
-  const [batches, setBatches] = useState<Batch[]>([])
-  const batch = mergeBatches(batches)
-  const [source, setSource] = useState(sampleText)
-  const [supplier, setSupplier] = useState(sampleQuotes[0].supplier_name)
-  const [useRag, setUseRag] = useState(false)
-  const [manualJson, setManualJson] = useState(json(manualQuote))
-  const api = quoteIntegrationApi(store.trim(), id.trim(), entry => setLog(list => [entry, ...list].slice(0, 24)))
-  const valid = !!store.trim() && uuid.test(id.trim())
 
-  function clearContext() {
-    setDict(null); setSales(null); setPreview(null); setBatches([]); setBatchId('')
-    setChat([]); setLog([]); setError('')
+  const store = STORE_ID
+  const id = PREPARATION_ID
+
+
+  const [busy, setBusy] = useState('')
+
+  const [error, setError] = useState('')
+
+  const running = useRef(false)
+
+  const [chat, setChat] = useState<Chat[]>([])
+
+  const [dict, setDict] =
+    useState<Dictionary | null>(null)
+
+  const [sales, setSales] =
+    useState<Sales | null>(null)
+
+  const [preview, setPreview] =
+    useState<Preview | null>(null)
+
+  const [batch, setBatch] =
+    useState<Batch | null>(null)
+
+  const [batches, setBatches] =
+    useState<Batch[]>([])
+
+  const [source, setSource] =
+    useState(sampleText)
+
+  const [supplier, setSupplier] =
+    useState('A식자재')
+
+  const [manualJson, setManualJson] =
+    useState(json(manualQuote))
+
+
+  // Spring Boot API 객체 생성
+  const api = useMemo(
+    () => quoteIntegrationApi(
+      store,
+      id,
+      () => {}
+    ),
+    [store, id]
+  )
+
+
+  const valid =
+    !!store.trim() && uuid.test(id.trim())
+
+
+  // 대화 기록 추가
+  function add(
+    role: Chat['role'],
+    text: string
+  ) {
+
+    setChat(list => [
+      ...list,
+      {role, text}
+    ])
   }
-  function add(role: Chat['role'], text: string) { setChat(list => [...list, {role, text}]) }
-  async function run(label: string, work: () => Promise<void>) {
-    if (!valid || running.current) return
-    running.current = true
-    setBusy(label); setError('')
-    try { await work() }
-    catch (err) { setError(label + ': ' + errorText(err)) }
-    finally { running.current = false; setBusy('') }
-  }
-  async function calculate() { setPreview(await api.preview()) }
-  async function seed() {
-    // 매장 단위 PUT은 전체 교체다. 이미 데이터가 있는 매장은 샘플로 덮어쓰지 않는다.
-    try { await api.items(); throw new Error('이미 품목 사전이 있는 매장입니다. 새 테스트 ID를 사용해 주세요.') }
-    catch (err) { if (!(err instanceof QuoteRequestError && err.status === 404)) throw err }
-    setDict(await api.createItems(dictionary))
-    await api.recipes(recipes)
-    setSales(await api.saveSales(sampleSales))
-    await api.inventory(inventory)
-    add('assistant', '샘플 품목 사전, 재료표, 판매 계획, 재고를 Spring에 등록했습니다.')
-  }
-  async function fetchInputs() {
-    setDict(await api.items())
-    setSales(await api.sales())
-  }
-  function showBatch(data: Batch) {
-    setBatches(list => upsertBatch(list, data)); setBatchId(data.quote_batch_id)
-    add('assistant', `견적 ${data.normalization.items.length}행을 정리했습니다. 분석 묶음 ID: ${data.quote_batch_id}`)
-  }
-  // 샘플 거래처 12곳의 견적 문자를 한 곳씩 차례로 분석한다. 이미 분석한 거래처는 건너뛴다.
-  function analyzeSamples() {
-    void run('샘플 견적 12곳 분석', async () => {
-      const done = new Set(batches.flatMap(b => b.normalization.items.map(r => r.supplier_name)))
-      for (const [i, q] of sampleQuotes.entries()) {
-        if (done.has(q.supplier_name)) continue
-        setBusy(`샘플 견적 분석 ${i + 1}/${sampleQuotes.length} · ${q.supplier_name}`)
-        add('user', `[${q.supplier_name}] ${q.text}`)
-        showBatch(await api.analyze(q.text, q.supplier_name, useRag))
+
+
+  // API 공통 실행 처리
+  const run = useCallback(
+    async (
+      label: string,
+      work: () => Promise<void>
+    ) => {
+
+      if (!valid || running.current) {
+        return
       }
+
+      running.current = true
+
+      setBusy(label)
+
+      setError('')
+
+      try {
+
+        await work()
+
+      } catch (err) {
+
+        setError(
+          label + ': ' + errorText(err)
+        )
+
+      } finally {
+
+        running.current = false
+
+        setBusy('')
+      }
+    },
+    [valid]
+  )
+
+
+  // 재료 필요량 및 재고 계산
+  const calculate = useCallback(async () => {
+
+    const result = await api.preview()
+
+    setPreview(result)
+
+  }, [api])
+
+
+  // 품목 사전 및 판매 계획 조회
+  const fetchInputs = useCallback(async () => {
+
+    const dictionaryData = await api.items()
+
+    setDict(dictionaryData)
+
+    const salesData = await api.sales()
+
+    setSales(salesData)
+
+  }, [api])
+
+
+  // 페이지 접속 시 초기 데이터 자동 조회
+  useEffect(() => {
+
+    void run('초기 데이터 조회', async () => {
+
+      await fetchInputs()
+
+      await calculate()
+
+    })
+
+  }, [run, fetchInputs, calculate])
+
+
+  // 기존 견적 분석 결과 갱신
+  function updateBatch(data: Batch) {
+
+    setBatch(data)
+
+  
+
+    setBatches(previous => {
+
+      const exists = previous.some(
+        entry =>
+          entry.quote_batch_id === data.quote_batch_id
+      )
+
+      return exists
+
+        ? previous.map(entry =>
+            entry.quote_batch_id === data.quote_batch_id
+              ? data
+              : entry
+          )
+
+        : [...previous, data]
+
     })
   }
-  function pickSample(name: string) {
-    const q = sampleQuotes.find(x => x.supplier_name === name)
-    if (q) { setSupplier(q.supplier_name); setSource(q.text) }
+
+
+  // 견적 분석 결과 표시
+  function showBatch(data: Batch) {
+
+    updateBatch(data)
+
+    add(
+      'assistant',
+      `견적 ${data.normalization.items.length}행을 정리했습니다.`
+    )
   }
+
+
+  // AI 견적 분석 요청
   function send(e: FormEvent<HTMLFormElement>) {
+
     e.preventDefault()
+
+    if (!source.trim()) {
+      return
+    }
+
     void run('AI 견적 분석', async () => {
+
       add('user', source.trim())
-      showBatch(await api.analyze(source.trim(), supplier.trim(), useRag))
+
+      const data = await api.analyze(
+        source.trim(),
+        supplier.trim(),
+        true
+      )
+
+      showBatch(data)
+
     })
   }
-  // 구매 업무는 화면이 쓰는 매장(업무 공간과 같은 VITE_STORE_ID)에 만든다. 견적 테스트 매장 ID와는 따로다.
-  function makePurchase() {
-    if (!batch) return
-    void run('구매안 만들기', async () => {
-      const result = await api.purchaseInput(Number(import.meta.env.VITE_STORE_ID ?? 1), batches.map(b => b.quote_batch_id))
-      // 빈 값이 있으면 업무 화면이 질문 카드와 조건 폼으로 이어서 받는다.
-      window.location.assign(`${window.location.pathname}#/work/${result.data.session_id}`)
-    })
-  }
-  const skipped = batch?.normalization.items.filter(r => !r.item_id || r.issues.some(i => i.blocks_comparison)).length ?? 0
+
+
   const suppliers = quotesTable(batch).suppliers
+
+
+  // 기존 누적 견적 테이블 생성
+  const tables = batches.map(entry => ({
+
+    batchId: entry.quote_batch_id,
+
+    table: quotesTable(entry)
+
+  }))
+
+
+  // 거래처 중복 제거
+  const supplierNames = [
+
+    ...new Set(
+
+      tables.flatMap(({table}) =>
+
+        table.suppliers.map(
+          supplier => supplier.supplier_id
+        )
+
+      )
+    )
+  ]
+
+
+  // 기존 견적 정리 데이터 결합
+  const accumulatedQuotes = {
+
+    supplier_count: supplierNames.length,
+
+    suppliers: supplierNames.map(supplierId => ({
+
+      supplier_id: supplierId,
+
+      supplier_name: supplierId,
+
+      shipping_rules: tables.flatMap(({table}) =>
+
+        table.suppliers
+
+          .filter(
+            supplier =>
+              supplier.supplier_id === supplierId
+          )
+
+          .flatMap(
+            supplier => supplier.shipping_rules
+          )
+
+      )
+
+    })),
+
+    items: tables.flatMap(({batchId, table}) =>
+
+      table.items.map(item => ({
+
+        ...item,
+
+        line_id: `${batchId}:${item.line_id}`
+
+      }))
+
+    )
+  }
+
+
+  // 누적 견적 검증 결과
+  const accumulatedIssues = presentIssues(
+
+    batches.flatMap(entry =>
+
+      entry.normalization.items.flatMap(item =>
+
+        item.issues.map(issue => ({
+
+          ...issue,
+
+          target_id:
+            `${entry.quote_batch_id}:${issue.target_id ?? item.line_id}`
+
+        }))
+
+      )
+    )
+  )
+
+
+  // ==========================================
+  // 품목별 견적 수량 및 가격 합산
+  // ==========================================
+
+  const groupedQuotes = useMemo(() => {
+
+    const groupedMap = new Map<string, GroupedQuote>()
+
+    batches.forEach(entry => {
+
+      entry.normalization.items.forEach(item => {
+
+        // 확정 품목 또는 RAG 추천 품목 ID
+        const resolvedItemId = resolveItemId(
+          item.item_id,
+          item.candidate_item_ids
+        )
+
+
+        // 같은 품목은 동일한 키로 집계
+        const groupKey = resolvedItemId
+          ?? `${entry.quote_batch_id}:${item.line_id}`
+
+
+        // 품목 한글 이름 설정
+        const itemName = resolvedItemId
+
+          ? ITEM_NAMES[resolvedItemId] ?? resolvedItemId
+
+          : item.raw_item_name
+
+
+        // 표준 단위 수량 계산
+        const quantity = calculateQuantity(
+          item.normalized_quantity_per_pack,
+          item.normalized_unit,
+          item.quantity_per_unit,
+          item.quantity_unit,
+          item.units_per_pack
+        )
+
+
+        // 품목 기준 단위 확인
+        const expectedUnit = resolvedItemId
+
+          ? ITEM_UNITS[resolvedItemId]
+
+          : undefined
+
+
+        const unit =
+          expectedUnit ?? quantity?.unit ?? ''
+
+
+        // 기존 그룹이 없다면 생성
+        if (!groupedMap.has(groupKey)) {
+
+          groupedMap.set(groupKey, {
+
+            itemId: groupKey,
+
+            itemName,
+
+            suppliers: [],
+
+            totalQuantity: 0,
+
+            unit,
+
+            totalPrice: 0,
+
+            quantityMissing: false,
+
+            priceMissing: false,
+
+            priceCount: 0,
+
+            needsConfirmation: false
+
+          })
+
+        }
+
+
+        const grouped = groupedMap.get(groupKey)!
+
+
+        // 거래처 중복 제거
+        if (
+          item.supplier_name &&
+          !grouped.suppliers.includes(item.supplier_name)
+        ) {
+
+          grouped.suppliers.push(
+            item.supplier_name
+          )
+
+        }
+
+
+        // 동일한 품목의 수량 합산
+        if (
+          quantity &&
+          (
+            !grouped.unit ||
+            grouped.unit === quantity.unit
+          )
+        ) {
+
+          grouped.totalQuantity += quantity.quantity
+
+          grouped.unit = quantity.unit
+
+        } else {
+
+          grouped.quantityMissing = true
+
+        }
+
+
+        // 동일한 품목의 가격 합산
+        if (
+          item.pack_price != null &&
+          Number.isFinite(Number(item.pack_price)) &&
+          Number(item.pack_price) >= 0
+        ) {
+
+          grouped.totalPrice += Number(item.pack_price)
+
+          grouped.priceCount += 1
+
+        } else {
+
+          grouped.priceMissing = true
+
+        }
+
+
+        // RAG 후보만 있는 경우 확인 상태 유지
+        if (!item.item_id) {
+
+          grouped.needsConfirmation = true
+
+        }
+
+      })
+
+    })
+
+
+    return Array.from(groupedMap.values())
+
+  }, [batches])
+
+
+  // 전체 견적 가격 합계
+  const totalQuotePrice = groupedQuotes.reduce(
+
+    (total, item) =>
+      total + item.totalPrice,
+
+    0
+
+  )
+
+
+  // 전체 견적에 미확인 가격이 있는지 확인
+  const hasMissingPrice = groupedQuotes.some(
+    item => item.priceMissing
+  )
+
+
   const disabled = !!busy || !valid
-  return <main className="pp qi">
-    <header className="pp-header"><div><h1>이번 주 매입 준비</h1><p>Spring과 FastAPI를 연결하는 견적 테스트 화면입니다.</p></div>
-      <ol className="pp-steps" aria-label="매입 준비 단계"><li className={!batch && !preview ? 'active' : 'done'}>1 입력</li>
-        <li className={batch || preview ? 'active' : ''}>2 확인</li><li>3 구매안</li><li>4 확정</li></ol>
-    </header>
-    <section className="pp-card qi-controls" aria-label="테스트 대상">
-      <label>테스트 매장 ID<input value={store} disabled={!!busy} onChange={e => {setStore(e.target.value); clearContext()}} /></label>
-      <label>작업 UUID<input value={id} disabled={!!busy} onChange={e => {setId(e.target.value); clearContext()}} /></label>
-      <div className="qi-actions">
-        <button className="pp-plain" disabled={!!busy} onClick={() => {setStore('quote-test-' + crypto.randomUUID().slice(0,12)); setId(crypto.randomUUID()); clearContext()}}>새 테스트 ID</button>
-        <button className="pp-primary" disabled={disabled || !store.trim().startsWith('quote-test-')} onClick={() => void run('샘플 등록', seed)}>샘플 데이터 등록</button>
-        <button className="pp-plain" disabled={disabled} onClick={() => void run('데이터 조회', fetchInputs)}>사전·계획 조회</button>
-      </div>
-      <p>샘플 등록은 새 테스트 매장에만 가능합니다. 테스트 데이터는 서버에 저장됩니다.</p>
-    </section>
-    {!valid && <p role="status">매장 ID와 올바른 작업 UUID를 입력해 주세요.</p>}
-    {busy && <p role="status" className="qi-feedback">{busy} 중…</p>}
-    {error && <div role="alert" className="pp-error qi-feedback">{error}</div>}
-    <div className="pp-grid qi-grid">
-      <section className="pp-card pp-chat">
-        <div className="pp-chat-head"><h2>견적 입력</h2><span className="pp-chip">실서버 요청</span></div>
-        <div className="pp-messages" role="log" aria-label="견적 처리 내역">
-          {!chat.length && <p>샘플 데이터를 등록한 다음, 거래처 견적 문자를 붙여 넣거나 "샘플 견적 12곳 분석"을 눌러 보세요.</p>}
-          {chat.map((m, i) => <div key={i} className={`pp-bubble ${m.role}`}>{m.text}</div>)}
-          {batch && <div className="pp-bubble assistant">
-            <p>거래처 확인 상태를 바꿀 수 있습니다. 부가세 답변과는 별개입니다.</p>
-            {suppliers.map(s => <div key={s.supplier_id} className="pp-options">
-              <span>{s.supplier_name} · {batch.confirmations[s.supplier_id] ? '확인 완료' : '미확인'}</span>
-              <button className="pp-plain" disabled={disabled} onClick={() => void run('거래처 확인', async () => {
-                // 같은 거래처가 여러 묶음에 있으면 모든 묶음에 같은 확인 값을 넣는다.
-                // 모든 요청이 성공한 뒤 한 번에 반영해서, 중간에 실패하면 화면은 그대로이고 같은 값으로 다시 시도한다.
-                const next = !batch.confirmations[s.supplier_id]
-                const owners = batches.filter(b => b.normalization.items.some(r => r.supplier_name === s.supplier_id))
-                const updates: Batch[] = []
-                for (const owner of owners.length ? owners : batches.slice(-1)) {
-                  updates.push(await api.confirm(owner.quote_batch_id, s.supplier_id, next))
-                }
-                setBatches(list => updates.reduce(upsertBatch, list))
-              })}>{batch.confirmations[s.supplier_id] ? '확인 취소' : '거래처 확인'}</button>
-            </div>)}
-          </div>}
+
+
+  return (
+
+    <main className="pp qi">
+
+
+      {/* 업무 공간 이동 */}
+      <a
+        href="/#/work"
+        style={{
+          display: 'inline-block',
+          marginBottom: 16
+        }}
+      >
+        ← 업무 공간으로 돌아가기
+      </a>
+
+
+      {/* 페이지 헤더 */}
+      <header className="pp-header">
+
+        <div>
+
+          <h1>이번 주 매입 준비</h1>
+
+          <p>
+            AI를 활용해 거래처 견적을 분석하고
+            이번 주 재료 필요량을 확인합니다.
+          </p>
+
         </div>
-        <details className="qi-input">
-          <summary>직접 입력 JSON · AI 키 없이 테스트</summary>
-          <label>견적 JSON<textarea rows={8} value={manualJson} onChange={e => setManualJson(e.target.value)} disabled={!!busy}/></label>
-          <button className="pp-primary" disabled={disabled} onClick={() => void run('견적 직접 입력', async () => {
-            let body: ManualQuote
-            try { body = JSON.parse(manualJson) as ManualQuote } catch { throw new Error('JSON 문법을 확인해 주세요.') }
-            if (!Array.isArray(body?.items) || !body.items.length) throw new Error('items 배열에 견적을 1건 이상 넣어 주세요.')
-            showBatch(await api.manual(body))
-          })}>직접 입력 전송</button>
-        </details>
+
+
+        <ol
+          className="pp-steps"
+          aria-label="매입 준비 단계"
+        >
+
+          <li
+            className={
+              !batch && !preview ? 'active' : 'done'
+            }
+          >
+            1 입력
+          </li>
+
+          <li
+            className={
+              batch || preview ? 'active' : ''
+            }
+          >
+            2 확인
+          </li>
+
+          <li>3 구매안</li>
+
+          <li>4 확정</li>
+
+        </ol>
+
+      </header>
+
+
+      {/* 판매 계획 및 사전 새로고침 */}
+      <section className="pp-card qi-controls">
+
         <div className="qi-actions">
-          <label>샘플 거래처<select disabled={!!busy} value={sampleQuotes.some(q => q.supplier_name === supplier) ? supplier : ''}
-            onChange={e => pickSample(e.target.value)}>
-            <option value="">직접 입력</option>
-            {sampleQuotes.map(q => <option key={q.supplier_name} value={q.supplier_name}>{q.supplier_name}</option>)}
-          </select></label>
-          <button className="pp-plain" disabled={disabled || !dict} onClick={analyzeSamples}>샘플 견적 12곳 분석</button>
+
+          <button
+            className="pp-plain"
+            disabled={disabled}
+            onClick={() =>
+
+              void run('데이터 조회', async () => {
+
+                await fetchInputs()
+
+                await calculate()
+
+              })
+
+            }
+          >
+            사전·계획 새로고침
+          </button>
+
         </div>
-        <form className="qi-input" onSubmit={send}>
-          <label>거래처<input disabled={!!busy} value={supplier} onChange={e => setSupplier(e.target.value)} /></label>
-          <label className="qi-check"><input disabled={!!busy} type="checkbox" checked={useRag} onChange={e => setUseRag(e.target.checked)} />품목 사전 검색 사용</label>
-          <label>견적 원문<textarea rows={6} maxLength={15000} value={source} onChange={e => setSource(e.target.value)} disabled={!!busy} /></label>
-          <button className="pp-primary" disabled={disabled || !source.trim()}>AI 분석 보내기</button>
-        </form>
+
       </section>
-      <div className="pp-panels">
-        <SalesTable data={tableWithActuals(sales)} />
-        <MaterialsTable data={materialsTable(preview, dict)} busy={disabled} refresh={() => void run('필요량 계산', calculate)} />
-        {!!preview?.issues.length && <div className="pp-card" role="status">{presentIssues(preview.issues).map((i,n) =>
-          <p key={n}>{i.target_id} · {i.message}</p>)}</div>}
-        <QuotesTable data={quotesTable(batch)} issues={presentIssues(batch?.normalization.items.flatMap(r => r.issues) ?? [])} />
-        <section className="pp-card qi-next" aria-label="구매안 만들기">
-          <h2>다음: 구매안 만들기</h2>
-          <p>{batch
-            ? `정리한 견적으로 구매 업무를 만들고 계산 전 확인으로 넘어가요.${skipped ? ` 확인이 필요한 견적 ${skipped}줄은 빼고 계산해요.` : ''}`
-            : '견적을 먼저 정리하면 구매안을 만들 수 있어요.'}</p>
-          <button className="pp-primary" disabled={disabled || !batch} onClick={makePurchase}>이 견적으로 구매안 만들기</button>
-        </section>
-        <section className="pp-card qi-controls">
-          <label>견적 분석 묶음 UUID<input disabled={!!busy} value={batchId} onChange={e => setBatchId(e.target.value)} /></label>
-          <button className="pp-plain" disabled={disabled || !uuid.test(batchId.trim())} onClick={() => void run('저장 견적 조회', async () => {
-            const found = await api.getBatch(batchId.trim())
-            setBatches(list => upsertBatch(list, found))
-          })}>저장 견적 조회</button>
-          <details><summary>Spring 요청 기록 ({log.length}건)</summary>
-            {log.map((t, i) => <details key={i}><summary>{t.method} {t.path} → {t.status ?? '연결 실패'}</summary>
-              <pre>{json(t.response)}</pre>
-            </details>)}
+
+
+      {/* 처리 상태 */}
+      {busy && (
+
+        <p
+          role="status"
+          className="qi-feedback"
+        >
+          {busy} 중…
+        </p>
+
+      )}
+
+
+      {/* 오류 메시지 */}
+      {error && (
+
+        <div
+          role="alert"
+          className="pp-error qi-feedback"
+        >
+          {error}
+        </div>
+
+      )}
+
+
+      <div className="pp-grid qi-grid">
+
+
+        {/* 좌측 견적 입력 영역 */}
+        <section className="pp-card pp-chat">
+
+          <div className="pp-chat-head">
+
+            <h2>견적 입력</h2>
+
+            <span className="pp-chip">
+              실서버 요청
+            </span>
+
+          </div>
+
+
+          {/* 견적 대화 내역 */}
+          <div
+            className="pp-messages"
+            role="log"
+            aria-label="견적 처리 내역"
+          >
+
+            {!chat.length && (
+
+              <p>
+                거래처에서 받은 견적 내용을
+                입력해 주세요.
+              </p>
+
+            )}
+
+
+            {chat.map((m, i) => (
+
+              <div
+                key={i}
+                className={`pp-bubble ${m.role}`}
+              >
+                {m.text}
+              </div>
+
+            ))}
+
+
+            {/* 거래처 확인 */}
+            {batch && (
+
+              <div className="pp-bubble assistant">
+
+                <p>
+                  거래처 확인 상태를 바꿀 수 있습니다.
+                  부가세 및 품목 확인과는 별개입니다.
+                </p>
+
+
+                {suppliers.map(s => (
+
+                  <div
+                    key={s.supplier_id}
+                    className="pp-options"
+                  >
+
+                    <span>
+
+                      {s.supplier_name} · {
+
+                        batch.confirmations[s.supplier_id]
+
+                          ? '확인 완료'
+
+                          : '미확인'
+
+                      }
+
+                    </span>
+
+
+                    <button
+                      className="pp-plain"
+                      disabled={disabled}
+                      onClick={() =>
+
+                        void run(
+                          '거래처 확인',
+                          async () => {
+
+                            updateBatch(
+
+                              await api.confirm(
+
+                                batch.quote_batch_id,
+
+                                s.supplier_id,
+
+                                !batch.confirmations[
+                                  s.supplier_id
+                                ]
+
+                              )
+
+                            )
+
+                          }
+                        )
+                      }
+                    >
+
+                      {batch.confirmations[s.supplier_id]
+
+                        ? '확인 취소'
+
+                        : '거래처 확인'
+
+                      }
+
+                    </button>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </div>
+
+
+          {/* 직접 입력 JSON */}
+          <details className="qi-input">
+
+            <summary>
+              직접 입력 JSON · AI 키 없이 테스트
+            </summary>
+
+
+            <label>
+
+              견적 JSON
+
+              <textarea
+                rows={8}
+                value={manualJson}
+                onChange={e =>
+                  setManualJson(e.target.value)
+                }
+                disabled={!!busy}
+              />
+
+            </label>
+
+
+            <button
+              className="pp-primary"
+              disabled={disabled}
+              onClick={() =>
+
+                void run('견적 직접 입력', async () => {
+
+                  let body: ManualQuote
+
+                  try {
+
+                    body = JSON.parse(
+                      manualJson
+                    ) as ManualQuote
+
+                  } catch {
+
+                    throw new Error(
+                      'JSON 문법을 확인해 주세요.'
+                    )
+
+                  }
+
+
+                  if (
+                    !Array.isArray(body?.items) ||
+                    !body.items.length
+                  ) {
+
+                    throw new Error(
+                      'items 배열에 견적을 1건 이상 넣어 주세요.'
+                    )
+
+                  }
+
+
+                  showBatch(
+                    await api.manual(body)
+                  )
+
+                })
+
+              }
+            >
+              직접 입력 전송
+            </button>
+
           </details>
+
+
+          {/* AI 견적 입력 폼 */}
+          <form
+            className="qi-input"
+            onSubmit={send}
+          >
+
+            <label>
+
+              거래처
+
+              <input
+                disabled={!!busy}
+                value={supplier}
+                onChange={e =>
+                  setSupplier(e.target.value)
+                }
+              />
+
+            </label>
+
+
+            <label>
+
+              견적 원문
+
+              <textarea
+                rows={3}
+                maxLength={15000}
+                value={source}
+                onChange={e =>
+                  setSource(e.target.value)
+                }
+                disabled={!!busy}
+              />
+
+            </label>
+
+
+            <button
+              className="pp-primary"
+              disabled={disabled || !source.trim()}
+            >
+              AI 분석 보내기
+            </button>
+
+          </form>
+
         </section>
+
+
+        {/* 우측 결과 영역 */}
+        <div className="pp-panels">
+
+
+          {/* 이번 주 판매 계획 */}
+          <SalesTable
+            data={tableWithActuals(sales)}
+          />
+
+
+          {/* 재료 필요량 및 재고 */}
+          <MaterialsTable
+            data={materialsTable(preview, dict)}
+            busy={disabled}
+            refresh={() =>
+
+              void run('필요량 계산', calculate)
+
+            }
+          />
+
+
+          {/* 재료 필요량 검증 메시지 */}
+          {!!preview?.issues.length && (
+
+            <div
+              className="pp-card"
+              role="status"
+            >
+
+              {presentIssues(preview.issues).map(
+                (item, index) => (
+
+                  <p key={index}>
+                    {item.target_id} · {item.message}
+                  </p>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+
+          {/* 기존 거래처별 견적 정리 */}
+          <QuotesTable
+            data={accumulatedQuotes}
+            issues={accumulatedIssues}
+          />
+
+
+          {/* 품목별 견적 합산 결과 */}
+          <section className="pp-card">
+
+            <h2>AI 견적 분석 상세 결과</h2>
+
+            <p>
+              동일 품목의 견적 수량과
+              묶음 가격을 합산한 결과입니다.
+            </p>
+
+
+            <div style={{overflowX: 'auto'}}>
+
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  textAlign: 'left'
+                }}
+              >
+
+                <thead>
+
+                  <tr style={{
+                    backgroundColor: '#f1f3f5'
+                  }}>
+
+                    <th style={{padding: 12}}>
+                      품목
+                    </th>
+
+                    <th style={{padding: 12}}>
+                      거래처
+                    </th>
+
+                    <th style={{padding: 12}}>
+                      총 수량
+                    </th>
+
+                    <th style={{padding: 12}}>
+                      총 가격
+                    </th>
+
+                    <th style={{padding: 12}}>
+                      상태
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                  {groupedQuotes.length === 0 ? (
+
+                    <tr>
+
+                      <td
+                        colSpan={5}
+                        style={{
+                          padding: 16,
+                          textAlign: 'center'
+                        }}
+                      >
+                        아직 분석된 견적이 없습니다.
+                      </td>
+
+                    </tr>
+
+                  ) : (
+
+                    groupedQuotes.map(item => (
+
+                      <tr
+                        key={item.itemId}
+                        style={{
+                          borderBottom: '1px solid #e5e7eb'
+                        }}
+                      >
+
+
+                        {/* 품목명 */}
+                        <td style={{
+                          padding: 12,
+                          fontWeight: 500
+                        }}>
+
+                          {item.itemName}
+
+                        </td>
+
+
+                        {/* 거래처 목록 */}
+                        <td style={{padding: 12}}>
+
+                          {item.suppliers.join(', ')
+                            || '미확인'}
+
+                        </td>
+
+
+                        {/* 품목별 합산 수량 */}
+                        <td style={{padding: 12}}>
+
+                          {item.totalQuantity > 0
+
+                            ? item.totalQuantity
+                                .toLocaleString('ko-KR')
+                              + item.unit
+
+                            : '확인 필요'
+
+                          }
+
+
+                          {item.quantityMissing &&
+                            item.totalQuantity > 0 && (
+
+                              <small style={{
+                                marginLeft: 4,
+                                color: '#b45309'
+                              }}>
+                                (일부 미확인)
+                              </small>
+
+                            )
+                          }
+
+                        </td>
+
+
+                        {/* 품목별 합산 가격 */}
+                        <td style={{padding: 12}}>
+
+                          {item.priceCount > 0
+
+                            ? formatPrice(item.totalPrice)
+
+                            : '확인 필요'
+
+                          }
+
+
+                          {item.priceMissing &&
+                            item.priceCount > 0 && (
+
+                              <small style={{
+                                marginLeft: 4,
+                                color: '#b45309'
+                              }}>
+                                (일부 미확인)
+                              </small>
+
+                            )
+                          }
+
+                        </td>
+
+
+                        {/* 확인 상태 */}
+                        <td style={{padding: 12}}>
+
+                          {item.needsConfirmation
+
+                            ? '품목 확인 필요'
+
+                            : item.quantityMissing ||
+                              item.priceMissing
+
+                              ? '규격·가격 확인 필요'
+
+                              : '품목·수량·가격 확인'
+
+                          }
+
+                        </td>
+
+                      </tr>
+
+                    ))
+
+                  )}
+
+                </tbody>
+
+
+                {/* 전체 입력 견적 가격 합계 */}
+                {groupedQuotes.length > 0 && (
+
+                  <tfoot>
+
+                    <tr style={{
+                      backgroundColor: '#f1f3f5'
+                    }}>
+
+                      <td
+                        colSpan={3}
+                        style={{
+                          padding: 12,
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        전체 견적 가격 합계
+                      </td>
+
+
+                      <td style={{
+                        padding: 12,
+                        fontWeight: 'bold'
+                      }}>
+
+                        {groupedQuotes.some(
+                          item => item.priceCount > 0
+                        )
+
+                          ? formatPrice(totalQuotePrice)
+
+                          : '확인 필요'
+
+                        }
+
+
+                        {hasMissingPrice && (
+
+                          <small style={{
+                            marginLeft: 4,
+                            color: '#b45309'
+                          }}>
+                            (미확인 가격 제외)
+                          </small>
+
+                        )}
+
+                      </td>
+
+                      <td />
+
+                    </tr>
+
+                  </tfoot>
+
+                )}
+
+              </table>
+
+            </div>
+
+          </section>
+
+
+  
+
+        </div>
+
       </div>
-    </div>
-  </main>
+
+    </main>
+
+  )
 }
