@@ -180,7 +180,7 @@ export default function EasyRosterResult({
           {(option.new_hires?.length ?? 0) > 0 && <span><i className="hire" />새로 뽑을 직원</span>}
           <span><i className="rest" />휴게 있음(4시간 넘게 일하면 30분, 무급)</span>
           {hasExtra && <span><i className="extra" />바쁠 때 더 둔 사람</span>}
-          {days.length === 1 && <span className="er-legend-busy"><i className="busy" />바쁜 시간(이때 사람을 더 둬요)</span>}
+          {days.length === 1 && <span className="er-legend-busy"><i className="busy" />바쁜 시간(위 눈금 · 이때 사람을 더 둬요)</span>}
         </p>
         {capacityText(option, days) && <p className="er-warn easy-noprint">{capacityText(option, days)}</p>}
         {option.shortfall.more_people_under_15h > 0 && (

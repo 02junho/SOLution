@@ -55,7 +55,7 @@ export function currentStep(phase: TourPhase, feature: EasyFeature | null, resul
       step: {
         key: 'input', target: 'input', waitsForAction: true,
         title: '하고 싶은 일을 적어 보세요',
-        body: '“점심에 줄이 길어요”처럼 평소 말투면 돼요. 다 적으면 "보내기"를 누르세요. 아래 카드를 눌러도 돼요.',
+        body: '“일주일 근무표 만들어 줘”처럼 평소 말투면 돼요. 다 적으면 "보내기"를 누르세요. 아래 카드를 눌러도 돼요.',
       },
     }
   }

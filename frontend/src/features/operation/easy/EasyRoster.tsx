@@ -57,7 +57,6 @@ const WARM_RETRIES = 9
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback)
 
 export default function EasyRoster({
-  firstWords = '',
   phase,
   onPhase,
   onSession,
@@ -70,8 +69,6 @@ export default function EasyRoster({
   /** 업무를 만들면 알린다(쉬운 화면이 주소를 이 업무로 바꿔 새로 고쳐도 다시 열리게). */
   onSession: (sessionId: number) => void
   opened?: RosterOpened | null
-  /** 근무표를 고르기 전에 사장님이 먼저 한 말. 말 칸에 채워 두기만 하고 바로 보내지 않는다(데이터를 고른 뒤 보냄). */
-  firstWords?: string
   /** 위 "← 이전" 줄을 이 화면 안의 한 단계(조건 확인 → 데이터 고르기)로 바꿀 때 알린다. null이면 쉬운 화면 기본. */
   onBack?: (back: { label: string; run: () => void } | null) => void
   /** 따라 하며 배우기가 데이터 고르기/조건 확인 중 어느 단계인지 알게 한다. */
@@ -86,7 +83,7 @@ export default function EasyRoster({
   const [editing, setEditing] = useState(false)
   const [showTeam, setShowTeam] = useState(false) // 조건 카드: 직원별 일할 수 있는 요일·시간 펼치기
   const [changedRows, setChangedRows] = useState<string[]>([])
-  const [chatText, setChatText] = useState(firstWords)
+  const [chatText, setChatText] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
   /** 지금 조건(채팅 답을 기다리는 동안 사장님이 고쳤는지 보려고). */
   const condNow = useRef<RosterConditions | null>(null)

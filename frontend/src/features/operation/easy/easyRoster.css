@@ -178,10 +178,11 @@
 .er-day-head { min-height: 24px; }
 .er-day-name { display: flex; flex-direction: column; font-size: 0.95em; }
 .er-day-name small { color: #1f7a3a; font-size: 0.82em; }
+.er-day-name small.er-pay { color: var(--gray-2, #6b7280); }
 .er-day-track { position: relative; height: 40px; }
 .er-day-head .er-day-track { height: 22px; }
 .er-day-head i { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 0.78em; color: var(--gray); white-space: nowrap; }
-.er-day-head i:last-child { transform: translateX(-100%); }
+.er-day-head i:last-of-type { transform: translateX(-100%); }
 .er-day-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eef0f4; }
 .er-day-bar { position: absolute; top: 4px; bottom: 4px; display: flex; align-items: center; padding: 0 8px; border-radius: 8px; background: #e5f6ec; font-size: 0.88em; white-space: nowrap; overflow: hidden; }
 .er-day-row.owner .er-day-bar { background: var(--blue-soft); }
@@ -193,9 +194,16 @@
 .er-legend i.extra { background: #ffe1bf; border: 1px solid #e8890c; }
 .er-added-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 6px; background: var(--blue-soft); color: var(--blue-dark); font-size: 0.75em; font-weight: 700; }
 .er-changed { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 0.92em; }
-/* 하루 근무표의 바쁜 시간 띠(막대 뒤) */
-.er-day-busy { position: absolute; top: 0; bottom: 0; background: rgba(255, 170, 60, 0.13); pointer-events: none; }
-.er-legend i.busy { background: rgba(255, 170, 60, 0.35); }
+/* 하루 근무표의 바쁜 시간: 눈금 아래 얇은 회색 띠와 작은 글씨(주황 '더 둔 사람'과 섞이지 않게) */
+.er-day-head.has-busy .er-day-track { height: 42px; }
+.er-day-busy { position: absolute; bottom: 2px; height: 5px; border-radius: 3px; background: #64748b; pointer-events: none; }
+.er-day-busy em { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 0.72em; font-weight: 700; color: #475569; white-space: nowrap; }
+.er-legend i.busy { height: 5px; vertical-align: middle; border-radius: 3px; background: #64748b; }
 @media print { .er-legend-busy { display: none; } }
 .er-day-rest { position: absolute; top: 0; bottom: 0; background-image: repeating-linear-gradient(135deg, rgba(120,128,140,.35) 0 4px, transparent 4px 8px); }
-@media print { .er-day { display: none; } .er-week-day { display: block; } }
+/* 인쇄: 하루 근무표도 화면처럼 시간 막대로(한 칸짜리 표는 막대가 칸을 꽉 채워 시간이 안 보였다). 배경색이 빠지지 않게 색을 그대로 찍는다. */
+@media print {
+  .er-day-bar, .er-day-busy, .er-day-rest, .er-legend i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .er-day-row { min-height: 34px; break-inside: avoid; }
+  .er-day-track { height: 28px; }
+}

@@ -180,7 +180,7 @@ class RosterResultServiceTest {
 	@Test
 	void 계산_중_상태에는_끝난_요일_진행_상황이_붙고_업무별_진행_키를_보낸다() {
 		var f = fixture(version(2, 2, true), true);
-		when(f.rosters().rosterProgress("1:key-p")).thenReturn(Map.of("total", 7, "done", 3));
+		when(f.rosters().rosterProgress(RosterResultService.progressKey(1, "key-p"))).thenReturn(Map.of("total", 7, "done", 3));
 		f.service().start(1L, BODY, "key-p");
 		var running = f.service().status(1L, 7L, "key-p");
 		assertThat(running.data()).containsEntry("state", "RUNNING").containsEntry("progress", Map.of("total", 7, "done", 3));
@@ -188,7 +188,9 @@ class RosterResultServiceTest {
 		@SuppressWarnings("unchecked")
 		ArgumentCaptor<Map<String, Object>> sent = ArgumentCaptor.forClass(Map.class);
 		verify(f.rosters()).rosterOptions(sent.capture());
-		assertThat(sent.getValue()).containsEntry("progress_key", "1:key-p");
+		assertThat(sent.getValue()).containsEntry("progress_key", RosterResultService.progressKey(1, "key-p"));
+		// 조회 주소에 그대로 넣어도 되는 글자만(":"·"%"가 있으면 두 번 인코딩돼 ai-server가 다른 키로 읽었다)
+		assertThat(RosterResultService.progressKey(12, "a:b%c d/e")).matches("12_[0-9a-f]{32}");
 	}
 
 	@Test

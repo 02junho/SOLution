@@ -57,7 +57,7 @@ const STARTERS = [
   { feature: 'purchase', title: '장보기', desc: '이번 주 무엇을 얼마나, 어느 거래처에서 살지', message: '이번 주 장보기 계획 세워 줘', result: '구매안과 거래처별 주문 문구' },
   // 기본은 "직원 근무표"(운영 2번). ?mode=lunch면 같은 자리가 예전 "점심 인원"(1번) 카드가 된다.
   ROSTER_MODE
-    ? { feature: 'operation', title: '직원 근무표', desc: '가게 판매 데이터로 일주일 근무표를 짜 드려요', message: '일주일 근무표 짜 줘', result: '추천 근무표' }
+    ? { feature: 'operation', title: '직원 근무표', desc: '가게 판매 데이터로 일주일 근무표를 만들어 드려요', message: '일주일 근무표 만들어 줘', result: '추천 근무표' }
     : { feature: 'operation', title: '점심 인원', desc: '바쁜 점심에 몇 명이 일하면 덜 기다릴지', message: '점심에 알바 한 명 더 쓰면 어때?', result: '추천 배치표' },
 ]
 
@@ -149,8 +149,6 @@ export default function EasyPage() {
   // 점심 인원을 추천 근무표(2번)로 볼지. 새로 시작하면 주소(기본 2번, ?mode=lunch면 1번)로, 이어서 열면 결과 종류로 정한다.
   const [roster, setRoster] = useState(false)
   const [rosterOpened, setRosterOpened] = useState<RosterOpened | null>(null)
-  // 근무표를 고르기 전 사장님이 먼저 한 말: 근무표 화면의 말 칸에 채워 두고, 데이터를 고른 뒤 사장님이 보내게 한다(이름은 보낼 때 별칭으로 바뀜).
-  const [rosterWords, setRosterWords] = useState('')
   // 근무표 화면 안의 한 단계 뒤로(조건 확인 → 데이터 고르기). 있으면 "← 이전" 줄이 이걸 쓴다.
   const [rosterBack, setRosterBack] = useState<{ label: string; run: () => void } | null>(null)
   const [rosterStage, setRosterStage] = useState<RosterStage>(null) // 따라 하며 배우기: 데이터 고르기/조건 확인
@@ -241,7 +239,7 @@ export default function EasyPage() {
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
-    resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setRosterWords(''); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
     shownResultRef.current = null
     setQuestion(null); setThinking(false); setPending(null); setChatError(''); setReply(''); setNoInput(false); setQuoteOpen(false); setBlocked(null)
     inputRef.current = null; firstWordsRef.current = null
@@ -417,10 +415,11 @@ export default function EasyPage() {
     const rosterOn = next === 'operation' && ROSTER_MODE
     setRoster(rosterOn)
     if (rosterOn) {
-      setRosterWords(words?.trim() ?? '')
+      // 첫마디(words)는 일부러 넘기지 않는다: 이 말은 근무표 화면으로 오는 데 쓰였고("일주일 근무표 만들어 줘"),
+      // 근무표는 판매 데이터를 고른 뒤에야 조건을 알아들을 수 있다. 조건은 근무표 화면의 말 칸에서 바꾼다.
       setBase(NEW_OPERATION)
       setPhase('confirm')
-      say('agent', '일주일 근무표를 짜 볼게요.')
+      say('agent', '일주일 근무표를 만들어 드려요.')
       return
     }
     const values = fill(next, practice)
@@ -803,12 +802,12 @@ export default function EasyPage() {
             {phase === 'ask' ? (
               <div className="easy-choices" data-tour="choices">
                 <button type="button" className="easy-big" onClick={() => { say('owner', '이번 주 장보기 계획'); begin('purchase', firstWordsRef.current) }}>이번 주 장보기 계획 세우기</button>
-                <button type="button" className="easy-big" onClick={() => { say('owner', ROSTER_MODE ? '직원 근무표' : '점심 인원 배치'); begin('operation', firstWordsRef.current) }}>{ROSTER_MODE ? '직원 근무표 짜 보기' : '점심 인원 배치 돌려 보기'}</button>
+                <button type="button" className="easy-big" onClick={() => { say('owner', ROSTER_MODE ? '직원 근무표' : '점심 인원 배치'); begin('operation', firstWordsRef.current) }}>{ROSTER_MODE ? '직원 근무표 만들기' : '점심 인원 배치 돌려 보기'}</button>
               </div>
             ) : null}
             <form className="easy-input" onSubmit={submit}>
               <label htmlFor="easy-text" className="easy-sr">사장님 말</label>
-              <textarea id="easy-text" rows={2} value={text} placeholder="예: 점심에 줄이 너무 길어요" onChange={(e) => setText(e.target.value)}
+              <textarea id="easy-text" rows={2} value={text} placeholder={ROSTER_MODE ? '예: 일주일 근무표 만들어 줘' : '예: 점심에 줄이 너무 길어요'} onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text) } }} />
               <button type="submit" className="easy-primary" disabled={!text.trim()}>보내기</button>
             </form>
@@ -892,7 +891,6 @@ export default function EasyPage() {
           <Suspense fallback={null}>
             <EasyRoster
               key={screenNo}
-              firstWords={rosterWords}
               phase={phase}
               onPhase={setPhase}
               opened={rosterOpened}
@@ -1067,7 +1065,7 @@ export default function EasyPage() {
         <section className="easy-side-card">
           <h2>이렇게 쓰세요</h2>
           <ol className="easy-guide">
-            <li><b>하고 싶은 일을 말로 적어요</b><span>“점심에 줄이 길어요”처럼 평소 말투면 돼요</span></li>
+            <li><b>하고 싶은 일을 말로 적어요</b><span>{ROSTER_MODE ? '“일주일 근무표 만들어 줘”' : '“점심에 줄이 길어요”'}처럼 평소 말투면 돼요</span></li>
             <li><b>조건을 확인해요</b><span>틀린 곳은 말로 바꾸거나 "고치기"로 바꿔요</span></li>
             <li><b>결과를 보고 저장해요</b><span>배치표·구매안·주문 문구가 나와요</span></li>
           </ol>
