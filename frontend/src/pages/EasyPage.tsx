@@ -658,15 +658,16 @@ export default function EasyPage() {
       })
       prepRef.current = job
       const done = await job
-      if (token !== tokenRef.current) return
-      // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
-      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
-      setPrepared(done)
-      if (route.kind !== 'session') {
+      // 계산을 그만둬도 이미 만든 업무의 주소는 남긴다(같은 화면일 때만). 새로 고쳐도 그 업무가 다시 열리게.
+      if (screen === screenRef.current && route.kind !== 'session') {
         window.history.replaceState(null, '', routeHash({ kind: 'session', id: done.sessionId }))
         setRoute({ kind: 'session', id: done.sessionId })
         setStartedHere(true)
       }
+      if (token !== tokenRef.current) return
+      // 다시 계산하면 같은 업무 안에서 이어지게 한다.
+      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
+      setPrepared(done)
       if (feature === 'purchase') {
         const response = await workflowApi.calculate(done.sessionId, done.versionId, crypto.randomUUID())
         const resultId = Number((response.data as JsonObject | null)?.result_id)
