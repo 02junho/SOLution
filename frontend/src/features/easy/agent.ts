@@ -33,6 +33,8 @@ export function outcome(
   const run = data.action === 'run_operation'
   if (response.status === 'needs_input') {
     if (data.detail_status === 'USE_FORM') return { kind: 'use-form', message: message || '말로는 알아듣기 어려웠어요. 아래 "고치기"로 바꿔 주세요.' }
+    // 조건을 묻는 게 아니라 대답만 한 경우(예: "원두 어디서 사?"에 대한 안내)는 질문 카드 없이 말풍선으로만 보여 준다.
+    if (answerOnly(data)) return { kind: 'same', message: questionText(data) || message || '조건은 그대로예요.', run: false }
     return { kind: 'question', question: data, message: questionText(data) || message }
   }
   if (response.status === 'infeasible') {
@@ -59,6 +61,15 @@ export function questionChoices(question: EventData | null): string[] {
   return strings(question?.question?.choices)
 }
 
+/** AI가 조건 칸이 아니라 자유 대답("content")만 남기고, 고를 것도 묻는 말(?)도 없으면 질문이 아니라 대답이다. */
+export function answerOnly(question: EventData | null): boolean {
+  if (!question) return false
+  const fields = question.missing_fields ?? []
+  const text = questionText(question)
+  return fields.length > 0 && fields.every((field) => field.path === 'content')
+    && questionChoices(question).length === 0 && !/[?？]/.test(text)
+}
+
 /** 아직 답하지 않은 서버 질문(지금 입력 버전 기준). 화면을 새로 열어도 이어서 답할 수 있게. */
 export function openQuestion(messages: Message[], currentVersionId: number | null): EventData | null {
   const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.metadata_json?.response)
@@ -67,6 +78,7 @@ export function openQuestion(messages: Message[], currentVersionId: number | nul
   const data = obj(response.data) as EventData
   return response.status === 'needs_input'
     && data.detail_status !== 'USE_FORM'
+    && !answerOnly(data)
     && typeof data.question_id === 'string'
     && (data.base_version_id ?? null) === currentVersionId
     ? data

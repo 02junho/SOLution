@@ -186,3 +186,17 @@ def test_출력_상한으로_잘린_해석은_파싱돼도_사용하지_않는�
     monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", lambda **_: model)
     with pytest.raises(LlmUnavailable):
         LlmInterpreter()._call(Settings(_env_file=None, anthropic_api_key="local-test-only"), "system", "user")
+
+
+def test_prompt_names_suppliers_instead_of_ids():
+    from app.agent.interpreter import _named_suppliers
+    current = {
+        "budget_krw": 200000,
+        "quotes": [{"item_id": "beans", "supplier_id": "R1", "pack_price_krw": 19000}],
+        "suppliers": [{"supplier_id": "R1", "supplier_name": "원두 로스터리 가"}],
+    }
+    named = _named_suppliers(current)
+    assert named["quotes"][0]["supplier"] == "원두 로스터리 가"
+    assert "supplier_id" not in named["quotes"][0]
+    assert current["quotes"][0]["supplier_id"] == "R1"  # 원본은 그대로
+    assert _named_suppliers({"operation_form": {}}) == {"operation_form": {}}

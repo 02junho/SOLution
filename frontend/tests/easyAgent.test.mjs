@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { changeSentence, chatBubbles, openQuestion, outcome, questionChoices, questionText } from '../src/features/easy/agent.ts'
+import { answerOnly, changeSentence, chatBubbles, openQuestion, outcome, questionChoices, questionText } from '../src/features/easy/agent.ts'
 
 test('조건이 바뀐 응답은 새 입력 버전으로, 같은 버전이면 그대로로 본다', () => {
   const changed = outcome({ status: 'ok', data: { input_version_id: 12, version_no: 3 }, message: '입력을 저장했어요.' }, 11)
@@ -72,4 +72,17 @@ test('폼으로 만든 업무의 빠진 값 질문은 말풍선으로 보여 준
   assert.equal(bubbles.length, 1)
   assert.match(bubbles[0].text, /^이 값을 알려 주세요: /)
   assert.match(bubbles[0].text, /예산/)
+})
+
+test('조건을 묻지 않고 대답만 한 응답은 질문 카드 없이 말로만 보여 준다', () => {
+  const answer = { question_id: 'q1', detail_status: 'NEEDS_INPUT', missing_fields: [{ path: 'content', label: '안내' }],
+    question: { text: '원두는 계산 결과에서 거래처별로 확인해 주세요. 실제 발주는 도와드릴 수 없어요.', choices: [], question_key: 'content' } }
+  assert.equal(answerOnly(answer), true)
+  const out = outcome({ status: 'needs_input', data: answer }, 10)
+  assert.equal(out.kind, 'same')
+  assert.match(out.message, /실제 발주/)
+  // 물음표로 묻거나 고를 것이 있으면 질문 그대로
+  assert.equal(answerOnly({ ...answer, question: { ...answer.question, text: '어느 품목 말씀이세요?' } }), false)
+  assert.equal(answerOnly({ ...answer, question: { ...answer.question, choices: ['원두', '우유'] } }), false)
+  assert.equal(answerOnly({ ...answer, missing_fields: [{ path: 'budget_krw', label: 'budget_krw' }] }), false)
 })
