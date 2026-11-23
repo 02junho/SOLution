@@ -1,9 +1,8 @@
-"""One-day cafe simulation (open to close, default 07:00-19:00, last order before close).
+"""카페 하루 시뮬레이션(오픈~마감, 기본 07:00~19:00, 라스트 오더는 마감 전).
 
-New arrivals stop at the last order time. Orders already accepted are finished so
-that their waiting time can be measured; employees on the final roster finish them.
-How long that tail runs past 19:00 is reported for reference only. It is not a
-quality gate and is not added to staff hours. This is NOT a payroll planner.
+라스트 오더 뒤에는 새 손님을 받지 않는다. 이미 받은 주문은 대기 시간을 재려고 끝까지 만들고,
+마지막 근무표의 직원이 끝낸다. 마감 뒤로 얼마나 넘겼는지는 참고로만 알린다.
+합격 기준이 아니고 직원 근무시간에도 더하지 않는다. 급여 계산기가 아니다.
 """
 
 from __future__ import annotations
@@ -29,10 +28,10 @@ def percentile(values, q=0.90):
 
 
 def served_by(values, share=0.90):
-    """Time by which at least `share` of the customers were served (nearest rank, no interpolation).
+    """손님 중 `share` 비율 이상이 음료를 받은 시각(가장 가까운 순위, 보간 없음).
 
-    `served_by(waits) <= limit` is exactly "share of customers waited <= limit", so pass checks use it.
-    The interpolated percentile() stays for display only.
+    `served_by(waits) <= limit`가 곧 "손님 share 비율이 limit 안에 받음"이라 합격 판정은 이걸 쓴다.
+    보간하는 percentile()은 화면 표시용으로만 남긴다.
     """
     if not values:
         return None
@@ -65,8 +64,8 @@ def peak_edges():
 
 
 def roster(mode, plan_ids):
-    # Each roster covers the full working day. "three": before peak / peak / after peak.
-    # "four": one segment per demand time slot (four by default, N for store data).
+    # 근무표 하나가 영업시간 전체를 덮는다. "three": 바쁜 시간 전 / 바쁜 시간 / 바쁜 시간 뒤.
+    # "four": 손님 시간대마다 한 구간(기본 4개, 가게 데이터면 시간대 수만큼).
     edges = peak_edges() if mode == "three" else list(day().edges)
     if mode not in ("three", "four") or len(plan_ids) != len(edges) - 1:
         raise ValueError("roster mode and plan count mismatch")
@@ -178,8 +177,8 @@ def _clock(sec):
 
 
 def roster_for_base(pid):
-    """Day plans for the three-plan comparison (team decision 11.11): A and C apply only 11~14,
-    the other hours run as CURRENT. Other hours are covered by the per-slot recommendation."""
+    """세 안 비교용 하루 근무표(11.11 팀 결정): A·C안은 11~14시에만 적용하고
+    나머지 시간은 CURRENT로 돈다. 나머지 시간은 시간대별 추천이 맡는다."""
     edges = peak_edges()
     peak_start = day().peak[0]
     return roster(
@@ -197,7 +196,10 @@ class DayCafe(SlotCafe):
         label,
         clock_mode="simpy",
         include_events=False,
+        lite=False,
     ):
+        # lite: 근무표 찾기용 가벼운 요약(대기 판정에 쓰는 숫자만). 숫자는 전체 요약과 같다.
+        self.lite = lite
         self.roster_segments = roster_segments
         # 구간마다 {직원 번호: 역할 묶음}. 정해 둔 세 운영안은 profile에서, 받은 근무표는 roster_from_shifts에서 온다.
         self.assignments = [
@@ -247,7 +249,7 @@ class DayCafe(SlotCafe):
 
     def _find_segment(self, at):
         if at >= self.day_end:
-            # The final on-duty employees finish orders already accepted.
+            # 마지막까지 있는 직원이 이미 받은 주문을 끝낸다.
             return len(self.roster_segments) - 1
         return next(
             (
@@ -266,7 +268,7 @@ class DayCafe(SlotCafe):
         return self.worker_index[worker["id"]]
 
     def _employee_window_end(self, worker):
-        """End of a continuous set of segments where this employee is present."""
+        """이 직원이 계속 있는 구간이 끝나는 시각."""
         idx = self._index(worker)
         at = self.clock.now
         end = at
@@ -278,7 +280,7 @@ class DayCafe(SlotCafe):
             if idx not in present:
                 break
             end = row["end_sec"]
-        # A worker present at 19:00 may finish accepted orders after closing.
+        # 마감 시각에 있던 직원은 받은 주문을 마감 뒤에도 끝낼 수 있다.
         if end >= self.day_end and idx in self.assignments[-1]:
             return math.inf
         return end
@@ -306,14 +308,30 @@ class DayCafe(SlotCafe):
         return self.assignments[i].get(self._index(worker), [])
 
     def _pick_task(self, worker):
-        for group in self._worker_groups(worker):
-            eligible = [
-                t
-                for t in self.queue
-                if t["stage"] in group and self._worker_can_start(worker, t)
-            ]
-            if eligible:
-                return min(eligible, key=lambda t: t["seq"])
+        """역할 묶음 순서대로, 지금 시작할 수 있는 작업 중 가장 먼저 들어온 것.
+
+        _worker_can_start와 같은 조건을 작업마다 다시 계산하지 않게 한 번만 구한다(같은 시각·같은 직원이라 값이 같다).
+        - 줄(queue)은 들어온 순번(seq) 순이라 처음 맞는 작업이 min(seq)와 같다(줄 끝에만 넣고, 빼도 순서는 그대로).
+        - 직원이 계속 있는 시간 끝(_employee_window_end)은 맞는 작업이 있을 때 처음 한 번만 구한다.
+        """
+        groups = self._worker_groups(worker)
+        if not groups:
+            return None
+        now = self.clock.now
+        busy, counts = self.equipment_busy, self.equipment_counts
+        window_end = None
+        for group in groups:
+            for t in self.queue:
+                if t["stage"] not in group or not t["needs_worker"]:
+                    continue
+                if window_end is None:
+                    window_end = self._employee_window_end(worker)
+                if now + t["seconds"] > window_end + 1e-8:
+                    continue
+                eq = t["equipment"]
+                if eq is not None and busy[eq] >= counts[eq]:
+                    continue
+                return t
         return None
 
     def _slot_summary(self):
@@ -418,14 +436,46 @@ class DayCafe(SlotCafe):
             assert backlog_end == backlog_start + len(arrived) - len(completion)
         return byslot
 
+    def _lite_summary(self, jobs):
+        """근무표 찾기(daily_roster·roster_options)가 읽는 값만 만든다.
+
+        하루: 들어온·끝난 손님 수, 주문 후 받기 P90·10명 중 9명. 시간대마다: 그 시간대 손님 수와 같은 두 값.
+        계산식은 전체 요약(simulate 아래·_slot_summary)과 같아서 값이 똑같다(테스트가 비교한다).
+        머신·직원 사용률, 평균, 단계별 대기, 메뉴 수처럼 근무표 찾기가 안 읽는 값은 만들지 않는다.
+        """
+        post = {}
+        for j in jobs:
+            order_end = next(t["ended_at"] for t in j["tasks"] if t["stage"] == "order")
+            post[id(j)] = j["completed_at_sec"] - order_end
+        finished = sorted(self.finished, key=lambda j: j["completed_at_sec"])
+        day_post = [post[id(j)] for j in finished]
+        by_slot = []
+        for label in self.day.slots:
+            lo, hi = map(seconds, label.split("-"))
+            waits = [post[id(j)] for j in jobs if lo <= j["arrival_sec"] < hi]
+            by_slot.append(
+                {
+                    "cohort_completed_eventually": len(waits),
+                    "p90_post_order_receipt_sec": percentile(waits),
+                    "served90_post_order_receipt_sec": served_by(waits),
+                }
+            )
+        return {
+            "arrived_orders": len(jobs),
+            "completed_eventually": len(finished),
+            "p90_post_order_receipt_sec": percentile(day_post),
+            "served90_post_order_receipt_sec": served_by(day_post),
+            "by_slot": by_slot,
+        }
+
     def simulate(self):
-        # Log the resources assigned to each task for per-slot busy fractions.
+        # 시간대별 바쁨 비율을 내려고 일마다 맡은 자원을 기록한다.
         for boundary in sorted({r["start_sec"] for r in self.roster_segments[1:]}):
             self.clock.schedule(boundary, self.dispatch)
         for order in self.orders:
             self.clock.schedule(order["arrival_sec"], lambda o=order: self.arrival(o))
-        # The last roster handles any accepted orders remaining at 19:00.
-        # Guard the virtual horizon and fail explicitly if the queue cannot drain.
+        # 마감 때 남은 주문은 마지막 근무표가 처리한다.
+        # 가상 시간 끝을 지키고, 대기열이 비지 않으면 분명하게 실패로 알린다.
         horizon = self.day_end + 3600 * max(4, len(self.orders) + 1)
         self.clock.run(horizon)
         finished = sorted(self.finished, key=lambda j: j["completed_at_sec"])
@@ -435,6 +485,8 @@ class DayCafe(SlotCafe):
             raise RuntimeError(
                 f"Accepted orders did not finish: {len(finished)}/{len(self.orders)}"
             )
+        if self.lite:
+            return self._lite_summary(all_jobs)
         finished_by_close = [
             j for j in finished if j["completed_at_sec"] <= self.day_end + 1e-7
         ]

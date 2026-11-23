@@ -29,6 +29,7 @@ from .slot_plan import slot_cohort_pass, slot_pass_rate
 
 UNIT = 30 * 60
 LONG_HOURS = 8
+MINOR_LONG_HOURS = 7.5  # 연소자 긴 조 상한(휴게 30분 빼면 실제 7시간)
 SHORT_HOURS = 4
 MIN_STAFF = 1
 MAX_STAFF = 6
@@ -361,12 +362,9 @@ def _cost(shifts, wage, business_date, minor):
 
 # ---------------------------------------------------------------- 하루 근무표
 def _rules(body, minor=False):
-    raw = dict(body.get("roster_rules") or {})
-    if minor:
-        # 연소자는 하루 실제 근무 7시간까지: 7시간 30분 머무르고 30분 쉬면 7시간이다.
-        raw["long_shift_hours"] = min(raw.get("long_shift_hours", LONG_HOURS), 7.5)
+    raw = body.get("roster_rules") or {}
     if not isinstance(raw, dict):
-        raise ValueError("roster_rules must be an object")
+        raise ValueError("roster_rules는 객체여야 해요.")
     long_h = raw.get("long_shift_hours", LONG_HOURS)
     short_h = raw.get("short_shift_hours", SHORT_HOURS)
     min_s = raw.get("min_staff", MIN_STAFF)
@@ -374,6 +372,9 @@ def _rules(body, minor=False):
     for v, lo, hi, name in ((long_h, 4, 10, "긴 조"), (short_h, 2, 8, "짧은 조")):
         if type(v) not in (int, float) or not lo <= v <= hi or (v * 2) != int(v * 2):
             raise ValueError(f"{name} 길이는 {lo}~{hi}시간, 30분 단위예요.")
+    if minor:
+        # 연소자는 하루 실제 근무 7시간까지: 7시간 30분 머무르고 30분 쉬면 7시간이다. 입력을 검사한 뒤에 줄인다.
+        long_h = min(long_h, MINOR_LONG_HOURS)
     if short_h > long_h:
         raise ValueError("짧은 조가 긴 조보다 길 수 없어요.")
     if type(min_s) is not int or type(max_s) is not int or not 1 <= min_s <= max_s <= 8:
@@ -384,7 +385,7 @@ def _rules(body, minor=False):
 def _owner(body):
     owner = body.get("owner") or {}
     if not isinstance(owner, dict):
-        raise ValueError("owner must be an object")
+        raise ValueError("owner는 객체여야 해요.")
     if not owner.get("is_working"):
         return None
     d = day()
@@ -462,7 +463,8 @@ def _prepare(body, engine, include_curve=False):
     def run(rows):
         key = _rows_key(rows)
         if key not in cache:
-            cache[key] = [DayCafe(orders, rows, conf, "DAILY_ROSTER", engine).simulate() for orders, _ in draws]
+            # 근무표 찾기는 대기 판정 값만 읽으므로 가벼운 요약(lite)으로 돌린다(값은 전체 요약과 같다).
+            cache[key] = [DayCafe(orders, rows, conf, "DAILY_ROSTER", engine, lite=True).simulate() for orders, _ in draws]
         return cache[key]
 
     limit, need_rate = quality["max_p90_post_order_receipt_sec"], quality["min_run_pass_rate"]
@@ -477,7 +479,7 @@ def _prepare(body, engine, include_curve=False):
             cut = slot_ends[index] + SLOT_TAIL_SEC
             begin = slot_starts[index] - SLOT_WARMUP_SEC
             orders = [o for o in draws[k][0] if begin <= o["arrival_sec"] < cut]
-            slot_cache[key] = DayCafe(orders, rows, conf, "DAILY_ROSTER", engine).simulate()
+            slot_cache[key] = DayCafe(orders, rows, conf, "DAILY_ROSTER", engine, lite=True).simulate()
         return slot_cache[key]
 
     slot_run.count = repetitions

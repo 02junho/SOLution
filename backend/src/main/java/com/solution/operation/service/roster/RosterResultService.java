@@ -155,18 +155,21 @@ public class RosterResultService {
 			}
 			// 계산 중 표시를 먼저 남기고(실패하면 시작하지 않음) 뒤에서 계산한다.
 			CalculationRuns.Run run = runs.start(sessionId, "operation", () -> checked(sessionId, versionId));
-			repository.markStep(sessionId, checked(sessionId, versionId).versionNo(), "running");
 			Job running = new Job(sessionId, versionId, "RUNNING", null, Instant.now());
 			jobs.put(requestKey, running);
 			try {
+				// 단계 표시도 try 안에서: 여기서 실패해도 계산 자리(run)를 돌려준다.
+				repository.markStep(sessionId, checked(sessionId, versionId).versionNo(), "running");
 				executor.execute(() -> compute(run, sessionId, versionId, body, requestKey));
 			} catch (RejectedExecutionException full) {
 				jobs.remove(requestKey);
 				run.close();
+				resetStep(sessionId, versionId, requestKey);
 				throw ApiException.badRequest("CALCULATION_BUSY", "지금 계산이 많이 밀려 있어요. 잠시 뒤 다시 해 주세요.");
 			} catch (RuntimeException failure) {
 				jobs.remove(requestKey);
 				run.close();
+				resetStep(sessionId, versionId, requestKey);
 				throw failure;
 			}
 			return state(running, requestKey);
@@ -194,6 +197,11 @@ public class RosterResultService {
 				}
 			}
 			return current;
+		}
+		// 위에서 DB를 본 뒤 작업 기록을 보기 전에 계산이 끝나 저장됐을 수 있으니 한 번 더 확인한다.
+		var saved = repository.findByRequestKey(sessionId, requestKey);
+		if (saved.isPresent()) {
+			return done(saved.get(), versionId);
 		}
 		// 서버가 다시 켜졌거나 다른 서버에서 시작한 계산: 결과도 기록도 없으면 다시 계산해야 한다.
 		return state(new Job(sessionId, versionId, "LOST", "계산 기록을 찾지 못했어요. 다시 계산해 주세요.", Instant.now()), requestKey);
@@ -228,6 +236,27 @@ public class RosterResultService {
 			log.warn("추천 근무표 계산 실패 session={} key={}", sessionId, key, failure);
 			String message = failure instanceof ApiException api ? api.getMessage() : "추천 근무표를 만들지 못했어요. 다시 계산해 주세요.";
 			jobs.put(key, new Job(sessionId, versionId, "FAILED", message, Instant.now()));
+			resetStep(sessionId, versionId, key);
+		}
+	}
+
+	/**
+	 * 계산이 실패하거나 시작하지 못하면 업무 단계를 running에서 review(조건 확인 전)로 되돌린다.
+	 * running으로 남으면 "하던 일" 목록에 계속 "계산 중"으로 보이고 업무 삭제도 막힌다(WorkDeletionService).
+	 * 운영 1번(OperationResultService)의 실패 처리와 같은 잠금 순서를 쓰고, 같은 키의 결과가 이미 저장됐으면 건드리지 않는다.
+	 */
+	private void resetStep(long sessionId, long versionId, String key) {
+		try {
+			transaction.executeWithoutResult(status -> {
+				requestKeyLock.lock("operation", versionId, key);
+				repository.lockSession(sessionId);
+				if (repository.findByRequestKey(sessionId, key).isEmpty()) {
+					repository.markStep(sessionId, checked(sessionId, versionId).versionNo(), "review");
+				}
+			});
+		} catch (RuntimeException reset) {
+			// 되돌리기까지 실패해도 계산 실패 안내는 그대로 보낸다.
+			log.warn("추천 근무표 단계 되돌리기 실패 session={} key={}", sessionId, key, reset);
 		}
 	}
 

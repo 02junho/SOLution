@@ -31,7 +31,8 @@ SEOUL = ZoneInfo("Asia/Seoul")
 MAX_DAILY_ORDERS = 300
 DAY_START = "07:00"
 DAY_END = "19:00"
-DEFAULT_LAST_ORDER = "18:45"
+DEFAULT_LAST_ORDER = "18:45"  # 기본 영업시간(07:00~19:00)일 때의 값. 마감이 다르면 마감 LAST_ORDER_GAP_MIN분 전
+LAST_ORDER_GAP_MIN = 15
 # 상권 데이터에서 손님이 가장 몰리는 시간대(Spring OperationInputBuilder.PEAK_START~PEAK_END). 안내 문장에만 쓴다.
 PEAK = ("11:00", "14:00")
 
@@ -228,7 +229,7 @@ def summary(current: dict | None) -> dict:
     out = {
         "daily_orders": cups if cups is not None else values.get("daily_orders"),
         "last_order_time": values.get(
-            "last_order_time", f"{_minus(close_time, 15)}(기본)"
+            "last_order_time", f"{_minus(close_time, LAST_ORDER_GAP_MIN)}(기본)"
         ),
         "is_owner_working": values.get("is_owner_working"),
         "hourly_wage_krw": values.get("hourly_wage_krw"),
@@ -333,5 +334,6 @@ def default_notes(values: dict) -> list[str]:
     """비워 둔 선택 칸 중 계산할 때 기본값을 쓰는 것. 사장님께 알릴 문장."""
     notes = []
     if values.get("last_order_time") is None:
-        notes.append(f"라스트 오더는 기본 {DEFAULT_LAST_ORDER}")
+        # 요약(위)과 같은 규칙: 바뀐 마감에 맞춘다(기본 마감 19:00이면 18:45).
+        notes.append(f"라스트 오더는 기본 {_minus(hours(values)[1], LAST_ORDER_GAP_MIN)}")
     return notes

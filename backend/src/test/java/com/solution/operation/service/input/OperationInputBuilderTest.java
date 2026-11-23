@@ -148,6 +148,11 @@ class OperationInputBuilderTest {
 				Map.of("daily_orders", 150, "is_owner_working", true, "hourly_wage_krw", 10320));
 		assertThat(OperationInputBuilder.missingFormFields(full)).isEmpty();
 		assertThat(OperationInputBuilder.missingFormFields(OperationInputBuilder.build(form(true), DAY))).isEmpty();
+		// 빈 맵은 주문 입력이 아니다(계산할 때 hasOrders와 같은 기준)
+		Map<String, Object> empty = Map.of(OperationInputBuilder.FORM_KEY,
+				Map.of("menu_cups", Map.of(), "orders_by_slot", Map.of(), "is_owner_working", true, "hourly_wage_krw", 10320));
+		assertThat(OperationInputBuilder.missingFormFields(empty).stream().map(row -> row.get("path")).toList())
+				.containsExactly("operation_form.daily_orders");
 	}
 
 	@Test

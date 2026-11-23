@@ -36,21 +36,24 @@ export function chatFields(open: string, close: string, dataDays: Weekday[]): Ch
   ]
 }
 
-const aliasOf = (i: number) => `P${i + 1}`
+/**
+ * 별칭은 명단 순서가 아니라 직원 번호(id)로 붙인다. 대화 중에 앞 직원을 빼도 앞 대화의 "P3"가 다른 사람을 가리키지 않게.
+ */
+const aliasOf = (p: Person) => `P${p.id}`
 
 /**
  * 사장님이 쓴 말 속 직원 이름 → 별칭(P1…). AI에는 이름을 보내지 않는다("직원 G가 토요일에 못 나온대" → "P7이 …").
  * 긴 이름부터 바꿔 "직원 A"가 "직원 AB" 안에서 먼저 바뀌지 않게 한다.
  */
 export function toAliases(text: string, people: Person[]): string {
-  const named = people.map((p, i) => ({ name: p.name.trim(), alias: aliasOf(i) })).filter((x) => x.name)
+  const named = people.map((p) => ({ name: p.name.trim(), alias: aliasOf(p) })).filter((x) => x.name)
   named.sort((a, b) => b.name.length - a.name.length)
   return named.reduce((out, x) => out.split(x.name).join(x.alias), text)
 }
 
 /** AI 답장 속 별칭(P1…) → 화면에 보이는 직원 이름. 명단에 없는 번호는 그대로 둔다. */
 export function toNames(text: string, people: Person[]): string {
-  return text.replace(/\bP(\d{1,2})\b/g, (whole, n: string) => people[Number(n) - 1]?.name || whole)
+  return text.replace(/\bP(\d{1,2})\b/g, (whole, n: string) => people.find((p) => p.id === Number(n))?.name || whole)
 }
 
 /** 바로 앞 대화(별칭으로 바꾼 말). "그럼 그렇게 해 줘"처럼 앞 말을 가리킬 때 AI가 본다. 최근 4줄까지. */
@@ -60,7 +63,7 @@ export const pushHistory = (list: ChatTurn[], ...turns: ChatTurn[]): ChatTurn[] 
 
 /** 직원은 이름 없이 별칭(P1…)만 보낸다. */
 export const chatWorkers = (people: Person[]): JsonObject[] =>
-  people.map((p, i) => ({ alias: aliasOf(i), days: p.days, start: p.start, end: p.end, max_hours: Number(p.maxHours), minor: p.minor }))
+  people.map((p) => ({ alias: aliasOf(p), days: p.days, start: p.start, end: p.end, max_hours: Number(p.maxHours), minor: p.minor }))
 
 export function chatState(c: RosterConditions, extra: { open: string; close: string; busy: string | null; dailyOrders: number | null }): JsonObject {
   return {
@@ -95,7 +98,8 @@ const ROW_OF: Record<string, string> = {
 export function applyReply(
   c: RosterConditions,
   reply: RosterChatReply,
-  defaults: { open: string; close: string },
+  /** nextId: 새 직원에게 줄 가장 작은 번호(화면이 지금까지 쓴 번호 + 1). 없으면 지금 명단 기준 */
+  defaults: { open: string; close: string; nextId?: number },
 ): { next: RosterConditions; rows: string[]; changed: boolean } {
   let next = { ...c, team: { ...c.team } }
   const rows = new Set<string>()
@@ -104,7 +108,11 @@ export function applyReply(
     else if (key === 'espresso_machines' && typeof value === 'number') next.espresso = value
     else if (key === 'blenders' && typeof value === 'number') next.blenders = value
     else if (key === 'owner_working' && typeof value === 'boolean') next.owner = value
-    else if (key === 'hourly_wage' && typeof value === 'number') next.wage = String(value)
+    else if (key === 'hourly_wage' && typeof value === 'number') {
+      // 조건 카드의 시급 고르기와 같게: 가게 시급과 직원마다의 시급을 함께 바꾼다(계산은 직원 시급을 쓴다).
+      next.wage = String(value)
+      next.team.people = next.team.people.map((p) => ({ ...p, wage: String(value) }))
+    }
     else if (key === 'owner_days' && Array.isArray(value)) next.team.ownerDays = value as Weekday[]
     else if (key === 'owner_start' && typeof value === 'string') next.team.ownerStart = value
     else if (key === 'owner_end' && typeof value === 'string') next.team.ownerEnd = value
@@ -112,7 +120,7 @@ export function applyReply(
     if (ROW_OF[key]) rows.add(ROW_OF[key])
   }
   let people = [...next.team.people]
-  const byAlias = new Map(people.map((p, i) => [aliasOf(i), p.id]))
+  const byAlias = new Map(people.map((p) => [aliasOf(p), p.id]))
   for (const change of reply.worker_changes) {
     const f = (change.fields ?? {}) as Partial<{ days: Person['days']; start: string; end: string; max_hours: number; minor: boolean }>
     const patch: Partial<Person> = {
@@ -123,14 +131,21 @@ export function applyReply(
       ...(f.minor != null ? { minor: f.minor } : {}),
     }
     if (change.op === 'add' && people.length < MAX_TEAM) {
-      const id = Math.max(0, ...people.map((p) => p.id)) + 1
-      people.push({ id, name: `새 직원 ${people.length + 1}`, wage: next.wage, minor: false, days: [], start: defaults.open, end: defaults.close, maxHours: '14', ...patch })
+      const id = Math.max(defaults.nextId ?? 1, ...people.map((p) => p.id + 1))
+      people.push({ id, name: `추가 직원 ${id}`, wage: next.wage, minor: false, days: [], start: defaults.open, end: defaults.close, maxHours: '14', ...patch })
     } else if (change.op === 'remove') {
       const id = byAlias.get(change.alias)
-      if (people.length > 1) people = people.filter((p) => p.id !== id)
+      // 마지막 한 명은 빼지 않는다. 실제로 뺀 게 없으면 바뀐 줄로도 표시하지 않는다.
+      if (id == null || people.length <= 1) continue
+      people = people.filter((p) => p.id !== id)
     } else if (change.op === 'update') {
       const id = byAlias.get(change.alias)
-      people = people.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      const target = people.find((p) => p.id === id)
+      if (!target) continue
+      const merged = { ...target, ...patch }
+      // 서버에서도 막지만, 합친 결과의 시작이 끝보다 늦으면 받지 않는다.
+      if (merged.start >= merged.end) continue
+      people = people.map((p) => (p.id === id ? merged : p))
     } else continue
     rows.add('team')
   }

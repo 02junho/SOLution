@@ -200,6 +200,8 @@ class RosterResultServiceTest {
 		assertThat(failed.data()).containsEntry("state", "FAILED");
 		assertThat(failed.message()).contains("다시 계산");
 		verify(f.repository(), never()).insertResult(any(), any(), any());
+		// 실패하면 단계를 running에서 review로 되돌린다(목록에 "계산 중"으로 남거나 삭제가 막히지 않게).
+		verify(f.repository()).markStep(1L, 2, "review");
 		assertThat(f.service().status(1L, 7L, "모르는-키").data()).containsEntry("state", "LOST");
 	}
 
@@ -228,6 +230,28 @@ class RosterResultServiceTest {
 		verify(run).close();
 		assertThat(f.service().jobCount()).isZero();
 		assertThat(f.service().status(1L, 7L, "key-4").data()).containsEntry("state", "LOST");
+	}
+
+	@Test
+	void 계산_중_표시를_남기다_실패해도_계산_자리를_돌려준다() {
+		var f = fixture(version(2, 2, true), true);
+		CalculationRuns.Run run = mock(CalculationRuns.Run.class);
+		when(f.runs().start(anyLong(), any(), any())).thenReturn(run);
+		org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(f.repository()).markStep(1L, 2, "running");
+		assertThatThrownBy(() -> f.service().start(1L, BODY, "key-5")).hasMessageContaining("db down");
+		verify(run).close();
+		assertThat(f.service().jobCount()).isZero();
+		assertThat(f.held()).isEmpty();
+	}
+
+	@Test
+	void 작업_기록이_막_지워졌어도_DB에_결과가_있으면_LOST가_아니라_DONE() {
+		var f = fixture(version(2, 2, true), false);
+		StoredResult row = new StoredResult(99L, 7L, 1L, 2, "operation", "ok", null, "{\"message\":\"추천안\"}", "{}",
+				OffsetDateTime.now(), 2, "demo-owner", null);
+		// 처음 조회에는 없고, 바로 다음 조회에는 저장돼 있는 경우(그 사이 계산이 끝남)
+		when(f.repository().findByRequestKey(1L, "key-6")).thenReturn(Optional.empty(), Optional.of(row));
+		assertThat(f.service().status(1L, 7L, "key-6").data()).containsEntry("state", "DONE");
 	}
 
 	@Test

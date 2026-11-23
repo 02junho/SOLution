@@ -25,7 +25,7 @@ import { ROSTER_TOUR_TOTAL, rosterStep } from '../features/operation/easy/roster
 import type { RosterStage } from '../features/operation/easy/rosterTour'
 import { Card, OperationView, Pick, PurchaseView } from '../features/easy/views'
 import type { Prepared } from '../features/easy/views'
-import { isRosterResult, ROSTER_MODE } from '../features/operation/easy/rosterSwitch'
+import { isRosterResult, LUNCH_MODE_PARAM, ROSTER_MODE } from '../features/operation/easy/rosterSwitch'
 import type { RosterOpened } from '../features/operation/easy/EasyRoster'
 import type { OperationResult } from '../features/operation/types'
 import { won } from '../features/operation/workspace/format'
@@ -48,16 +48,16 @@ type Snapshot = { budget: number | null; deliveries: number | null; dailyOrders:
 // 첫 화면의 기능 카드 두 개. 누르면 예시 말(message)을 보낸 것처럼 그 기능을 시작한다.
 const STARTERS = [
   { feature: 'purchase', title: '장보기', desc: '이번 주 무엇을 얼마나, 어느 거래처에서 살지', message: '이번 주 장보기 계획 세워 줘', result: '구매안과 거래처별 주문 문구' },
-  // 근무표 모드(?mode=roster, 운영 2번)면 같은 자리가 "직원 근무표" 카드가 된다. 월요일에 1번을 없애면 이 줄만 남긴다.
+  // 기본은 "직원 근무표"(운영 2번). ?mode=lunch면 같은 자리가 예전 "점심 인원"(1번) 카드가 된다.
   ROSTER_MODE
     ? { feature: 'operation', title: '직원 근무표', desc: '가게 판매 데이터로 일주일 근무표를 짜 드려요', message: '일주일 근무표 짜 줘', result: '추천 근무표' }
     : { feature: 'operation', title: '점심 인원', desc: '바쁜 점심에 몇 명이 일하면 덜 기다릴지', message: '점심에 알바 한 명 더 쓰면 어때?', result: '추천 배치표' },
 ]
 
-/** 1번(점심 인원 배치) ↔ 2번(추천 근무표) 임시 전환 주소. 월요일에 하나로 정하면 이 링크도 뺀다. */
+/** 1번(점심 인원 배치) ↔ 2번(추천 근무표) 전환 주소. 1번을 없애면 이 링크도 뺀다. */
 const MODE_SWITCH = ROSTER_MODE
-  ? { href: window.location.pathname, label: '예전 "점심 인원 배치"로 보기' }
-  : { href: `${window.location.pathname}?mode=roster`, label: '새 "직원 근무표"로 보기' }
+  ? { href: `${window.location.pathname}?mode=${LUNCH_MODE_PARAM}`, label: '예전 "점심 인원 배치"로 보기' }
+  : { href: window.location.pathname, label: '새 "직원 근무표"로 보기' }
 
 // 기능 카드 아이콘(선 그림). 장보기는 장바구니, 점심 인원은 사람 둘.
 function StarterIcon({ feature }: { feature: string }) {
@@ -133,7 +133,7 @@ export default function EasyPage() {
   const [screenNo, setScreenNo] = useState(0)
   const [context, setContext] = useState<Context | null>(null)
   const [prepared, setPrepared] = useState<Prepared | null>(null)
-  // 점심 인원을 추천 근무표(2번)로 볼지. 새로 시작하면 주소(?mode=roster)로, 이어서 열면 결과 종류로 정한다.
+  // 점심 인원을 추천 근무표(2번)로 볼지. 새로 시작하면 주소(기본 2번, ?mode=lunch면 1번)로, 이어서 열면 결과 종류로 정한다.
   const [roster, setRoster] = useState(false)
   const [rosterOpened, setRosterOpened] = useState<RosterOpened | null>(null)
   // 근무표 화면 안의 한 단계 뒤로(조건 확인 → 데이터 고르기). 있으면 "← 이전" 줄이 이걸 쓴다.

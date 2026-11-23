@@ -138,3 +138,27 @@ def test_근무표_답은_주문이라는_말을_막지_않고_보장_표현과_
     assert _roster_safe("주문 후 음료를 받기까지 걸리는 시간이에요. 손님 10명 중 9명이 5분 안에 받아요.", allowed) is None
     assert _roster_safe("대기가 반드시 줄어요.", allowed) is not None
     assert _roster_safe("7명이 더 필요해요.", allowed) is not None
+
+
+def test_일부만_고칠_때도_지금_값과_합쳐_시작이_끝보다_늦으면_거절한다():
+    # P1은 07:00~16:00. 시작만 17:00으로 바꾸면 끝(16:00)보다 늦어진다.
+    out, _ = ask({"intent": "EDIT", "changes": [], "worker_changes": [
+        {"op": "update", "alias": "P1", "fields": {"start": "17:00"}},
+    ]})
+    assert out["worker_changes"] == []
+    assert "직원 시작 시각이 끝보다 늦어요." in out["rejected"]
+    # 끝만 당겨도 시작보다 앞이면 거절, 시작 안쪽이면 받는다
+    ok, _ = ask({"intent": "EDIT", "changes": [], "worker_changes": [
+        {"op": "update", "alias": "P1", "fields": {"end": "12:00"}},
+    ]})
+    assert ok["worker_changes"] == [{"op": "update", "alias": "P1", "fields": {"end": "12:00"}}]
+
+
+def test_모델_답_모양이_다르면_쓸_수_없는_답으로_본다():
+    for bad in ({"intent": "EDIT", "changes": "target_wait_min"}, {"intent": "EDIT", "changes": [], "worker_changes": {"op": "add"}}):
+        out, _ = ask(bad)
+        assert out["source"] == "UNAVAILABLE" and out["changes"] == [] and out["worker_changes"] == []
+    # 칸 이름·별칭이 문자열이 아니면 그 항목만 건너뛴다(죽지 않는다)
+    out, _ = ask({"intent": "EDIT", "changes": [{"key": ["target_wait_min"], "value": 3}],
+                  "worker_changes": [{"op": "remove", "alias": ["P1"]}]})
+    assert out["source"] == "LLM" and out["changes"] == [] and out["worker_changes"] == []

@@ -62,7 +62,7 @@ METRIC_DEFINITIONS = {
     "throughput_per_hour_mean": {
         "label": "시간당 처리량",
         "unit": "customers_per_hour",
-        "description": "19시까지 받은 손님 수를 영업 12시간으로 나눈 값",
+        "description": "마감까지 끝까지 만든 손님 수를 그날 영업시간으로 나눈 값",
     },
     "_aggregation": {
         "label": "집계 방식",

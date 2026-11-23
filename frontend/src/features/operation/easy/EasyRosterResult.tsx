@@ -6,7 +6,7 @@ import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
 import DayTimeline from './DayTimeline'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, capacityText, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
+import { averagePeak, busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -26,6 +26,7 @@ export default function EasyRosterResult({
   readOnly,
   onSave,
   chat,
+  changed = null,
 }: {
   /** 저장된 결과 번호(줄 서는 모습을 서버가 이 결과에서 다시 만든다). 없으면 줄 서는 모습을 숨긴다. */
   resultId: number | null
@@ -42,6 +43,8 @@ export default function EasyRosterResult({
   onSave: (key: OptionKey, acks: string[]) => Promise<void>
   /** 말로 고치기 칸(결과 아래). */
   chat: React.ReactNode
+  /** 말로 바꿔 다시 계산한 결과면: 바꾼 내용 한 줄과 말로 새로 넣은 직원 이름 */
+  changed?: { text: string; added: string[] } | null
 }) {
   const days = shownDays(data)
   const period = periodOf(days) // 하루 근무표면 "주" 대신 "하루"
@@ -50,7 +53,10 @@ export default function EasyRosterResult({
   const day = ladderDay && days.includes(ladderDay) ? ladderDay : busiestDay(data, days)
   const bars = day ? ladderBars(data, day) : []
   const windows = day ? mergedWindows(data.days[day].windows).map((w) => range(w.start, w.end)).join(', ') : '' // 이어진 바쁜 시간은 하나로
-  const rows = weekRows(option, days)
+  // 바쁠 때 더 배치한 근무(절약 안에 없는 근무)를 칸마다 표시한다.
+  const rows = markExtraShifts(weekRows(option, days), option, data.options.find((o) => o.key === 'SAVE'), days)
+  const added = new Set(changed?.added ?? [])
+  const hasExtra = rows.some((r) => r.cells.some((c) => c?.extra))
   const holes = unfilledCells(option, days)
   const peak = averagePeak(option, days)
   const recommended = data.options.find((o) => o.key === 'RECOMMENDED') ?? option
@@ -111,7 +117,8 @@ export default function EasyRosterResult({
       <section className="easy-card easy-print er-print" data-tour="detail">
         <h2>{OPTION_NAME[option.key]} · {period.title}</h2>
         <p className="easy-print-only easy-print-sign er-sign">확인 ____________</p>
-        {days.length === 1 && <DayTimeline rows={rows} per={period.per} />}
+        {changed && <p className="er-changed easy-noprint">바꾼 조건으로 다시 계산했어요: {changed.text}</p>}
+        {days.length === 1 && <DayTimeline rows={rows} added={added} per={period.per} holes={holes?.[0]} busy={mergedWindows(data.days[days[0]]?.windows ?? [])} />}
         <div className={`er-week-wrap${days.length === 1 ? ' er-week-day' : ''}`}>
           <table className="er-week">
             <thead>
@@ -130,13 +137,14 @@ export default function EasyRosterResult({
                 <tr key={r.key} className={r.owner ? 'owner' : r.hire ? 'hire' : ''}>
                   <th scope="row">
                     {r.name}
+                    {added.has(r.name) && <small className="er-added-tag">말로 추가</small>}
                     {r.hours != null && <small>{period.per} {r.hours}시간</small>}
                     {r.pay != null && <small className="er-pay">{won(r.pay)}</small>}
                   </th>
                   {r.cells.map((c, i) => (
                     <td key={days[i]}>
                       {c && (
-                        <span className={`er-shift${c.breaks.length ? ' rest' : ''}`}>
+                        <span className={`er-shift${c.breaks.length ? ' rest' : ''}${c.extra ? ' extra' : ''}`}>
                           <span className="er-time">
                             {shiftParts(c.start, c.end).map((part) => (
                               <span key={part}>{part}</span>
@@ -165,6 +173,8 @@ export default function EasyRosterResult({
           <span><i />지금 직원</span>
           {(option.new_hires?.length ?? 0) > 0 && <span><i className="hire" />새로 뽑을 직원</span>}
           <span><i className="rest" />휴게 있음(4시간 넘게 일하면 30분, 무급)</span>
+          {hasExtra && <span><i className="extra" />바쁠 때 더 배치한 근무</span>}
+          {days.length === 1 && <span className="er-legend-busy"><i className="busy" />바쁜 시간(이때 사람을 더 둬요)</span>}
         </p>
         {capacityText(option, days) && <p className="er-warn easy-noprint">{capacityText(option, days)}</p>}
         {option.shortfall.more_people_under_15h > 0 && (
@@ -203,7 +213,7 @@ export default function EasyRosterResult({
         </summary>
         <div className="er-compare">
           {data.options.map((o) => (
-            <button key={o.key} type="button" className={`er-option${o.key === option.key ? ' on' : ''}`} disabled={readOnly} onClick={() => onChoose(o.key)}>
+            <button key={o.key} type="button" className={`er-option${o.key === option.key ? ' on' : ''}`} aria-pressed={o.key === option.key} disabled={readOnly} onClick={() => onChoose(o.key)}>
               {o.key === 'RECOMMENDED' && <span className="er-badge">추천</span>}
               <b>{OPTION_NAME[o.key]}</b>
               <span>가장 긴 대기</span>

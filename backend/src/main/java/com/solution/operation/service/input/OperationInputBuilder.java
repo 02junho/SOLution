@@ -135,7 +135,9 @@ public final class OperationInputBuilder {
 		List<Map<String, Object>> missing = new ArrayList<>();
 		for (String[] field : new String[][] {{"daily_orders", "하루 주문 수", "건"},
 				{"is_owner_working", "사장님 근무 여부", null}, {"hourly_wage_krw", "직원 시급", "원"}}) {
-			boolean ordersFromStore = form.get("menu_cups") instanceof Map<?, ?> || form.get("orders_by_slot") instanceof Map<?, ?>;
+			// hasOrders와 같은 기준: 비어 있지 않은 맵만 주문 입력으로 본다.
+			boolean ordersFromStore = form.get("menu_cups") instanceof Map<?, ?> cups && !cups.isEmpty()
+					|| form.get("orders_by_slot") instanceof Map<?, ?> slots && !slots.isEmpty();
 			if (form.get(field[0]) == null && !("daily_orders".equals(field[0]) && ordersFromStore)) {
 				Map<String, Object> row = new LinkedHashMap<>();
 				row.put("path", FORM_KEY + "." + field[0]);

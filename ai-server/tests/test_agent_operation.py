@@ -481,3 +481,8 @@ def test_운영_규칙은_운영_요청의_지시문에만_붙는다():
 def test_정하지_않은_라스트_오더만_기본값으로_알린다():
     assert operation_fields.default_notes({"daily_orders": 100}) == ["라스트 오더는 기본 18:45"]
     assert operation_fields.default_notes({"last_order_time": "19:00"}) == []
+
+
+def test_라스트_오더_기본_안내는_바뀐_마감에_맞춘다():
+    from app.agent import operation_fields
+    assert operation_fields.default_notes({"daily_orders": 100, "close_time": "21:00"}) == ["라스트 오더는 기본 20:45"]

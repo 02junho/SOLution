@@ -58,15 +58,15 @@ test('대기 글자: 1분 안 / 반올림한 분 / 없음', () => {
 test('추천 한 줄: 새로 뽑을 직원 먼저, 모든 요일 같은 수면 "N명씩", 아니면 요일, 0이면 충분', () => {
   const days = model.shownDays(data)
   assert.deepEqual(days, ['MON', 'TUE'])
-  assert.equal(model.headline(data.options[1], days), '바쁜 시간에 1명씩 더 두면 돼요')
+  assert.equal(model.headline(data.options[1], days), '바쁜 시간에 1명씩 더 배치하면 돼요 · 새로 뽑지 않고 지금 직원으로 채워요')
   assert.equal(model.headline(data.options[0], days), '지금 직원으로 충분해요')
   // 새로 뽑을 직원이 있으면 그걸 먼저(표의 노란 줄과 맞게)
   assert.equal(model.headline({ ...data.options[0], shortfall: { more_people_under_15h: 2 } }, days), '직원 2명을 더 뽑으면 돼요')
-  assert.equal(model.headline({ ...data.options[1], shortfall: { more_people_under_15h: 1 } }, days), '직원 1명을 더 뽑고, 바쁜 시간에 1명씩 더 두면 돼요')
+  assert.equal(model.headline({ ...data.options[1], shortfall: { more_people_under_15h: 1 } }, days), '직원 1명을 더 뽑고, 바쁜 시간에 1명씩 더 배치하면 돼요')
   const mixed = { ...data.options[1], extra_by_day: { MON: 1, TUE: 0 } }
-  assert.equal(model.headline(mixed, days), '월요일 바쁜 시간에 사람을 더 두면 돼요')
+  assert.equal(model.headline(mixed, days), '월요일 바쁜 시간에 사람을 더 배치하면 돼요 · 새로 뽑지 않고 지금 직원으로 채워요')
   const uneven = { ...data.options[1], extra_by_day: { MON: 1, TUE: 2 } }
-  assert.equal(model.headline(uneven, days), '바쁜 시간에 요일마다 1~2명 더 두면 돼요')
+  assert.equal(model.headline(uneven, days), '바쁜 시간에 요일마다 1~2명 더 배치하면 돼요 · 새로 뽑지 않고 지금 직원으로 채워요')
 })
 
 test('가장 바쁜 요일과 막대: 추천 표시, 가장 긴 대기를 1로', () => {
@@ -133,9 +133,9 @@ test('줄 서는 모습의 일하는 사람: 이름 없이 사장님·직원 수
 })
 
 test('시각 글자', () => {
-  assert.equal(model.clock('07:00'), '오전 7시')
-  assert.equal(model.clock('13:30'), '오후 1시 30분')
-  assert.equal(model.clock('12:00'), '오후 12시')
+  assert.equal(model.clock('07:00'), '7시')
+  assert.equal(model.clock('13:30'), '13시 30분')
+  assert.equal(model.clock('12:00'), '12시')
 })
 
 const team = {
@@ -172,10 +172,43 @@ test('말로 고치기: 직원은 별칭으로 더하기·빼기·고치기', ()
     reply: '',
   }
   const { next, rows } = chat.applyReply(cond, reply, { open: '07:00', close: '19:00' })
-  assert.deepEqual(next.team.people.map((p) => p.name), ['직원 A', '새 직원 2'])
+  assert.deepEqual(next.team.people.map((p) => p.name), ['직원 A', '추가 직원 2'])
   assert.equal(next.team.people[0].maxHours, '10')
   assert.deepEqual(next.team.people[1].days, ['SAT'])
   assert.deepEqual(rows, ['team'])
+})
+
+test('말로 고치기: 마지막 직원 빼기·시작이 끝보다 늦어지는 고치기는 반영도, 바뀐 줄 표시도 안 한다', () => {
+  const one = { ...cond, team: { ...team, people: [team.people[0]] } }
+  const removed = chat.applyReply(one, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'remove', alias: 'P1' }], reply: '' }, { open: '07:00', close: '19:00' })
+  assert.equal(removed.next.team.people.length, 1)
+  assert.equal(removed.changed, false)
+  // 직원 A는 07:00~12:00: 시작만 13:00으로 바꾸면 끝보다 늦다
+  const late = chat.applyReply(cond, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'update', alias: 'P1', fields: { start: '13:00' } }], reply: '' }, { open: '07:00', close: '19:00' })
+  assert.equal(late.next.team.people[0].start, '07:00')
+  assert.equal(late.changed, false)
+})
+
+test('말로 고치기: 시급을 바꾸면 직원마다의 시급도 같이(조건 카드 고르기와 같게)', () => {
+  const { next } = chat.applyReply(cond, { source: 'LLM', intent: 'EDIT', changes: [{ key: 'hourly_wage', value: 12000 }], worker_changes: [], reply: '' }, { open: '07:00', close: '19:00' })
+  assert.equal(next.wage, '12000')
+  assert.deepEqual(next.team.people.map((p) => p.wage), ['12000', '12000'])
+  assert.equal(cond.team.people[0].wage, '10320', '원래 조건은 그대로')
+})
+
+test('말로 고치기: 별칭은 직원 번호로 붙어 앞 직원을 빼도 바뀌지 않는다', () => {
+  const { next } = chat.applyReply(cond, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'remove', alias: 'P1' }], reply: '' }, { open: '07:00', close: '19:00' })
+  assert.deepEqual(chat.chatWorkers(next.team.people).map((w) => w.alias), ['P2'])
+  assert.equal(chat.toNames('P2는 화요일', next.team.people), '직원 B는 화요일')
+  assert.equal(chat.toNames('P1은 빠졌어요', next.team.people), 'P1은 빠졌어요')
+  const later = chat.applyReply(next, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'update', alias: 'P2', fields: { max_hours: 9 } }], reply: '' }, { open: '07:00', close: '19:00' })
+  assert.equal(later.next.team.people[0].maxHours, '9')
+})
+
+test('말로 고치기: 뺀 직원 번호는 새 직원에게 다시 주지 않는다(화면이 넘긴 nextId)', () => {
+  const removed = chat.applyReply(cond, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'remove', alias: 'P2' }], reply: '' }, { open: '07:00', close: '19:00' })
+  const added = chat.applyReply(removed.next, { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'add', alias: 'NEW', fields: { days: ['SAT'], start: '09:00', end: '13:00' } }], reply: '' }, { open: '07:00', close: '19:00', nextId: 3 })
+  assert.deepEqual(chat.chatWorkers(added.next.team.people).map((w) => w.alias), ['P1', 'P3'])
 })
 
 test('말로 고치기: 바뀐 것이 없으면 changed=false (묻기)', () => {
@@ -224,6 +257,22 @@ test('다시 불러오기: 그때의 조건·직원 명단으로 채운다', () 
     ['직원 A', ['MON', 'SAT'], '07:00', '12:00', '12', false, '11000'],
     ['직원 B', ['TUE'], '12:00', '19:00', '10', true, '11500'],
   ])
+})
+
+test('다시 불러오기: 사장님 시간을 그대로 다시 계산하면 요일마다 저장된 시간이 유지된다', () => {
+  // 월요일은 09시 개점이라 09:00부터로 잘려 저장됐다. 그 값으로 화요일(07:00부터)이 좁아지면 안 된다.
+  const late = {
+    days: [
+      { day: 'MON', operation_form: { daily_orders: 80, orders_by_slot: slots(9, 18, 8), is_owner_working: true }, owner_start_time: '09:00', owner_end_time: '14:00' },
+      { day: 'TUE', operation_form: { daily_orders: 90, orders_by_slot: slots(7, 18, 8), is_owner_working: true }, owner_start_time: '07:00', owner_end_time: '14:00' },
+    ],
+    workers: [],
+  }
+  const c = restore.restoreConditions(late, { open: '07:00', close: '18:00' })
+  assert.equal(c.team.ownerStart, '07:00')
+  assert.equal(c.team.ownerEnd, '14:00')
+  const days = restore.restoredDayBodies(late, c)
+  assert.deepEqual(days.map((d) => [d.day, d.owner_start_time, d.owner_end_time]), [['MON', '09:00', '14:00'], ['TUE', '07:00', '14:00']])
 })
 
 test('다시 계산 본문: 지금 값으로 덮고, 사장님 근무는 그날 영업시간 안으로', () => {
@@ -311,3 +360,29 @@ test('말로 바꿀 수 있는 것 안내는 칸 정의에서', () => {
   assert.match(text, /사장님 근무\(요일·시간\)/)
   assert.equal(text.split('사장님 근무').length, 2) // 사장님 칸 여러 개는 하나로
 })
+
+test('AI 설명 보이기: 긴 숫자에 쉼표, 문장마다 나눔', () => {
+  assert.deepEqual(model.noteSentences('인건비는 1491240원에서 1527360원으로 늘어납니다. 대기는 2.5분이에요. 시급 10,320원'), [
+    '인건비는 1,491,240원에서 1,527,360원으로 늘어납니다.',
+    '대기는 2.5분이에요.',
+    '시급 10,320원',
+  ])
+})
+
+test('바쁠 때 더 배치한 근무: 절약 안에 없는 시간 근무만 표시', () => {
+  const save = option('SAVE', 0)
+  const rec = option('RECOMMENDED', 1)
+  rec.days.MON.shifts = [...rec.days.MON.shifts, shift('11:00', '14:30')]
+  rec.weekly.assignments = [...rec.weekly.assignments, { slot_id: 'MON-3', day: 'MON', worker_key: 'C', name: '직원 C', start_time: '11:00', end_time: '14:30', work_hours: 3.5 }]
+  rec.weekly.workers = [...rec.weekly.workers, { worker_key: 'C', name: '직원 C', days: ['MON'], weekly_work_hours: 3.5 }]
+  const rows = model.markExtraShifts(model.weekRows(rec, ['MON', 'TUE']), rec, save, ['MON', 'TUE'])
+  const extra = rows.flatMap((r) => r.cells.filter((c) => c?.extra).map((c) => `${r.name} ${c.start}`))
+  assert.deepEqual(extra, ['직원 C 11:00'])
+  assert.deepEqual(model.markExtraShifts(model.weekRows(save, ['MON']), save, save, ['MON']), model.weekRows(save, ['MON']))
+})
+
+test('결론 한 줄: 새로 뽑지 않고 더 배치하면 그렇다고 말한다', () => {
+  const rec = option('RECOMMENDED', 1)
+  assert.match(model.headline(rec, ['MON', 'TUE']), /더 배치하면 돼요 · 새로 뽑지 않고 지금 직원으로 채워요/)
+})
+

@@ -184,3 +184,32 @@ test('카드 외 결제 보정: 비율만큼 주문을 늘리고 가정으로 �
   assert.equal(f.sourceOf(imp, fixed).card_share, 0.8)
   assert.equal(f.planFrom(imp, 'AVERAGE', null, {}, 0.1).cardShare, 0.5, '50% 아래는 50%로')
 })
+
+test('취소여부 열: Y는 취소, N은 정상', () => {
+  const imp = f.analyzeTable(f.parseCsv('거래일시,취소여부,품목\n2026-11-02 09:10,N,아이스 아메리카노\n2026-11-02 09:20,Y,아이스 아메리카노\n2026-11-02 09:30,N,핫 카페라떼\n'), 'y.csv')
+  assert.equal(imp.excluded.cancelled, 1)
+  assert.equal(imp.byDate['2026-11-02'].hours[9], 2)
+})
+
+test('엑셀 숫자 시각: 093000(HHMMSS)은 9시 30분, 소수는 일련번호', () => {
+  const imp = f.analyzeTable([['승인일자', '승인시간'], ['2026-11-02', 93000], ['2026-11-02', 143015], ['2026-11-02', 0.75]], 'n.xlsx')
+  const hours = imp.byDate['2026-11-02'].hours
+  assert.equal(hours[9], 1)
+  assert.equal(hours[14], 1)
+  assert.equal(hours[18], 1)
+  assert.equal(imp.excluded.unreadable, 0)
+})
+
+test('설명 줄 뒤에 탭 머리글이 와도 탭으로 나눈다(설명 줄의 쉼표는 따옴표 안)', () => {
+  const tsv = '"조회 기간: 2026-11-01, 2026-11-07"\n승인일시\t승인금액\t품목\n2026-11-02 09:10\t4500\t아이스 아메리카노\n'
+  const imp = f.analyzeTable(f.parseCsv(tsv), 'd.tsv')
+  assert.equal(imp.byDate['2026-11-02'].hours[9], 1)
+})
+
+test('메뉴 이름이 constructor·toString이어도 그대로 센다', () => {
+  const imp = f.analyzeTable(f.parseCsv('품목,수량\nconstructor,3\ntoString,2\n'), 'p.csv')
+  assert.equal(imp.undated.constructor, 3)
+  assert.equal(imp.undated.toString, 2)
+  const plan = f.planFrom(imp)
+  assert.deepEqual(plan.menus.map((m) => m.chosen), [false, false])
+})

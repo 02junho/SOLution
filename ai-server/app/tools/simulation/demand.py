@@ -1,7 +1,7 @@
-"""Euljiro-entrance daily demand assumptions and common random arrivals.
+"""을지로입구 하루 손님 가정과 공통 난수 도착.
 
-The public commercial district data determines SLOT SHARES only, never per-store order counts.
-A full 07:00-19:00 day is modeled with *continuous* arrivals / shared queue across bands.
+상권 공공데이터는 시간대 비중만 정하고, 가게 하나의 주문 수로 쓰지 않는다.
+07:00~19:00 하루를 시간대 경계에서 끊지 않고, 도착과 대기열을 이어서 돌린다.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from . import day_window
 LABELS = [f"{a}-{b}" for a, b, *_ in SLOTS]
 DAY_START = 7 * 3600
 DAY_END = 19 * 3600
-# Illustrative daily orders for demand_level, not measured. One table for every path.
+# demand_level의 하루 주문 수 예시(측정값 아님). 모든 경로가 이 표 하나를 쓴다.
 DEMAND_PRESETS = {
     "low": 60,
     "medium": 100,

@@ -14,6 +14,8 @@
 .er-reply.ok i { color: var(--good); font-style: normal; font-weight: 800; }
 .er-ai-note { background: var(--blue-soft); }
 .er-ai-note b { margin-right: 6px; color: var(--blue-dark); }
+.er-ai-note ul { margin: 4px 0 0; padding-left: 1.2em; }
+.er-ai-note li + li { margin-top: 2px; }
 
 .easy-running .er-running-note { display: block; margin-top: 4px; color: var(--gray-2); font-size: 0.85em; }
 
@@ -47,8 +49,9 @@
 .er-shift { display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 44px; padding: 3px 6px; border-radius: 8px; background: #e5f6ec; line-height: 1.3; }
 .er-shift small { color: var(--gray-2); font-size: 0.82em; }
 .er-shift.rest { background-image: repeating-linear-gradient(135deg, transparent 0 5px, #b9c0cc 5px 6px); background-size: 100% 4px; background-repeat: no-repeat; background-position: bottom; }
-.er-week tr.owner .er-shift { background: var(--blue-soft); }
-.er-week tr.hire .er-shift { background: #fff7d6; border: 1.5px dashed #c99a1c; }
+.er-week tr.owner .er-shift { background-color: var(--blue-soft); }
+/* 배경색만 바꾼다(background 축약이면 .rest의 휴게 무늬가 지워진다). */
+.er-week tr.hire .er-shift { background-color: #fff7d6; border: 1.5px dashed #c99a1c; }
 .er-week tr.hire th { color: var(--accent); }
 .er-week tr.need th, .er-week tr.need td { color: var(--accent); font-weight: 700; font-size: 0.9em; line-height: 1.4; }
 .er-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 0.82em; color: var(--gray); }
@@ -184,5 +187,15 @@
 .er-day-row.owner .er-day-bar { background: var(--blue-soft); }
 .er-day-row.hire .er-day-bar { background: #fff7d6; border: 1.5px dashed #c99a1c; }
 .er-day-row.hire .er-day-name b { color: var(--accent); }
+.er-day-need { color: var(--accent); font-weight: 700; font-size: 0.9em; }
+/* 바쁠 때 더 배치한 근무: 왼쪽 굵은 주황 줄(새로 뽑을 직원의 노란 칸과 구분) */
+.er-shift.extra, .er-day-bar.extra { box-shadow: inset 4px 0 0 #e8890c; }
+.er-legend i.extra { background: #e5f6ec; box-shadow: inset 4px 0 0 #e8890c; }
+.er-added-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 6px; background: var(--blue-soft); color: var(--blue-dark); font-size: 0.75em; font-weight: 700; }
+.er-changed { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 0.92em; }
+/* 하루 근무표의 바쁜 시간 띠(막대 뒤) */
+.er-day-busy { position: absolute; top: 0; bottom: 0; background: rgba(255, 170, 60, 0.13); pointer-events: none; }
+.er-legend i.busy { background: rgba(255, 170, 60, 0.35); }
+@media print { .er-legend-busy { display: none; } }
 .er-day-rest { position: absolute; top: 0; bottom: 0; background-image: repeating-linear-gradient(135deg, rgba(120,128,140,.35) 0 4px, transparent 4px 8px); }
 @media print { .er-day { display: none; } .er-week-day { display: block; } }

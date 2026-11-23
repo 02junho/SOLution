@@ -100,8 +100,10 @@ export function restoreConditions(request: StoredRequest, fallback: { open: stri
     team: {
       people,
       ownerDays: ownerDays.map((d) => d.day),
-      ownerStart: ownerDays[0]?.ownerStart ?? fallback.open,
-      ownerEnd: ownerDays[0]?.ownerEnd ?? fallback.close,
+      // 저장된 요일별 시간은 처음 시간을 그날 영업시간 안으로 자른 값이다. 가장 이른 시작·가장 늦은 끝으로 되돌리면
+      // 다시 계산할 때 요일마다 다시 잘라도 저장된 시간과 같아진다(첫 요일 값으로 다른 요일이 좁아지지 않게).
+      ownerStart: ownerDays.map((d) => d.ownerStart as string).sort()[0] ?? fallback.open,
+      ownerEnd: ownerDays.map((d) => d.ownerEnd as string).sort().at(-1) ?? fallback.close,
     },
   }
 }

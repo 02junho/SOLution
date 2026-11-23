@@ -28,6 +28,10 @@ def test_키가_없거나_이상한_답이면_모두_모름():
     assert out == {"model_version": "operation.menu_types.v1", "source": "UNAVAILABLE", "types": {"A": None}}
     assert classify({"names": ["A"], "types": TYPES}, call=lambda s, u: '```json\n{"A": "iced_americano"}\n```')["types"] == {"A": "iced_americano"}
 
+    # 분류값이 목록·사전이어도 죽지 않고 모름으로 본다
+    weird = classify({"names": ["A", "B"], "types": TYPES}, call=lambda s, u: '{"A": ["FOOD"], "B": {"x": 1}}')
+    assert weird["types"] == {"A": None, "B": None}
+
 
 def test_입력_검사():
     with pytest.raises(ValueError):

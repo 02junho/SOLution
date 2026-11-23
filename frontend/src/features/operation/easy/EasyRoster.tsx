@@ -21,7 +21,7 @@ import type { RosterStage } from './rosterTour'
 import { applyReply, chatFields, chatState, chatWorkers, editableText, mergeChanges, pushHistory, toAliases, toNames } from './easyRosterChat'
 import type { ChatTurn } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
-import { clock, OPTION_NAME, won } from './easyRosterModel'
+import { clock, noteSentences, OPTION_NAME, won } from './easyRosterModel'
 import { equipmentOf, patchForm, restoreConditions, restoredDayBodies, restoredFacts } from './easyRosterRestore'
 import type { RestoredFacts, StoredRequest } from './easyRosterRestore'
 import { warmConditions } from './rosterWarm'
@@ -85,6 +85,14 @@ export default function EasyRoster({
   const [changedRows, setChangedRows] = useState<string[]>([])
   const [chatText, setChatText] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
+  /** 지금 조건(채팅 답을 기다리는 동안 사장님이 고쳤는지 보려고). */
+  const condNow = useRef<RosterConditions | null>(null)
+  /** 지금까지 쓴 가장 큰 직원 번호. 뺀 직원 번호를 새 직원에게 다시 주지 않게(앞 대화의 별칭이 다른 사람을 가리키지 않게). */
+  const maxPersonId = useRef(0)
+  useEffect(() => {
+    condNow.current = cond
+    maxPersonId.current = Math.max(maxPersonId.current, ...(cond?.team.people.map((p) => p.id) ?? []))
+  }, [cond])
   const [chatReply, setChatReply] = useState<{ text: string; ok: boolean } | null>(null)
   const [session, setSession] = useState<number | null>(opened?.sessionId ?? null)
   const [options, setOptions] = useState<RosterOptions | null>(null)
@@ -140,11 +148,19 @@ export default function EasyRoster({
   const readOnly = Boolean(opened?.readOnly)
 
   // ---------------------------------------------------------------- 데이터 읽기
+  /** 마지막으로 읽기 시작한 파일 번호. 앞 파일의 늦은 AI 분류가 지금 파일에 붙지 않게 한다. */
+  const readSeq = useRef(0)
   /** 판매 내역 읽기. 읽었으면 true. */
   async function readFile(file: File, label: string): Promise<boolean> {
+    return applyImport(async () => analyzeTable(await readTable(file), file.name), label)
+  }
+  /** 읽어 둔 정리 결과로 조건을 채운다. AI 메뉴 분류는 기다리지 않고 뒤에서 받는다(화면이 멈추지 않게). */
+  async function applyImport(parse: () => Promise<StoreImport>, label: string): Promise<boolean> {
     setError('')
+    const seq = ++readSeq.current
     try {
-      const next = analyzeTable(await readTable(file), file.name)
+      const next = await parse()
+      if (seq !== readSeq.current) return false
       setRestored(null)
       const first = planFrom(next)
       const days = WEEKDAYS.filter((w) => first.weekdayDays[w])
@@ -161,33 +177,50 @@ export default function EasyRoster({
         team: exampleTeam(wage, first.open ?? DEFAULT_OPEN, first.close ?? DEFAULT_CLOSE, days.filter((d) => d !== 'SAT' && d !== 'SUN')),
       }))
       setChangedRows([])
-      // 이름만으로 모른 메뉴만 AI에 종류를 묻는다(이름과 종류 목록만 보냄). 못 물으면 가장 많이 팔린 종류로 둔다.
+      // 이름만으로 모른 메뉴만 AI에 종류를 묻는다(이름과 종류 목록만 보냄). 답이 오기 전에는 가장 많이 팔린 종류로 둔다.
       const unknown = first.menus.filter((m) => m.how === 'GUESS').map((m) => m.name).slice(0, 40)
-      if (unknown.length) {
-        const response = await classifyMenuTypes({ names: unknown, types: MENU_TYPES })
-        if (response.status === 'ok' && response.data?.source === 'LLM') {
-          const picked = Object.fromEntries(
-            Object.entries(response.data.types)
-              .filter(([, v]) => v !== null)
-              .map(([k, v]) => [k, v === 'FOOD' ? null : v]),
-          ) as Record<string, string | null>
-          setAiTypes(picked)
-          setAiCount(Object.keys(picked).length)
-        }
-      }
+      if (unknown.length) void classifyInBackground(unknown, seq)
       return true
     } catch (cause) {
-      setError(errorText(cause, '가게 데이터를 읽지 못했어요.'))
+      if (seq === readSeq.current) setError(errorText(cause, '가게 데이터를 읽지 못했어요.'))
       return false
     }
   }
-  async function readSample(file: string, label: string): Promise<boolean> {
-    const response = await fetch(`/samples/${file}`)
-    if (!response.ok) {
-      setError('예시 가게 데이터를 불러오지 못했어요.')
-      return false
+  /** 같은 메뉴 이름 묶음은 AI에 한 번만 묻는다(같은 예시를 다시 골라도 토큰을 또 쓰지 않게). */
+  const classified = useRef(new Map<string, Record<string, string | null>>())
+  async function classifyInBackground(names: string[], seq: number) {
+    const key = names.join('\n')
+    let picked = classified.current.get(key)
+    if (!picked) {
+      // 실패해도(키 없음·연결 끊김) 기본 분류 그대로 계속한다.
+      const response = await classifyMenuTypes({ names, types: MENU_TYPES }).catch(() => null)
+      if (response?.status !== 'ok' || response.data?.source !== 'LLM') return
+      picked = Object.fromEntries(
+        Object.entries(response.data.types)
+          .filter(([, v]) => v !== null)
+          .map(([k, v]) => [k, v === 'FOOD' ? null : v]),
+      ) as Record<string, string | null>
+      classified.current.set(key, picked)
     }
-    return readFile(new File([await response.blob()], file), label)
+    if (seq !== readSeq.current || !mounted.current) return // 그사이 다른 파일을 골랐거나 화면을 떠남
+    setAiTypes(picked)
+    setAiCount(Object.keys(picked).length)
+  }
+  /** 예시 파일은 한 번만 받아 정리해 둔다(처음 화면에서 미리 읽어 두므로 버튼을 누르면 바로 넘어간다). */
+  const parsedSamples = useRef(new Map<string, Promise<StoreImport>>())
+  async function readSample(file: string, label: string): Promise<boolean> {
+    let job = parsedSamples.current.get(file)
+    if (!job) {
+      job = (async () => {
+        const response = await fetch(`/samples/${file}`)
+        if (!response.ok) throw new Error('예시 가게 데이터를 불러오지 못했어요.')
+        return analyzeTable(await readTable(new File([await response.blob()], file)), file)
+      })()
+      parsedSamples.current.set(file, job)
+      job.catch(() => parsedSamples.current.delete(file)) // 실패하면 다음에 다시 받는다
+    }
+    const pending = job
+    return applyImport(() => pending, label)
   }
   /** 첫 단계에서 고른 데이터로 조건 확인 카드로 넘어간다. */
   async function chooseData(read: () => Promise<boolean>) {
@@ -201,32 +234,49 @@ export default function EasyRoster({
   // 저장된 조건으로 다시 불러오지 못한 예전 결과만, 결과를 띄운 뒤 예시 가게 데이터를 읽어 둔다("조건 다시 보기"용).
   // 결과가 없으면 예시 가게 데이터로 조건 확인부터.
   const started = useRef(false)
+  // 화면에 붙어 있는지. 처음 읽기가 끝나기 전에 다른 화면으로 가면 부모 단계를 바꾸지 않는다.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      // 계산을 기다리던 중에 다른 업무를 열면 기다리기를 멈춘다. 안 멈추면 끝난 뒤 새로 연 화면의 단계를 "결과"로 바꿔 빈 화면이 된다.
+      if (stopRef.current) stopRef.current.stopped = true
+    }
+  }, [])
   useEffect(() => {
     if (started.current) return
     started.current = true
     void (async () => {
       if (opened?.resultId) {
         const back = await showSaved(opened.resultId)
-        if (!back && !opened.readOnly) await readSample(SAMPLES[0].file, MYSHOP_LABEL)
+        // 불러오기 자체가 실패했으면 예시 데이터로 채우지 않는다("다시 시도"가 같은 결과를 다시 불러온다).
+        if (back === 'shown' && !opened.readOnly) await readSample(SAMPLES[0].file, MYSHOP_LABEL)
         return
       }
       await readSample(SAMPLES[0].file, MYSHOP_LABEL)
-      onPhase('confirm')
+      if (mounted.current) onPhase('confirm')
     })()
     // 처음 한 번만. 다른 업무를 열면 쉬운 화면이 이 조각을 새로 만든다(key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** 저장된 결과 열기. 저장된 조건으로 다시 불러왔으면 true. */
-  async function showSaved(resultId: number): Promise<boolean> {
+  /** 저장된 결과를 못 불러왔을 때 그 결과 번호("다시 시도"가 같은 결과를 다시 부른다). */
+  const [savedFailed, setSavedFailed] = useState<number | null>(null)
+  /** 저장된 결과 열기. restored: 저장된 조건까지 다시 불러옴, shown: 결과만 보여 줌, failed: 불러오지 못함. */
+  async function showSaved(resultId: number): Promise<'restored' | 'shown' | 'failed'> {
+    const phaseTo = (next: Parameters<typeof onPhase>[0]) => {
+      if (mounted.current) onPhase(next)
+    }
+    setSavedFailed(null)
     try {
       const detail = await loadRosterResult(resultId)
       if (detail.status !== 'ok' || !detail.data) throw new Error(detail.message ?? '근무표를 불러오지 못했어요.')
       const data = detail.data as StoredRosterResult
       if (data.summary?.result_kind !== 'ROSTER_OPTIONS') {
         setLegacy(true)
-        onPhase('result')
-        return false
+        phaseTo('result')
+        return 'shown'
       }
       show(data)
       // 다시 불러오기: 그때의 조건·직원으로 채운다(저장한 계획 보기는 고칠 수 없어 건너뜀).
@@ -240,12 +290,13 @@ export default function EasyRoster({
         setChosen(choice)
         setSaved(opened?.savedNote ?? `${OPTION_NAME[choice]}로 저장한 업무예요`)
       }
-      onPhase('result')
-      return Boolean(back && !opened?.readOnly)
+      phaseTo('result')
+      return back && !opened?.readOnly ? 'restored' : 'shown'
     } catch (cause) {
       setError(errorText(cause, '근무표를 불러오지 못했어요.'))
-      onPhase('error')
-      return false
+      setSavedFailed(resultId)
+      phaseTo('error')
+      return 'failed'
     }
   }
 
@@ -257,12 +308,16 @@ export default function EasyRoster({
     void explainResult(next, data.summary)
   }
 
+  /** 설명 요청 번호. 새 결과가 뜨면 늘어나, 앞 결과의 늦은 설명은 화면·대화 기록에 넣지 않는다. */
+  const explainSeq = useRef(0)
   async function explainResult(data: RosterOptions, summary: RosterSummary) {
     const fallback = summary.message
+    const seq = ++explainSeq.current
     setExplain({ text: fallback, ai: false })
     setAiNote(null)
     try {
       const response = await rosterExplain({ result: rosterDigest(data), fallback })
+      if (seq !== explainSeq.current) return
       if (response.status === 'ok' && response.data?.source === 'LLM') {
         const text = response.data.text
         setAiNote(text)
@@ -369,6 +424,9 @@ export default function EasyRoster({
     setChatReply(null)
     onPhase('running')
     try {
+      // 보낼 요일이 없으면 업무에 조건 버전을 남기기 전에 멈춘다(빈 버전이 쌓이지 않게).
+      const body = rosterBody(c)
+      if (!(body.days as JsonObject[]).length) throw new Error('근무표를 만들 요일 데이터가 없어요.')
       if (form) await draftOperationInput(form)
       let sessionId = session
       if (!sessionId) {
@@ -390,8 +448,6 @@ export default function EasyRoster({
       const versionNo = Number(data?.version_no)
       if (!versionId || !versionNo) throw new Error('조건을 저장하지 못했어요.')
       await workflowApi.confirmInput(versionId, versionNo)
-      const body = rosterBody(c)
-      if (!(body.days as JsonObject[]).length) throw new Error('근무표를 만들 요일 데이터가 없어요.')
       const key = crypto.randomUUID()
       const begun = await startRosterResult(sessionId, { input_version_id: versionId, ...body }, key)
       if (begun.status !== 'ok' || !begun.data) throw new Error(begun.message ?? '계산을 시작하지 못했어요.')
@@ -402,6 +458,8 @@ export default function EasyRoster({
       if (detail.status !== 'ok' || !detail.data) throw new Error(detail.message ?? '근무표를 불러오지 못했어요.')
       if (stop.stopped) return
       show(detail.data)
+      setLastChange(nextChange.current) // 말로 바꿔 다시 계산한 게 아니면 지운다
+      nextChange.current = null
       onPhase('result')
     } catch (cause) {
       if (stop.stopped) return
@@ -430,8 +488,16 @@ export default function EasyRoster({
   const [pending, setPending] = useState<{ before: RosterConditions; changes: string[] } | null>(null)
   const chatInput = useRef<HTMLTextAreaElement>(null)
 
+  /** 말로 바꿔 다시 계산하면 결과 위에 무엇을 바꿨는지, 말로 새로 넣은 직원이 누구인지 보여 준다. */
+  const [lastChange, setLastChange] = useState<{ text: string; added: string[] } | null>(null)
+  const nextChange = useRef<{ text: string; added: string[] } | null>(null)
+  const changeOf = (p: { before: RosterConditions; changes: string[] }) => {
+    const before = new Set(p.before.team.people.map((x) => x.id))
+    return { text: p.changes.join(' · '), added: (cond?.team.people ?? []).filter((x) => !before.has(x.id)).map((x) => x.name) }
+  }
   function rerunPending() {
     if (!pending) return
+    nextChange.current = changeOf(pending)
     setRerunNote(`${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.`)
     setPending(null)
     setChatReply(null)
@@ -485,7 +551,12 @@ export default function EasyRoster({
       })
       if (response.status !== 'ok' || !response.data) throw new Error(response.message ?? '말을 처리하지 못했어요.')
       const reply = response.data
-      const applied = applyReply(cond, reply, { open, close })
+      if (condNow.current !== cond && (reply.changes.length || reply.worker_changes.length)) {
+        // 보낸 뒤 조건 화면에서 직접 고쳤으면, 옛 조건 기준 답으로 덮어쓰지 않는다.
+        setChatReply({ text: '말을 보내는 동안 조건이 바뀌어 반영하지 않았어요. 한 번 더 말해 주세요.', ok: false })
+        return
+      }
+      const applied = applyReply(cond, reply, { open, close, nextId: maxPersonId.current + 1 })
       setChatText('')
       chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: reply.reply })
       const shown = toNames(reply.reply, cond.team.people)
@@ -504,6 +575,7 @@ export default function EasyRoster({
       }
       // "다시 계산해 줘"처럼 계산해 달라고 직접 말했을 때만 바로 계산한다(모아 둔 변경이 있으면 같이).
       if (reply.intent === 'RUN' && (phase === 'result' || phase === 'confirm')) {
+        nextChange.current = pending ? changeOf(pending) : null
         setRerunNote(pending ? `${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.` : shown)
         setPending(null)
         rerunNext.current = true
@@ -555,9 +627,14 @@ export default function EasyRoster({
         </div>
       )}
       {phase === 'result' && aiNote && (
-        <p className="er-reply er-ai-note" role="status">
-          <b>AI 설명</b> {aiNote}
-        </p>
+        <div className="er-reply er-ai-note" role="status">
+          <b>AI 설명</b>
+          <ul>
+            {noteSentences(aiNote).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {chatReply && (
         <p className={`er-reply${chatReply.ok ? ' ok' : ''}`} role="status">
@@ -596,8 +673,12 @@ export default function EasyRoster({
         <p>{error || '계산을 마치지 못했어요.'}</p>
         <p className="easy-muted">조건은 그대로예요. 잠시 뒤 "다시 시도"를 눌러 주세요.</p>
         <div className="easy-actions">
-          {!readOnly && cond && <button type="button" className="easy-primary" onClick={() => void run()}>다시 시도</button>}
-          {!readOnly && <button type="button" className="easy-secondary" onClick={() => onPhase('confirm')}>조건 다시 보기</button>}
+          {savedFailed !== null ? (
+            <button type="button" className="easy-primary" onClick={() => void showSaved(savedFailed)}>다시 시도</button>
+          ) : (
+            !readOnly && cond && <button type="button" className="easy-primary" onClick={() => void run()}>다시 시도</button>
+          )}
+          {!readOnly && cond && <button type="button" className="easy-secondary" onClick={() => onPhase('confirm')}>조건 다시 보기</button>}
         </div>
       </Card>
     )
@@ -625,6 +706,7 @@ export default function EasyRoster({
         readOnly={readOnly}
         onSave={save}
         chat={chatBox}
+        changed={lastChange}
       />
     )
   }
@@ -660,6 +742,12 @@ export default function EasyRoster({
     return (
       <Card title="어떤 데이터로 근무표를 만들까요?" tour="source">
         {fileInput}
+        {/* 하던 일에서 연 업무인데 결과가 없음: 계산이 끝나야 데이터·직원 명단이 결과와 함께 저장되므로 다시 고르게 안내한다 */}
+        {opened?.sessionId != null && !opened.resultId && (
+          <p className="easy-muted" role="status">
+            계산이 끝나기 전에 나간 업무예요. 서버 계산이 끝났다면 "하던 일"에서 다시 열면 결과가 보여요. 아니면 데이터를 다시 골라 주세요. 이 업무에 이어서 계산해요.
+          </p>
+        )}
         <div className="er-source">
           <button type="button" className="er-source-main" onClick={() => void chooseData(() => readSample(SAMPLES[0].file, MYSHOP_LABEL))}>
             <span aria-hidden>🔗</span>

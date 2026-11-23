@@ -38,19 +38,20 @@ export function headline(option: Option, days: Weekday[]): string {
   const hires = option.shortfall?.more_people_under_15h ?? 0
   const busy = busyText(option, days)
   if (hires > 0) return busy ? `직원 ${hires}명을 더 뽑고, ${busy}` : `직원 ${hires}명을 더 뽑으면 돼요`
-  return busy || '지금 직원으로 충분해요'
+  // 더 배치하는 사람도 지금 직원이면 새로 뽑을 필요가 없다는 걸 같이 말한다(고용인지 배치만 바꾼 건지 헷갈리지 않게).
+  return busy ? `${busy} · 새로 뽑지 않고 지금 직원으로 채워요` : '지금 직원으로 충분해요'
 }
 
-/** 바쁜 시간에 더 두는 사람 이야기("바쁜 시간에 1명씩 더 두면 돼요"). 더 두지 않으면 빈 글자. */
+/** 바쁜 시간에 더 두는 사람 이야기("바쁜 시간에 1명씩 더 배치하면 돼요"). 더 두지 않으면 빈 글자. */
 function busyText(option: Option, days: Weekday[]): string {
   const extras = days.map((d) => option.extra_by_day[d] ?? 0)
   const most = Math.max(0, ...extras)
   if (most === 0) return ''
   const busy = days.filter((d) => (option.extra_by_day[d] ?? 0) > 0)
-  if (busy.length === days.length && new Set(extras).size === 1) return `바쁜 시간에 ${most}명씩 더 두면 돼요`
-  if (busy.length === days.length) return `바쁜 시간에 요일마다 ${Math.min(...extras)}~${most}명 더 두면 돼요`
-  if (busy.length > 3) return `바쁜 시간에 사람을 더 두는 날이 ${busy.length}일이에요`
-  return `${busy.map((d) => WEEKDAY_LABEL[d]).join('·')}요일 바쁜 시간에 사람을 더 두면 돼요`
+  if (busy.length === days.length && new Set(extras).size === 1) return `바쁜 시간에 ${most}명씩 더 배치하면 돼요`
+  if (busy.length === days.length) return `바쁜 시간에 요일마다 ${Math.min(...extras)}~${most}명 더 배치하면 돼요`
+  if (busy.length > 3) return `바쁜 시간에 사람을 더 배치하는 날이 ${busy.length}일이에요`
+  return `${busy.map((d) => WEEKDAY_LABEL[d]).join('·')}요일 바쁜 시간에 사람을 더 배치하면 돼요`
 }
 
 /** 대기가 가장 긴 요일(사람을 더하기 전 기준). "사람을 늘리면" 그래프의 기본 요일. */
@@ -85,7 +86,8 @@ export function ladderBars(data: RosterOptions, day: Weekday): LadderBar[] {
   }))
 }
 
-export type WeekCell = { start: string; end: string; breaks: string[] } | null
+/** extra: 인건비 절약 근무표에는 없고 이 안에서 더 둔 근무(바쁠 때 더 배치한 사람). */
+export type WeekCell = { start: string; end: string; breaks: string[]; extra?: boolean } | null
 /** 그 자리의 휴게: 서버가 자리마다 실어 준 값(breaks)을 먼저 쓰고, 예전 결과(값 없음)만 근무조 순서로 찾는다. */
 function breaksFor(option: Option, a: { slot_id: string; breaks?: { start_time: string; end_time: string }[] }) {
   return a.breaks ?? breaksOf(option, a.slot_id)
@@ -147,20 +149,21 @@ export function unfilledCells(option: Option, days: Weekday[]): string[] | null 
   )
 }
 
-/** "08:00" → "오전 8시", "13:30" → "오후 1시 30분". */
+/** "08:00" → "8시", "13:30" → "13시 30분". */
 export function clock(hhmm: string): string {
+  // 표의 시간(16:30)과 맞춰 24시간제로 쓴다.
   const h = Number(hhmm.slice(0, 2))
   const m = Number(hhmm.slice(3, 5))
-  const half = h < 12 ? '오전' : '오후'
-  const hour = h % 12 === 0 ? 12 : h % 12
-  return `${half} ${hour}시${m ? ` ${m}분` : ''}`
+  return `${h}시${m ? ` ${m}분` : ''}`
 }
 
 /** 세 근무표 비교 카드: 추천 근무표와 견준 한 줄("추천보다 대기 +40초 · 인건비 −320,000원"). 추천 자신이면 null. */
 export function versusText(option: Option, recommended: Option, days: Weekday[]): string | null {
   if (option.key === recommended.key) return null
-  const a = averagePeak(option, days)
-  const b = averagePeak(recommended, days)
+  // 두 안 모두 값이 있는 요일끼리만 견준다(한쪽만 계산된 요일이 섞이면 차이가 틀어진다).
+  const both = days.filter((d) => option.peak_wait_sec[d] != null && recommended.peak_wait_sec[d] != null)
+  const a = averagePeak(option, both)
+  const b = averagePeak(recommended, both)
   const sec = a != null && b != null ? Math.round(a - b) : null
   // 몇 초 차이는 사장님이 느끼기 어려워 "거의 같아요"로(화면의 대기도 분 단위로 반올림해 보인다)
   const wait = sec == null ? null : Math.abs(sec) < SAME_WAIT_SEC ? '대기는 거의 같아요' : `대기 ${sec > 0 ? '+' : '−'}${Math.abs(sec)}초`
@@ -205,7 +208,7 @@ export function staffText(keys: string[]): string {
 
 /**
  * 사람을 더해도 대기가 더 줄지 않던 때(서버 verification.capacity_limited). 같은 시간대는 요일을 묶어 한 문장으로.
- * 예: "월·화요일 오전 8시대는 사람을 더 넣어도 손님 대기가 더 줄지 않아요. …" 없으면 null.
+ * 예: "월·화요일 8시대는 사람을 더 넣어도 손님 대기가 더 줄지 않아요. …" 없으면 null.
  */
 export function capacityText(option: RosterOptions['options'][number], days: Weekday[]): string | null {
   const bySlot = new Map<string, Weekday[]>()
@@ -241,4 +244,48 @@ export function mergedWindows(windows: { start_time: string; end_time: string }[
     else out.push({ start: w.start_time, end: w.end_time })
   }
   return out
+}
+
+/**
+ * AI 설명을 읽기 쉽게: 다섯 자리 넘는 숫자에 쉼표(1491240원 → 1,491,240원)를 넣고 문장마다 나눈다.
+ * 글자는 바꾸지 않고 보이는 모양만 바꾼다(서버가 숫자를 검사한 문장 그대로).
+ */
+export function noteSentences(text: string): string[] {
+  const grouped = text.replace(/(?<![\d.,])\d{5,}(?![\d.,])/g, (n) => Number(n).toLocaleString('ko-KR'))
+  return grouped
+    .split(/(?<=[다요]\.)\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/**
+ * 바쁠 때 더 배치한 근무 표시: 인건비 절약 근무표(사람을 더하지 않은 안)의 그날 직원 근무와 견줘, 같은 시간 근무가 없는 칸에 extra를 붙인다.
+ * 같은 시간 근무가 여러 개면 하나씩 짝지어 지운다. 절약 안 자신이면 그대로 돌려준다.
+ */
+export function markExtraShifts(rows: WeekRow[], option: Option, save: Option | undefined, days: Weekday[]): WeekRow[] {
+  if (!save || save.key === option.key) return rows
+  const left = days.map((d) => {
+    const bag = new Map<string, number>()
+    for (const s of save.days[d]?.shifts ?? []) {
+      if (s.is_owner) continue
+      const k = `${s.start_time}-${s.end_time}`
+      bag.set(k, (bag.get(k) ?? 0) + 1)
+    }
+    return bag
+  })
+  const used = days.map(() => new Map<string, number>())
+  // 먼저 짝이 있는 칸을 다 지우고, 남은 칸만 extra로 본다(줄 순서에 따라 결과가 바뀌지 않게).
+  const extra = rows.map((r) =>
+    r.cells.map((c, i) => {
+      if (!c || r.owner) return false
+      const k = `${c.start}-${c.end}`
+      const have = (left[i].get(k) ?? 0) - (used[i].get(k) ?? 0)
+      if (have > 0) {
+        used[i].set(k, (used[i].get(k) ?? 0) + 1)
+        return false
+      }
+      return true
+    }),
+  )
+  return rows.map((r, ri) => ({ ...r, cells: r.cells.map((c, i) => (c && extra[ri][i] ? { ...c, extra: true } : c)) }))
 }

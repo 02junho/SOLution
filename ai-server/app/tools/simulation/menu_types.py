@@ -93,5 +93,6 @@ def classify(body: dict, call=_anthropic_call) -> dict:
     out = {}
     for n in names:
         v = answer.get(n)
-        out[n] = v if v in allowed or v == FOOD else None
+        # 모델이 목록·사전 같은 값을 주면 분류 없음으로 본다(해시 못 하는 값으로 in 검사하다 죽지 않게).
+        out[n] = v if isinstance(v, str) and (v in allowed or v == FOOD) else None
     return {"model_version": "operation.menu_types.v1", "source": "LLM", "types": out}

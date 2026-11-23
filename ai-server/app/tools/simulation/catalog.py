@@ -1,4 +1,4 @@
-"""Editable model input, separated from store/recipe database ownership."""
+"""고칠 수 있는 모델 입력(메뉴·제조 단계). 가게·레시피 DB와는 따로 관리한다."""
 
 from __future__ import annotations
 import copy

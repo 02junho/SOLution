@@ -302,21 +302,26 @@ def _compute(jobs, background=False, on_done=None):
             out.append(_day_job(j))
             done(i, out[-1])
         return out
+    out = [None] * len(jobs)
+    delivered = set()  # done으로 이미 넘긴 요일 번호
     try:
         context = multiprocessing.get_context("spawn")
         initializer = _lower_priority if background else None
         with ProcessPoolExecutor(max_workers=count, mp_context=context, initializer=initializer) as pool:
             futures = {pool.submit(_day_job, j): i for i, j in enumerate(jobs)}
-            out = [None] * len(jobs)
             for f in as_completed(futures):
-                out[futures[f]] = f.result()
-                done(futures[f], out[futures[f]])
+                i = futures[f]
+                out[i] = f.result()
+                delivered.add(i)
+                done(i, out[i])
             return out
     except (OSError, RuntimeError):
-        out = []
+        # 프로세스를 못 띄우거나 중간에 깨짐: 이미 넘긴 요일은 그대로 두고 남은 요일만 여기서 계산한다(두 번 넘기지 않게).
         for i, j in enumerate(jobs):
-            out.append(_day_job(j))
-            done(i, out[-1])
+            if i in delivered:
+                continue
+            out[i] = _day_job(j)
+            done(i, out[i])
         return out
 
 
@@ -334,7 +339,7 @@ def _run_days(jobs, background=False, on_day=None):
         hit = day_cache.get(k)
         if hit is not None:
             results[job[0]] = _fit(job, hit)
-            tell(job[0], hit["day"], None)
+            tell(*results[job[0]])  # 시급을 맞춘 결과(맞추다 실패하면 그 오류)를 그대로 알린다
             continue
         if k in mine:
             mine[k][1].append(job)
@@ -346,7 +351,7 @@ def _run_days(jobs, background=False, on_day=None):
             if late is not None:
                 day_cache.release(k, future, value=late)
                 results[job[0]] = _fit(job, late)
-                tell(job[0], late["day"], None)
+                tell(*results[job[0]])
                 continue
             mine[k] = (future, [job])
         else:
@@ -367,7 +372,7 @@ def _run_days(jobs, background=False, on_day=None):
             released.add(k)
             for job in group:
                 results[job[0]] = _fit(job, stored) if stored else (job[0], None, err)
-                tell(job[0], result, err)
+                tell(*results[job[0]])
 
         try:
             _compute([group[0] for _, (_, group) in entries], background, on_done=finish)
@@ -397,7 +402,7 @@ def _run_days(jobs, background=False, on_day=None):
             day_cache.put(k, stored)
         for job in group:
             results[job[0]] = _fit(job, stored)
-            tell(job[0], stored["day"], None)
+            tell(*results[job[0]])
     return [results[job[0]] for job in jobs]
 
 

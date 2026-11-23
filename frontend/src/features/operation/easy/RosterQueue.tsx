@@ -43,6 +43,9 @@ export default function RosterQueue({
   const [traces, setTraces] = useState<Record<string, OperationTrace | string>>({})
   const key = `${day}:${choice}`
   const loaded = traces[key]
+  /** 실패한 것만 지워 다시 부르게 한다(성공한 재생 기록은 남겨 둔다). */
+  const forgetFailed = (only?: string) =>
+    setTraces((t) => Object.fromEntries(Object.entries(t).filter(([k, v]) => typeof v !== 'string' || (only !== undefined && k !== only))))
 
   useEffect(() => {
     if (!open || loaded !== undefined) return
@@ -71,7 +74,14 @@ export default function RosterQueue({
 
   return (
     <div className="easy-replay er-queue">
-      <button type="button" className="er-queue-close" onClick={() => setOpen(false)}>
+      <button
+        type="button"
+        className="er-queue-close"
+        onClick={() => {
+          setOpen(false)
+          forgetFailed() // 접었다 펴면 실패했던 것도 다시 불러온다
+        }}
+      >
         접기 ⌃
       </button>
       <div className="easy-pick" role="group" aria-label="어느 근무표로 볼까요">
@@ -81,13 +91,19 @@ export default function RosterQueue({
           </button>
         ))}
       </div>
-      {loaded === undefined ? (
-        <p className="easy-empty">{WEEKDAY_LABEL[day]}요일 하루를 다시 돌려 보는 중이에요</p>
-      ) : typeof loaded === 'string' ? (
-        <p className="easy-error">{loaded}</p>
-      ) : (
-        <Queue key={key} trace={loaded} windows={windows} />
-      )}
+      {/* 불러오는 중·실패 문구만 화면 읽기 프로그램에 알린다(재생 시계는 넣지 않는다) */}
+      <div role="status">
+        {loaded === undefined && <p className="easy-empty">{WEEKDAY_LABEL[day]}요일 하루를 다시 돌려 보는 중이에요</p>}
+        {typeof loaded === 'string' && (
+          <p className="easy-error">
+            {loaded}{' '}
+            <button type="button" className="easy-secondary" onClick={() => forgetFailed(key)}>
+              다시 시도
+            </button>
+          </p>
+        )}
+      </div>
+      {loaded !== undefined && typeof loaded !== 'string' && <Queue key={key} trace={loaded} windows={windows} />}
       <Info title="이 줄은 어떻게 나온 건가요?">
         근무표 숫자를 낸 {repetitions ? `${repetitions}번` : '여러 번'} 계산 중 첫 번째 판이에요. 위의 가장 긴 대기(여러 번 평균)와 조금 다를 수 있어요.
       </Info>
@@ -106,7 +122,7 @@ function Queue({ trace, windows }: { trace: OperationTrace; windows: { start_tim
   const origin = seconds(trace.time_origin)
   const duration = trace.events.reduce((last, e) => Math.max(last, e.at_seconds), trace.observation_window?.end_seconds ?? 0)
   const at = (hhmm: string) => Math.min(duration, Math.max(0, seconds(hhmm) - origin))
-  // 시작 시각 버튼: "오전 7시부터 (문 열 때)", "오전 8시부터 (바쁠 때)"처럼 무엇을 하는 버튼인지 바로 보이게. 처음 위치는 문 여는 시각.
+  // 시작 시각 버튼: "7시부터 (문 열 때)", "8시부터 (바쁠 때)"처럼 무엇을 하는 버튼인지 바로 보이게. 처음 위치는 문 여는 시각.
   const opening = trace.time_origin.slice(0, 5)
   // 이어진 바쁜 시간은 시작 하나만
   const jumps = [...new Set([opening, ...mergedWindows(windows).map((w) => w.start.slice(0, 5))])].map((hhmm) => ({ label: `${clock(hhmm)}부터 (${hhmm === opening ? '문 열 때' : '바쁠 때'})`, hhmm }))

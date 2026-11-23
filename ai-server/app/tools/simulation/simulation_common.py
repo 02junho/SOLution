@@ -1,7 +1,7 @@
-"""Shared helpers for the day simulation: input checks, scenario, common random draws, aggregation.
+"""하루 시뮬레이션 공통 도구: 입력 검사, 시나리오, 공통 난수 뽑기, 집계.
 
-The older whole-day engine, its compare/batch/sensitivity and the CLI runner were removed;
-the public path is simulation_service (compare, sensitivity) on day_simulation.
+예전 하루 전체 엔진과 그 비교·일괄·민감도, CLI 실행기는 지웠다.
+공개 경로는 day_simulation 위의 simulation_service(비교·민감도)다.
 """
 
 from __future__ import annotations
@@ -68,11 +68,10 @@ def _scenario(value):
 
 
 def sample_menu_jobs(scn, rep_seed, conf):
-    """Draw all randomness once; reuse these prepared jobs for every plan.
+    """무작위 값을 한 번만 뽑고, 준비한 일을 모든 안에 다시 쓴다.
 
-    Re-running with another time scale uses the same order arrivals, menu IDs,
-    and Gaussian deviations. Automatic equipment time scales separately from
-    employee duration; a Gaussian perturbation changes manual steps only.
+    시간 배율을 바꿔 다시 돌려도 손님 도착·메뉴·정규분포 편차는 같다.
+    머신 자동 시간은 직원 시간과 따로 늘고 줄며, 정규분포 흔들림은 사람 단계에만 준다.
     """
     orders, rejected = draw_orders(scn, rep_seed)
     rng = random.Random(rep_seed + 500_009)
@@ -136,7 +135,7 @@ def normalize_metrics(row):
 
 
 def aggregate(records, plan, include_events):
-    """Run-level records -> mean/stddev/min/max per metric. Quality is judged by the caller."""
+    """반복별 기록 → 지표마다 평균·표준편차·최소·최대. 합격 판정은 부르는 쪽이 한다."""
     metrics = [
         "arrived_orders",
         "unfinished_at_cutoff",
