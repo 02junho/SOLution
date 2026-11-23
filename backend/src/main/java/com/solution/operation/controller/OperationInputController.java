@@ -27,10 +27,12 @@ public class OperationInputController {
 	@PostMapping("/input-drafts")
 	public ApiResponse<Map<String, Object>> draft(@Valid @RequestBody OperationInputDraftRequest form) {
 		Map<String, Object> data = new LinkedHashMap<>();
-		data.put("input", OperationInputBuilder.build(form));
+		Map<String, Object> input = OperationInputBuilder.build(form);
+		data.put("input", input);
 		data.put("plan_descriptions", List.of(
 				Map.of("choice_key", "CURRENT", "title", "현재 방식",
-						"description", "2명이 07~19시 일해요. 주문·전달 1명, 제조 1명이 각자 맡은 일만 해요."),
+						"description", "2명이 " + OperationInputBuilder.hoursText(input)
+								+ " 일해요. 주문·전달 1명, 제조 1명이 각자 맡은 일만 해요."),
 				Map.of("choice_key", "ALT_A", "title", "서로 돕기",
 						"description", "사람과 근무시간은 그대로, 바쁜 시간에만 서로의 일을 도와요."),
 				Map.of("choice_key", "ALT_C", "title", "한 명 추가",

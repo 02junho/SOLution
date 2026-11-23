@@ -4,7 +4,7 @@ Spring 결과 조회 API(OperationResultService.trace)가 log_id로 이 기록�
 FastAPI가 쓰고 Spring은 읽기만 한다. 기록 형식은 Spring이 검사하는 operation.trace.v2다.
 - 사건: ARRIVED · ORDER_STARTED · ORDER_COMPLETED · PREPARATION_STARTED · PREPARATION_COMPLETED ·
         HANDOFF_STARTED · HANDED_OVER · STAFF_ON · STAFF_OFF
-- 시각: 07:00:00부터 지난 초(at_seconds). 시작 상태(initial_state)는 07:00 개점 때의 빈 매장.
+- 시각: 오픈 시각(기본 07:00:00)부터 지난 초(at_seconds). 시작 상태(initial_state)는 개점 때의 빈 매장.
 안마다 1번째 반복 하나를 남긴다. 기록이 실패하면 trace_refs를 비워 두고 계산 결과는 그대로 돌려준다.
 """
 
@@ -90,7 +90,9 @@ def _staff_events(roster: list[dict]) -> tuple[list[str], list[dict]]:
     return first, out
 
 
-def build_payload(plan: dict, repetitions: int) -> dict:
+def build_payload(
+    plan: dict, repetitions: int, scenario: dict | None = None
+) -> dict:
     """compare 결과의 한 안(results[])을 재생용 payload로 바꾼다. 수치는 다시 계산하지 않는다."""
     engine_events = plan.get("first_run_events") or []
     active, staff = _staff_events(plan.get("first_run_roster") or [])
@@ -104,9 +106,12 @@ def build_payload(plan: dict, repetitions: int) -> dict:
         "choice_key": plan["choice_key"],
         "replication_no": 1,
         "completed_repetitions": repetitions,
-        "time_origin": TIME_ORIGIN,
+        "time_origin": f"{scenario['start']}:00" if scenario else TIME_ORIGIN,
         "time_unit": "seconds",
-        "observation_window": {"start_seconds": 0, "end_seconds": DAY_END_SECONDS},
+        "observation_window": {
+            "start_seconds": 0,
+            "end_seconds": scenario["duration_min"] * 60 if scenario else DAY_END_SECONDS,
+        },
         "initial_state": {
             "active_staff_keys": active,
             "customers": [],
@@ -144,7 +149,7 @@ def write_traces(
         if not plan.get("first_run_events"):
             continue
         log_id = _next_id()
-        payload = build_payload(plan, data.get("repetitions", 0))
+        payload = build_payload(plan, data.get("repetitions", 0), data.get("scenario"))
         try:
             with get_pool().connection(timeout=1) as conn:
                 conn.execute(
