@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { confirmOperation, loadOperationTrace } from '../../api/operationApi'
-import { workflowApi } from '../../api/workflowApi'
+import { workflowApi, WorkflowError } from '../../api/workflowApi'
 import { simulationClock, stateAt } from '../operation/replay'
 import type { OperationResult, OperationTrace, PlanSummary, Shift } from '../operation/types'
 import { TASK_LABEL, WORKER_LABEL, won } from '../operation/workspace/format'
@@ -12,6 +12,7 @@ import type { PurchaseResult } from '../../types/workflow'
 import { changedSegments, perHundred, segmentKey } from './route'
 import { amount, compareItems, compareSentence, deliveriesOf, violationLabels } from './purchaseCompare'
 import type { Baseline, BuyNeed, CompareLine } from './purchaseCompare'
+import { forgetSaves, saveKey } from './saveKey'
 
 export type Prepared = { sessionId: number; versionId: number; versionNo: number }
 type SupplierTotal = { supplier_id: string; supplier_name: string; goods_krw: number; delivery_fee_krw: number }
@@ -196,7 +197,13 @@ export function PurchaseView({ result, prepared, saved, savedFor = null, onSaved
           warnings={warnings.filter((w) => (best.warning_ids ?? []).includes(w.warning_id))}
           lines={[`${CHOICE_NAME[best.choice_key] ?? best.label ?? ''} · ${won(best.total_krw)} · 거래처 ${names.length}곳 · 배송 ${best.delivery_count}번`]}
           onSave={async (acks) => {
-            await workflowApi.confirm(result.result_id, prepared.versionId, best.choice_key, acks, crypto.randomUUID())
+            // 다시 눌러도 같은 키: 연결이 끊겨 응답을 못 받았어도 서버에는 한 번만 저장된다.
+            try {
+              await workflowApi.confirm(result.result_id, prepared.versionId, best.choice_key, acks, saveKey(result.result_id, prepared.versionId, best.choice_key, acks))
+            } catch (cause) {
+              if (cause instanceof WorkflowError && cause.code === 'CONFIRMATION_DELETED') forgetSaves(result.result_id)
+              throw cause
+            }
             onSaved('저장했어요', best.choice_key)
           }}
         />
@@ -348,8 +355,11 @@ export function OperationView({ result, saved, savedFor = null, onSaved, savedCh
             warnings={warnings}
             lines={[`${PLAN_TITLE[recommended]} · 하루 인건비 ${won(plan?.cash_cost_krw)}`]}
             onSave={async (acks) => {
-              const response = await confirmOperation(result, recommended, acks, crypto.randomUUID())
-              if (response.status === 'error') throw new Error(response.message || '저장하지 못했어요.')
+              const response = await confirmOperation(result, recommended, acks, saveKey(result.result_id, result.input_version_id, recommended, acks))
+              if (response.status === 'error') {
+                if ((response.data as { detail_code?: string } | null)?.detail_code === 'CONFIRMATION_DELETED') forgetSaves(result.result_id)
+                throw new Error(response.message || '저장하지 못했어요.')
+              }
               onSaved('저장했어요', recommended)
             }}
           />

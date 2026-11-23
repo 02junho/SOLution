@@ -402,3 +402,40 @@
 .easy-row-confirm p { margin: 0 0 10px; color: var(--ink-2); }
 .easy-danger { min-height: 52px; padding: 0 22px; border: 0; border-radius: 14px; background: #b4232c; color: #fff; font-weight: 700; }
 .easy-danger:disabled { opacity: 0.6; }
+
+/* AI 대화: 읽는 중 말풍선, 말로 바꾸기, AI 질문 카드 */
+.easy-thinking { color: var(--gray); font-style: italic; }
+.easy-talk { margin: 4px 0 16px; }
+.easy-talk-label { margin: 0 0 -4px; color: var(--gray); font-weight: 700; font-size: 0.92em; }
+.easy-question { padding: 16px 18px; border-radius: 12px; background: var(--blue-soft); border: 2px solid var(--blue); }
+.easy-question p { margin: 0 0 6px; color: var(--ink); }
+.easy-question-label { color: var(--blue-dark) !important; font-weight: 700; font-size: 0.85em; }
+.easy-question-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* 쉬운 말 설명 */
+.easy-explain-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.easy-explain-head h2 { margin: 0; }
+.easy-explain-headline { font-weight: 700; color: var(--ink); margin: 12px 0; }
+.easy-explain dl { margin: 0; display: grid; gap: 10px; }
+.easy-explain dl div { padding: 12px 14px; border-radius: 10px; background: var(--bg-2); }
+.easy-explain dt { font-weight: 700; color: var(--ink); }
+.easy-explain dd { margin: 4px 0 0; }
+
+/* 받은 견적 붙여넣기 */
+.easy-quote-open { margin: 10px 0 0; }
+.easy-field { display: grid; gap: 6px; margin: 10px 0; font-weight: 700; color: var(--ink); }
+.easy-field input, .easy-field textarea { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; }
+.easy-field input:focus, .easy-field textarea:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
+.easy-quote-list { margin-top: 14px; }
+.easy-quote-supplier { padding: 10px 0; border-top: 1px solid var(--line); }
+.easy-quote-supplier ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.easy-quote-supplier li { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.easy-quote-supplier li span:first-child { font-weight: 700; min-width: 5em; }
+.easy-quote-supplier li em { font-style: normal; color: var(--accent); font-size: 0.9em; }
+.easy-quote-supplier li.blocked span { color: var(--gray); text-decoration: line-through; }
+.easy-quote-supplier li em.easy-guessed { color: #8a5a00; flex-basis: 100%; }
+
+/* 계산이 안 될 때 바꿀 값 제안 */
+.easy-suggest { margin: 12px 0 0; padding: 12px 16px; border-radius: 12px; background: var(--blue-soft); }
+.easy-suggest h3 { margin: 0 0 6px; font-size: 1em; color: var(--ink); }
+.easy-suggest ul, ul.easy-suggest { margin: 0; padding-left: 1.2em; }
