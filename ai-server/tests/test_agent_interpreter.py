@@ -200,3 +200,6 @@ def test_prompt_names_suppliers_instead_of_ids():
     assert "supplier_id" not in named["quotes"][0]
     assert current["quotes"][0]["supplier_id"] == "R1"  # 원본은 그대로
     assert _named_suppliers({"operation_form": {}}) == {"operation_form": {}}
+    # 번호가 글자가 아니면 바꾸지 않고 그대로 둔다(오류 없이)
+    odd = {"quotes": [{"supplier_id": ["R1"]}], "suppliers": [{"supplier_id": {"x": 1}, "supplier_name": "가"}]}
+    assert _named_suppliers(odd)["quotes"][0] == {"supplier_id": ["R1"]}

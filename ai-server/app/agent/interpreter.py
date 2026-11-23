@@ -137,10 +137,15 @@ def _named_suppliers(current: dict) -> dict:
     quotes = current.get("quotes")
     if not isinstance(suppliers, list) or not isinstance(quotes, list):
         return current
-    names = {s.get("supplier_id"): s.get("supplier_name") for s in suppliers if isinstance(s, dict) and s.get("supplier_name")}
+    # 번호가 글자인 것만 바꾼다(목록·객체 같은 값은 그대로 두어 요약을 만들다 멈추지 않게).
+    names = {
+        s["supplier_id"]: s["supplier_name"]
+        for s in suppliers
+        if isinstance(s, dict) and isinstance(s.get("supplier_id"), str) and isinstance(s.get("supplier_name"), str)
+    }
     named = []
     for quote in quotes:
-        if isinstance(quote, dict) and quote.get("supplier_id") in names:
+        if isinstance(quote, dict) and isinstance(quote.get("supplier_id"), str) and quote["supplier_id"] in names:
             quote = {**{k: v for k, v in quote.items() if k != "supplier_id"}, "supplier": names[quote["supplier_id"]]}
         named.append(quote)
     return {**current, "quotes": named}
