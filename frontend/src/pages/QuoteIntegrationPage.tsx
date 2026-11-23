@@ -225,7 +225,6 @@ export default function QuoteIntegrationPage() {
   const store = STORE_ID
   const id = PREPARATION_ID
 
-  const [batchId, setBatchId] = useState('')
 
   const [busy, setBusy] = useState('')
 
@@ -369,7 +368,7 @@ export default function QuoteIntegrationPage() {
 
     setBatch(data)
 
-    setBatchId(data.quote_batch_id)
+  
 
     setBatches(previous => {
 
