@@ -195,3 +195,274 @@ VALUES
   "business_date": "2026-11-18", "daily_orders": 150, "is_owner_working": false, "hourly_wage_krw": 10320
 }}'::jsonb, 'demo-owner', now())
 ON CONFLICT (input_version_id) DO NOTHING;
+
+
+-- 견적 기능 시연용 품목 사전
+INSERT INTO quote_demo_resource (
+    store_id,
+    resource_key,
+    version,
+    payload
+)
+VALUES (
+    'quote-test-e80ab4ba-4da',
+    'items',
+    2,
+    '{
+        "version": 2,
+        "items": [
+            {
+                "item_id": "beans",
+                "name": "원두",
+                "base_unit": "g",
+                "aliases": [
+                    "커피콩",
+                    "블렌드 원두",
+                    "에스프레소 블렌드"
+                ],
+                "specifications": ["1kg"]
+            },
+            {
+                "item_id": "milk",
+                "name": "우유",
+                "base_unit": "ml",
+                "aliases": [
+                    "흰우유",
+                    "카페우유",
+                    "멸균우유"
+                ],
+                "specifications": ["1L"]
+            },
+            {
+                "item_id": "ice_cup",
+                "name": "아이스컵",
+                "base_unit": "개",
+                "aliases": [
+                    "PET컵",
+                    "투명컵",
+                    "16온스컵"
+                ],
+                "specifications": ["16oz"]
+            },
+            {
+                "item_id": "hot_cup",
+                "name": "핫컵",
+                "base_unit": "개",
+                "aliases": [
+                    "종이컵",
+                    "13온스컵"
+                ],
+                "specifications": ["13oz"]
+            },
+            {
+                "item_id": "lid",
+                "name": "컵 뚜껑",
+                "base_unit": "개",
+                "aliases": [
+                    "뚜껑",
+                    "리드",
+                    "컵뚜껑"
+                ],
+                "specifications": []
+            }
+        ]
+    }'::jsonb
+)
+ON CONFLICT (store_id, resource_key, version)
+DO NOTHING;
+
+
+-- 견적 기능 시연용 메뉴 재료표
+INSERT INTO quote_demo_resource (
+    store_id,
+    resource_key,
+    version,
+    payload
+)
+VALUES (
+    'quote-test-e80ab4ba-4da',
+    'recipes',
+    1,
+    '{
+        "recipes": {
+            "iced_americano": [
+                {
+                    "item_id": "beans",
+                    "unit": "g",
+                    "amount_per_cup": 18,
+                    "scope": "all"
+                },
+                {
+                    "item_id": "ice_cup",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                },
+                {
+                    "item_id": "lid",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                }
+            ],
+            "iced_latte": [
+                {
+                    "item_id": "beans",
+                    "unit": "g",
+                    "amount_per_cup": 18,
+                    "scope": "all"
+                },
+                {
+                    "item_id": "milk",
+                    "unit": "ml",
+                    "amount_per_cup": 200,
+                    "scope": "all"
+                },
+                {
+                    "item_id": "ice_cup",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                },
+                {
+                    "item_id": "lid",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                }
+            ],
+            "hot_latte": [
+                {
+                    "item_id": "beans",
+                    "unit": "g",
+                    "amount_per_cup": 18,
+                    "scope": "all"
+                },
+                {
+                    "item_id": "milk",
+                    "unit": "ml",
+                    "amount_per_cup": 220,
+                    "scope": "all"
+                },
+                {
+                    "item_id": "hot_cup",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                },
+                {
+                    "item_id": "lid",
+                    "unit": "개",
+                    "amount_per_cup": 1,
+                    "scope": "takeaway"
+                }
+            ]
+        }
+    }'::jsonb
+)
+ON CONFLICT (store_id, resource_key, version)
+DO NOTHING;
+
+-- 견적 기능 시연용 재고
+INSERT INTO quote_demo_resource (
+    store_id,
+    resource_key,
+    version,
+    payload
+)
+VALUES (
+    'quote-test-e80ab4ba-4da',
+    'inventory',
+    1,
+    '{
+        "inventory": {
+            "beans": {
+                "unit": "g",
+                "usable_inventory": 1000,
+                "safety_stock": 500
+            },
+            "milk": {
+                "unit": "ml",
+                "usable_inventory": 2000,
+                "safety_stock": 2000
+            },
+            "ice_cup": {
+                "unit": "개",
+                "usable_inventory": 50,
+                "safety_stock": 50
+            },
+            "hot_cup": {
+                "unit": "개",
+                "usable_inventory": 30,
+                "safety_stock": 30
+            },
+            "lid": {
+                "unit": "개",
+                "usable_inventory": 100,
+                "safety_stock": 50
+            }
+        }
+    }'::jsonb
+)
+ON CONFLICT (store_id, resource_key, version)
+DO NOTHING;
+-- 견적 기능 시연용 판매 계획 및 최근 판매 실적
+INSERT INTO quote_demo_resource (
+    store_id,
+    resource_key,
+    version,
+    payload
+)
+VALUES (
+    'quote-test-e80ab4ba-4da',
+    'sales:87b31b51-d0b7-4e54-8013-f5f54b599929',
+    1,
+    '{
+        "start_date": "2026-11-23",
+        "end_date": "2026-11-29",
+        "recent_actuals": [
+            {
+                "menu_id": "iced_americano",
+                "cups": 45,
+                "start_date": "2026-11-20",
+                "end_date": "2026-11-22"
+            },
+            {
+                "menu_id": "iced_latte",
+                "cups": 15,
+                "start_date": "2026-11-20",
+                "end_date": "2026-11-22"
+            },
+            {
+                "menu_id": "hot_latte",
+                "cups": 10,
+                "start_date": "2026-11-20",
+                "end_date": "2026-11-22"
+            }
+        ],
+        "sales_plan": [
+            {
+                "menu_id": "iced_americano",
+                "cups": 100,
+                "takeaway_cups": 100
+            },
+            {
+                "menu_id": "iced_latte",
+                "cups": 30,
+                "takeaway_cups": 30
+            },
+            {
+                "menu_id": "hot_latte",
+                "cups": 20,
+                "takeaway_cups": 20
+            }
+        ]
+    }'::jsonb
+)
+ON CONFLICT (store_id, resource_key, version)
+DO UPDATE SET payload = jsonb_set(
+    quote_demo_resource.payload,
+    '{recent_actuals}',
+    EXCLUDED.payload -> 'recent_actuals',
+    true
+);

@@ -30,8 +30,11 @@ public class QuoteToolsClient { // Spring에서 FastAPI를 호출하는 곳
         this.json = json;
 
         var factory = new SimpleClientHttpRequestFactory();
+        // 연결 대기 시간: 3초
         factory.setConnectTimeout(3000);
-        factory.setReadTimeout(45000);
+
+        // 응답 대기 시간: 120초
+        factory.setReadTimeout(120000);
 
         this.tools = RestClient.builder()
                 .baseUrl(url)
