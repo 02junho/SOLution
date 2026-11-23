@@ -527,13 +527,13 @@ export default function EasyRoster({
   /** 말로 바꿔 다시 계산하면 결과 위에 무엇을 바꿨는지, 말로 새로 넣은 직원이 누구인지 보여 준다. */
   const [lastChange, setLastChange] = useState<{ text: string; added: string[] } | null>(null)
   const nextChange = useRef<{ text: string; added: string[] } | null>(null)
-  const changeOf = (p: { before: RosterConditions; changes: string[] }) => {
+  const changeOf = (p: { before: RosterConditions; changes: string[] }, next: RosterConditions | null) => {
     const before = new Set(p.before.team.people.map((x) => x.id))
-    return { text: p.changes.join(' · '), added: (cond?.team.people ?? []).filter((x) => !before.has(x.id)).map((x) => x.name) }
+    return { text: p.changes.join(' · '), added: (next?.team.people ?? []).filter((x) => !before.has(x.id)).map((x) => x.name) }
   }
   function rerunPending() {
     if (!pending) return
-    nextChange.current = changeOf(pending)
+    nextChange.current = changeOf(pending, cond)
     setRerunNote(`${pending.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.`)
     setPending(null)
     setChatReply(null)
@@ -617,7 +617,7 @@ export default function EasyRoster({
       }
       // "다시 계산해 줘"처럼 계산해 달라고 직접 말했을 때만 바로 계산한다(모아 둔 변경이 있으면 같이).
       if (reply.intent === 'RUN' && (phase === 'result' || phase === 'confirm')) {
-        nextChange.current = pendingNow ? changeOf(pendingNow) : null
+        nextChange.current = pendingNow ? changeOf(pendingNow, applied.changed ? applied.next : cond) : null // 이번 말로 더한 직원도 "말로 추가" 표시
         setRerunNote(pendingNow ? `${pendingNow.changes.join(' ')} 이 조건으로 다시 계산하고 있어요.` : shown)
         setPending(null)
         rerunNext.current = true
