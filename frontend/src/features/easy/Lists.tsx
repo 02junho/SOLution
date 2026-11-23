@@ -6,6 +6,7 @@ import type { Confirmation, SessionSummary } from '../../types/workflow'
 import { CHOICE, STEP, cleanTitle, featureTag, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
 import { forgetSaves } from './saveKey'
+import { ROSTER_MODE } from '../operation/easy/rosterSwitch'
 
 const EASY_FEATURES = new Set(['purchase', 'operation'])
 
@@ -141,7 +142,7 @@ export function PlanList() {
       title="저장한 계획"
       footer={list?.cursor ? <button type="button" className="easy-secondary easy-more" disabled={busy} onClick={() => void more()}>{busy ? '불러오는 중…' : '더 보기'}</button> : null}
     >
-      <p className="easy-list-sub">사장님이 저장한 구매안과 배치표예요. 누르면 그때 결과를 다시 보여 드려요.</p>
+      <p className="easy-list-sub">사장님이 저장한 구매안과 {ROSTER_MODE ? '근무표' : '배치표'}예요. 누르면 그때 결과를 다시 보여 드려요.</p>
       {failed ? <LoadFailed onRetry={retry} />
         : list === null ? <p className="easy-empty">불러오는 중이에요</p>
         : items.length === 0 ? <p className="easy-empty">{list.error || '아직 저장한 계획이 없어요'}</p>
