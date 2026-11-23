@@ -25,18 +25,23 @@ def normalize(req: Normalize):
                    in {key(a) for a in [item.name, *item.aliases]}]
         item = matches[0] if len(matches) == 1 else None
         candidates = [m.item_id for m in matches]
+        if item is None and not matches and req.use_rag:
+            try:
+                hit_rows = search(Search(store_id=req.store_id, query=row.raw_item_name,
+                                         document_type="item_alias",
+                                         dictionary_version=req.dictionary_version))["hits"]
+                valid = {m.item_id for m in req.dictionary}
+                candidates = list(dict.fromkeys(h["item_id"] for h in hit_rows if h["item_id"] in valid))
+            except HTTPException as exc:
+                if exc.status_code != 503:
+                    raise
+                issue("RAG_UNAVAILABLE", "item_id", False)
+            # 기준 점수(rag_min_score)를 넘은 후보가 한 품목뿐이면 그 품목으로 정한다.
+            # 사람이 확인할 수 있게 막지 않는 표시(ITEM_MATCHED_BY_RAG)를 남긴다.
+            if len(candidates) == 1:
+                item = next(m for m in req.dictionary if m.item_id == candidates[0])
+                issue("ITEM_MATCHED_BY_RAG", "item_id", False)
         if item is None:
-            if not matches and req.use_rag:
-                try:
-                    hit_rows = search(Search(store_id=req.store_id, query=row.raw_item_name,
-                                             document_type="item_alias",
-                                             dictionary_version=req.dictionary_version))["hits"]
-                    valid = {m.item_id for m in req.dictionary}
-                    candidates = list(dict.fromkeys(h["item_id"] for h in hit_rows if h["item_id"] in valid))
-                except HTTPException as exc:
-                    if exc.status_code != 503:
-                        raise
-                    issue("RAG_UNAVAILABLE", "item_id", False)
             issue("ITEM_CONFIRMATION_REQUIRED", "item_id")
         if not row.supplier_name:
             issue("MISSING_SUPPLIER", "supplier_name")

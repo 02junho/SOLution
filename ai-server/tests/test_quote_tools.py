@@ -28,6 +28,37 @@ class ToolsTest(unittest.TestCase):
         self.assertFalse(incomplete["comparable"])
         self.assertIsNone(incomplete["normalized_quantity_per_pack"])
 
+    def _rag_normalize(self, hits):
+        payload = {"store_id": "1", "dictionary_version": 1, "use_rag": True,
+                   "dictionary": [{"item_id": "milk", "name": "우유", "base_unit": "ml"},
+                                  {"item_id": "oat", "name": "귀리우유", "base_unit": "ml"}],
+                   "items": [{"source_text": "맛있는우유 1L 12개입 29,000원",
+                              "raw_item_name": "맛있는우유", "supplier_name": "A",
+                              "quantity_per_unit": 1, "quantity_unit": "L", "units_per_pack": 12,
+                              "order_unit": "box", "price": 29000, "price_basis": "per_pack",
+                              "vat_status": "included"}]}
+        with patch("app.tools.quote.normalize.search", return_value={"hits": hits}):
+            response = self.client.post("/tools/quote/normalize", json=payload)
+        self.assertEqual(response.status_code, 200)
+        return response.json()["items"][0]
+
+    def test_single_rag_candidate_is_used(self):
+        row = self._rag_normalize([{"item_id": "milk", "score": 0.76},
+                                   {"item_id": "milk", "score": 0.7}])
+        self.assertEqual(row["item_id"], "milk")
+        self.assertEqual(row["normalized_quantity_per_pack"], 12000)
+        self.assertTrue(row["comparable"])
+        self.assertEqual([i["code"] for i in row["issues"]], ["ITEM_MATCHED_BY_RAG"])
+        self.assertFalse(row["issues"][0]["blocks_comparison"])
+
+    def test_several_rag_candidates_need_confirmation(self):
+        row = self._rag_normalize([{"item_id": "milk", "score": 0.76},
+                                   {"item_id": "oat", "score": 0.7}])
+        self.assertIsNone(row["item_id"])
+        self.assertEqual(row["candidate_item_ids"], ["milk", "oat"])
+        self.assertFalse(row["comparable"])
+        self.assertIn("ITEM_CONFIRMATION_REQUIRED", [i["code"] for i in row["issues"]])
+
     def test_gross_need_and_missing_takeaway(self):
         bean = {"item_id": "bean", "unit": "g", "amount_per_cup": 18}
         response = self.client.post("/tools/quote/requirements", json={
