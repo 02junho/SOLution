@@ -410,3 +410,15 @@ td.opw-over {
 .opw-choice-row { display: grid; gap: 8px; margin: 4px 0 16px; }
 .opw-choice-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .opw-next { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: #eef3ff; color: var(--ink); font-size: 13px; }
+
+/* 가게 데이터 (영업시간·메뉴별 잔 수·제조시간) */
+.opw-store {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+.opw-store label.button {
+  cursor: pointer;
+}

@@ -3,19 +3,29 @@ import type { FormEvent } from 'react'
 import { Alert, Icon, Modal } from '../../../components/common/Ui'
 import type { JsonObject } from '../../../types/workflow'
 import {
-  DAY_HOURS,
+  CLOSE_TIMES,
+  DEFAULT_CLOSE,
+  DEFAULT_OPEN,
+  DEMO_STORE,
   FORM_MENUS,
-  LAST_ORDER_TIMES,
+  MENUS,
+  OPEN_TIMES,
   ORDER_PRESETS,
+  cupsTotal,
+  defaultLastOrder,
+  hoursOf,
+  hoursText,
+  lastOrderTimes,
+  parseStoreData,
   PEAK,
   SLOT_KEYS,
   SLOT_SHARES,
   SLOW_RUN_ORDERS,
-  DEFAULT_LAST_ORDER,
   digitsOnly,
   draftOperationInput,
   formInput,
   minimumWage,
+  wageFloor,
   rushLength,
   rushText,
   formFromInput,
@@ -30,7 +40,8 @@ import './operationWorkspace.css'
 /*
  * 운영 실험 조건 입력 (업무 화면 01 · 폼으로 직접 입력).
  * 사장님은 주문 수·라스트 오더·사장님 근무·시급만 고르고, 폼 값만 저장한다. 세 안의 근무표는 계산할 때 Spring이 만든다.
- * 근무는 고정 가정(2명 07~19시, 바쁜 시간에만 안이 바뀜). 바쁜 시간은 입력이 아니라 상권 데이터의 가장 바쁜 시간대다.
+ * 근무는 고정 가정(2명이 오픈~마감, 바쁜 시간에만 안이 바뀜). 바쁜 시간은 입력이 아니라 상권 데이터의 가장 바쁜 시간대다.
+ * 가게 데이터 버전: 영업시간을 고르고, 가게 데이터(메뉴별 잔 수·제조시간)를 시연 데이터나 JSON 파일로 넣을 수 있다.
  * 잘못된 칸이 있으면 저장 버튼을 막고 버튼 옆에 이유를 보인다.
  */
 
@@ -56,8 +67,37 @@ export default function OperationForm({
     setError('')
     setForm((f) => ({ ...f, ...patch }))
   }
-  const orders = Number(form.dailyOrders) || 0
-  const counts = slotCounts(form)
+  const hours = hoursOf(form)
+  const defaultHours = hours.open === DEFAULT_OPEN && hours.close === DEFAULT_CLOSE
+  const orders = form.store ? cupsTotal(form.store) : Number(form.dailyOrders) || 0
+  const counts = slotCounts({ ...form, dailyOrders: String(orders) })
+  const [storeError, setStoreError] = useState('')
+  const loadStore = (raw: unknown) => {
+    try {
+      const { store, openTime, closeTime } = parseStoreData(raw)
+      setStoreError('')
+      // 데이터에 영업시간이 있으면 같이 넣고, 바뀐 마감에 맞지 않는 라스트 오더는 기본으로 되돌린다.
+      const close = closeTime || form.closeTime || DEFAULT_CLOSE
+      set({
+        store,
+        dailyOrders: String(cupsTotal(store)),
+        ...(openTime ? { openTime } : {}),
+        ...(closeTime ? { closeTime } : {}),
+        ...(form.lastOrderTime && !lastOrderTimes(close).includes(form.lastOrderTime) ? { lastOrderTime: '' } : {}),
+      })
+    } catch (cause) {
+      setStoreError(cause instanceof Error ? cause.message : '가게 데이터를 읽지 못했어요.')
+    }
+  }
+  const readStoreFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      loadStore(JSON.parse(await file.text()))
+    } catch {
+      setStoreError('JSON 파일을 읽지 못했어요. 형식을 확인해 주세요.')
+    }
+  }
+  const menuName = (id: string) => MENUS.find((m) => m.menu_id === id)?.menu_name ?? id
   const weightSum = form.menuIds.reduce((s, id) => s + (Number(form.weights[id]) || 0), 0)
 
   async function submit(e: FormEvent) {
@@ -99,23 +139,33 @@ export default function OperationForm({
           {(error || serverError) && <Alert error>{error || serverError}</Alert>}
 
           <section className="form-section">
-            <h3>01 · 하루 손님</h3>
+            <h3>01 · 영업시간과 하루 손님</h3>
             <div className="form-grid">
               <label>
-                하루 주문 건수
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.dailyOrders}
-                  placeholder="예) 150"
-                  onChange={(e) => set({ dailyOrders: digitsOnly(e.target.value) })}
-                />
+                오픈
+                <select value={form.openTime} onChange={(e) => set({ openTime: e.target.value })}>
+                  <option value="">기본 ({DEFAULT_OPEN})</option>
+                  {OPEN_TIMES.filter((t) => t !== DEFAULT_OPEN).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
-                라스트 오더
-                <select value={form.lastOrderTime} onChange={(e) => set({ lastOrderTime: e.target.value })}>
-                  <option value="">기본 ({DEFAULT_LAST_ORDER})</option>
-                  {LAST_ORDER_TIMES.map((t) => (
+                마감
+                <select
+                  value={form.closeTime}
+                  onChange={(e) => {
+                    const close = e.target.value || DEFAULT_CLOSE
+                    set({
+                      closeTime: e.target.value,
+                      ...(form.lastOrderTime && !lastOrderTimes(close).includes(form.lastOrderTime) ? { lastOrderTime: '' } : {}),
+                    })
+                  }}
+                >
+                  <option value="">기본 ({DEFAULT_CLOSE})</option>
+                  {CLOSE_TIMES.filter((t) => t !== DEFAULT_CLOSE).map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
@@ -123,6 +173,72 @@ export default function OperationForm({
                 </select>
               </label>
             </div>
+            <div className="form-grid">
+              <label>
+                하루 주문 건수
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.store ? String(orders) : form.dailyOrders}
+                  placeholder="예) 150"
+                  disabled={Boolean(form.store)}
+                  onChange={(e) => set({ dailyOrders: digitsOnly(e.target.value) })}
+                />
+                {form.store && <small>가게 데이터의 메뉴별 잔 수 합계예요.</small>}
+              </label>
+              <label>
+                라스트 오더
+                <select value={form.lastOrderTime} onChange={(e) => set({ lastOrderTime: e.target.value })}>
+                  <option value="">기본 ({defaultLastOrder(hours.close)})</option>
+                  {lastOrderTimes(hours.close).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="opw-store" role="group" aria-label="가게 데이터">
+              <span className="opw-field-label">가게 데이터 (선택)</span>
+              {form.store ? (
+                <>
+                  <span>
+                    메뉴 {Object.values(form.store.menu_cups ?? {}).filter((n) => n > 0).length}종 · 하루 {orders}잔
+                    {form.store.manufacture_sec_by_menu &&
+                      ` · 제조시간 ${Object.entries(form.store.manufacture_sec_by_menu)
+                        .map(([id, sec]) => `${menuName(id)} ${sec}초`)
+                        .join(', ')}`}
+                  </span>
+                  <button type="button" className="button secondary" onClick={() => set({ store: null })}>
+                    가게 데이터 빼기
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="button secondary" onClick={() => loadStore(DEMO_STORE)}>
+                    시연 데이터 넣기
+                  </button>
+                  <label className="button secondary">
+                    JSON 불러오기
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      hidden
+                      onChange={(e) => {
+                        void readStoreFile(e.target.files?.[0])
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+              {storeError && (
+                <small className="opw-warn" role="alert">
+                  {storeError}
+                </small>
+              )}
+            </div>
+            {!form.store && (
             <div className="opw-presets" role="group" aria-label="주문 건수 빠른 선택">
               {ORDER_PRESETS.map((p) => (
                 <button
@@ -143,6 +259,8 @@ export default function OperationForm({
                 </span>
               </span>
             </div>
+            )}
+            {defaultHours ? (
             <details className="opw-slot-details">
               <summary>시간대별 예상 주문 보기</summary>
               <table className="data-table compact opw-slot-table">
@@ -167,6 +285,12 @@ export default function OperationForm({
                 비중은 서울시 상권분석서비스의 을지로입구 커피 상권 카드결제 기준이에요(우리 매장 실제 주문 아님).
               </p>
             </details>
+            ) : (
+              <p className="opw-note">
+                영업 {hoursText(hours)}에 맞춰 시간대 비중을 계산할 때 다시 나눠요. 첫·마지막 시간대는 같은 상권 데이터에서 시간
+                길이만큼 늘이거나 줄여요.
+              </p>
+            )}
             <p className="opw-note">
               라스트 오더 뒤 손님은 받지 않고, 받은 주문은 끝까지 만들어요.
               {orders >= SLOW_RUN_ORDERS && ' 주문이 많으면 계산이 1분 넘게 걸릴 수 있어요.'}
@@ -219,12 +343,12 @@ export default function OperationForm({
                   {wageError ??
                     (Number(form.hourlyWage) === minimumWage()
                       ? '현재 최저시급으로 채워 뒀어요.'
-                      : `최저시급 ${(minimumWage() ?? 10_320).toLocaleString('ko-KR')}원 이상이면 돼요.`)}
+                      : `최저시급 ${wageFloor().toLocaleString('ko-KR')}원 이상이면 돼요.`)}
                 </small>
               </label>
               <div className="opw-field">
-                <span className="opw-field-label">근무 시간 (고정)</span>
-                <span className="opw-field-box">2명 모두 {DAY_HOURS}</span>
+                <span className="opw-field-label">근무 시간 (영업시간)</span>
+                <span className="opw-field-box">2명 모두 {hoursText(hours)}</span>
                 <small className="opw-field-note">시간대별 인원 나누기는 다음 단계 기능이에요.</small>
               </div>
             </div>
@@ -302,7 +426,10 @@ export default function OperationForm({
                 </label>
               ))}
             </div>
-            <p className={weightSum === 100 ? 'muted' : 'opw-warn'}>
+            {form.store && (
+              <p className="opw-note">가게 데이터가 들어 있어서 메뉴와 판매 비중은 메뉴별 잔 수로 계산해요. 아래 칸은 쓰지 않아요.</p>
+            )}
+            <p className={form.store || weightSum === 100 ? 'muted' : 'opw-warn'}>
               메뉴는 기본 5종이에요. 판매 비중 합계 {weightSum}% (100%가 되어야 해요). 처리시간은 실제 매장에서 잰 값이 아니라
               가정이에요.
             </p>

@@ -11,6 +11,8 @@ export type TourStep = {
   body: string
   /** 사장님이 화면에서 직접 해야 넘어가는 단계면 true (다음 버튼 대신 안내) */
   waitsForAction: boolean
+  /** 'side'면 말풍선을 비춘 곳 옆(오른쪽 → 왼쪽)에 먼저 둔다. 단계마다 위·아래·옆으로 튀지 않게(추천 근무표). */
+  place?: 'side'
 }
 
 export const TOUR_TOTAL = 5

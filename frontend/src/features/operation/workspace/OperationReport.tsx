@@ -20,7 +20,7 @@ import {
   span,
   won,
 } from './format'
-import { DAY_HOURS, MENUS, SLOT_KEYS, readOperationInput, rushText, slotLabel } from './operationInput'
+import { MENUS, SLOT_KEYS, hoursText, readOperationInput, rushText, slotLabel } from './operationInput'
 import type { JsonObject } from '../../../types/workflow'
 import './operationWorkspace.css'
 
@@ -404,7 +404,9 @@ function ReportSheet({
               <th>주문</th>
               <td>
                 {saved
-                  ? `하루 ${saved.dailyOrders}건 (${saved.slotOrders.map((n, i) => `${slotLabel(SLOT_KEYS[i])} ${n}건`).join(', ')} · 을지로입구 상권 비중)`
+                  ? saved.slotOrders
+                    ? `하루 ${saved.dailyOrders}건 (${saved.slotOrders.map((n, i) => `${slotLabel(SLOT_KEYS[i])} ${n}건`).join(', ')} · 을지로입구 상권 비중)`
+                    : `하루 ${saved.dailyOrders}건 (영업 ${hoursText(saved.hours)} · 을지로입구 상권 비중을 영업시간에 맞춰 나눔)`
                   : '—'}
               </td>
             </tr>
@@ -428,7 +430,7 @@ function ReportSheet({
               <th>직원</th>
               <td>
                 {saved
-                  ? `${saved.isOwnerWorking ? '사장님 + 직원 1명' : '직원 2명'} · ${DAY_HOURS} · 시급 ${won(saved.hourlyWage)}`
+                  ? `${saved.isOwnerWorking ? '사장님 + 직원 1명' : '직원 2명'} · ${hoursText(saved.hours)} · 시급 ${won(saved.hourlyWage)}`
                   : '—'}
               </td>
             </tr>
@@ -564,7 +566,7 @@ export default function OperationReport({
   return (
     <Modal
       title="세 운영안 자세히 비교"
-      description={`07~19시 · 같은 손님 조건으로 ${summary.completed_repetitions ?? 30}번 돌린 결과예요. 고른 안의 배치표와 대기열을 아래에서 봐요.`}
+      description={`${summary.comparison_window ? `${summary.comparison_window.start_time}~${summary.comparison_window.end_time}` : '07~19시'} · 같은 손님 조건으로 ${summary.completed_repetitions ?? 30}번 돌린 결과예요. 고른 안의 배치표와 대기열을 아래에서 봐요.`}
       wide
       closeOnBackdrop
       onClose={onClose}

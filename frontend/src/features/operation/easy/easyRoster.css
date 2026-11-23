@@ -1,0 +1,201 @@
+/* 쉬운 화면 추천 근무표. 색·크기는 쉬운 화면(easy.css)의 변수를 그대로 쓴다. */
+
+.er-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--blue-soft); color: var(--blue-dark); font-size: 0.72em; font-style: normal; font-weight: 700; vertical-align: 1px; }
+.er-facts li.er-changed { margin: 0 -22px; padding-left: 22px; padding-right: 22px; background: #fff7dc; }
+.er-facts li.er-changed span::after { content: '방금 바뀜'; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: #ffe7a3; color: #6b4b00; font-size: 0.72em; font-weight: 700; }
+.er-small { font-size: 0.85em; margin: 8px 0 0; }
+.er-file { margin: 8px 0 0; }
+.er-file small { display: block; color: var(--gray-2); margin-top: 2px; }
+.er-link { display: inline-flex; align-items: center; text-decoration: none; }
+
+.er-chat .easy-input { margin: 0; }
+.er-reply { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); color: var(--ink-2); }
+.er-reply.ok { background: #ecf8f0; }
+.er-reply.ok i { color: var(--good); font-style: normal; font-weight: 800; }
+.er-ai-note { background: var(--blue-soft); }
+.er-ai-note b { margin-right: 6px; color: var(--blue-dark); }
+.er-ai-note ul { margin: 4px 0 0; padding-left: 1.2em; }
+.er-ai-note li + li { margin-top: 2px; }
+
+.easy-running .er-running-note { display: block; margin-top: 4px; color: var(--gray-2); font-size: 0.85em; }
+
+.er-explain { margin: 14px 0 0 !important; padding: 12px 14px; border-radius: 10px; background: var(--bg-2); line-height: 1.6; }
+.er-explain b { margin-right: 4px; color: var(--blue-dark) !important; }
+
+/* 사람을 늘리면 대기가 얼마나 줄까 */
+.er-ladder { display: flex; align-items: flex-end; gap: 18px; height: 190px; margin-top: 14px; padding: 0 6px; border-bottom: 1px solid var(--line); }
+.er-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; position: relative; padding-bottom: 28px; }
+.er-bar div { width: min(64px, 70%); background: #c9d5f3; border-radius: 6px 6px 0 0; }
+.er-bar.pick div { background: var(--blue); }
+.er-bar b { font-size: 0.95em; }
+.er-bar span { position: absolute; bottom: 4px; font-size: 0.82em; color: var(--gray); white-space: nowrap; }
+.er-bar.pick span { color: var(--blue-dark); font-weight: 700; }
+
+/* 일주일 근무표 */
+/* 요일 칸은 같은 너비(글자 길이와 상관없이). 좁은 화면은 옆으로 밀어 보고 이름 칸은 왼쪽에 붙어 있다. */
+.er-week-wrap { overflow-x: auto; }
+.er-week { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: separate; border-spacing: 3px; font-size: 0.84em; }
+.er-week thead th:first-child { width: 7.5em; }
+.er-week tbody th, .er-week thead th:first-child { position: sticky; left: 0; z-index: 1; background: #fff; }
+.er-week th { font-weight: 700; color: var(--gray-2); text-align: center; padding: 4px; }
+.er-week th small { display: block; color: var(--blue-dark); font-weight: 600; font-size: 0.82em; }
+.er-week tbody th { text-align: left; color: var(--ink-2); white-space: nowrap; }
+.er-week tbody th small { display: block; color: var(--good); }
+.er-week tbody th small.er-pay { color: var(--gray-2); font-weight: 500; }
+.er-week td { height: 46px; padding: 0; vertical-align: middle; }
+/* 시각은 숫자 중간에서 끊지 않고, 칸이 좁으면 "~" 뒤에서만 줄을 바꾼다 */
+.er-time { display: flex; flex-wrap: wrap; }
+.er-time span { white-space: nowrap; }
+.er-shift { display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 44px; padding: 3px 6px; border-radius: 8px; background: #e5f6ec; line-height: 1.3; }
+.er-shift small { color: var(--gray-2); font-size: 0.82em; }
+.er-shift.rest { background-image: repeating-linear-gradient(135deg, transparent 0 5px, #b9c0cc 5px 6px); background-size: 100% 4px; background-repeat: no-repeat; background-position: bottom; }
+.er-week tr.owner .er-shift { background-color: var(--blue-soft); }
+/* 배경색만 바꾼다(background 축약이면 .rest의 휴게 무늬가 지워진다). */
+.er-week tr.hire .er-shift { background-color: #fff7d6; border: 1.5px dashed #c99a1c; }
+.er-week tr.hire th { color: var(--accent); }
+.er-week tr.need th, .er-week tr.need td { color: var(--accent); font-weight: 700; font-size: 0.9em; line-height: 1.4; }
+.er-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 0.82em; color: var(--gray); }
+.er-legend i { display: inline-block; width: 14px; height: 10px; margin-right: 4px; border-radius: 3px; background: #e5f6ec; vertical-align: middle; }
+.er-legend i.owner { background: var(--blue-soft); }
+.er-legend i.hire { background: #fff7d6; border: 1.5px dashed #c99a1c; }
+.er-legend i.rest { background: repeating-linear-gradient(135deg, #fff 0 3px, #9aa1ae 3px 4px); }
+.er-warn { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid #f4dfb0; color: #6b4b00; }
+
+/* 저장하기 버튼은 오른쪽(열면 상자는 전체 너비) */
+.er-save > .easy-primary { display: block; margin-left: auto; }
+.er-save .easy-save .easy-actions { justify-content: flex-end; }
+
+/* 첫 단계: 어떤 데이터로 만들까요(추천은 파란 테두리·연한 배경만, 셋 다 고를 수 있게) */
+.er-source { display: grid; gap: 10px; }
+.er-source > button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: left; color: var(--ink); }
+.er-source > button > span:first-child { font-size: 1.5em; flex: none; width: 28px; text-align: center; }
+.er-source > button b { display: block; font-size: 1.05em; margin-bottom: 2px; }
+.er-source > button small { color: var(--gray-2); font-size: 0.9em; }
+.er-source > button i { margin-left: auto; color: var(--gray); font-style: normal; font-size: 1.3em; }
+.er-source > button:hover { border-color: var(--ink); }
+.er-source > .er-source-main { border: 2px solid var(--blue); background: var(--blue-soft); padding: 13px 17px; }
+.er-source-main b { color: var(--blue-dark); }
+.er-badge-inline { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--blue); color: #fff; font-size: 0.75em; font-style: normal; font-weight: 700; vertical-align: 2px; }
+/* 예시 가게 두 버튼: 운영 1번 화면처럼 들여쓰기 없이 위 카드 왼쪽 끝에 맞추고 연한 색을 넣는다 */
+.er-source-samples button { background: #f0f7f1; border-color: #cfe5d3; color: #1f5130; }
+.er-source-samples button:hover { background: #e2f1e5; border-color: #1f5130; }
+.er-source-note { margin-top: 12px; font-size: 0.85em; }
+
+/* 비교 카드의 "추천보다 …" 한 줄 */
+.er-versus { margin-top: 6px; color: var(--blue-dark); font-style: normal; font-weight: 700; font-size: 0.92em; }
+
+/* 접어 둔 짧은 설명(ⓘ) */
+.er-info { margin-top: 12px; color: var(--gray-2); font-size: 0.9em; }
+.er-info summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; color: var(--blue-dark); font-weight: 700; }
+.er-info > div { margin-top: 6px; padding: 10px 12px; border-radius: 10px; background: var(--fill); line-height: 1.6; }
+.er-info ul { margin: 0; padding-left: 1.1em; }
+
+/* 인쇄: 확인 칸은 맨 위, 표는 한 장에 들어가게 작게. 길면 줄 단위로 넘기고 머리줄을 다시 찍는다 */
+.er-sign { margin: -6px 0 10px !important; }
+@media print {
+  .easy .easy-print.er-print { break-inside: auto; padding: 7mm 10mm; }
+  .er-print h2 { margin: 0 0 2px; font-size: 1.25em; }
+  .er-sign { margin: 0 0 4px !important; }
+  .er-week { min-width: 0; font-size: 0.68em; border-spacing: 2px; }
+  .er-week td { height: 22px; }
+  .er-week tbody th { line-height: 1.05; padding: 2px 4px; }
+  .er-week tbody th small { font-size: 0.78em; }
+  .er-shift { min-height: 20px; padding: 1px 4px; line-height: 1.15; }
+  .er-legend { margin-top: 4px; }
+  .er-week tbody th, .er-week thead th:first-child { position: static; }
+  .er-week tr { break-inside: avoid; }
+  .er-week thead { display: table-header-group; }
+}
+
+/* 줄 서는 모습 재생 속도 */
+.er-speed { display: inline-flex; align-items: center; gap: 6px; }
+.er-speed-label { color: var(--gray); font-size: 0.9em; }
+
+/* 세 근무표 비교 */
+.er-compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.er-option { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; text-align: left; color: var(--gray); font-size: 0.9em; }
+.er-option b { color: var(--ink); font-size: 1.05em; margin-bottom: 6px; }
+.er-option strong { color: var(--ink); font-size: 1.15em; margin-bottom: 6px; }
+.er-option.on { border: 2px solid var(--blue); padding: 13px; }
+
+.er-badge { position: absolute; top: 10px; right: 10px; padding: 1px 8px; border-radius: 6px; background: var(--blue); color: #fff; font-size: 0.78em; font-weight: 700; }
+
+@media (max-width: 720px) {
+  .er-compare { grid-template-columns: 1fr; }
+  .er-ladder { gap: 8px; }
+}
+.er-option:disabled { opacity: 1; color: var(--gray); }
+
+/* 줄 서는 모습 */
+.er-queue-open { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.er-queue-open .easy-muted { font-size: 0.88em; }
+.er-queue { margin-top: 18px; }
+
+/* 말로 바꿔 다시 계산할 때 계산 화면 위에 보이는 문장 */
+.er-rerun-note { display: block; margin-bottom: 6px; font-weight: 600; }
+.er-back { background: none; border: 0; padding: 0 0 8px; color: #1d4ed8; font: inherit; font-size: 0.9em; cursor: pointer; }
+.er-back:hover { text-decoration: underline; }
+/* 접는 카드(세 근무표 비교·줄 서는 모습): 제목 줄을 누르면 접히고 펼쳐진다 */
+.er-fold > summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.er-fold > summary::-webkit-details-marker { display: none; }
+.er-fold > summary h2 { margin: 0; }
+.er-fold > summary::after { content: '접기 ⌃'; font-size: 0.85em; color: #555; }
+.er-fold:not([open]) > summary::after { content: '펼치기 ⌄'; }
+.er-fold[open] > summary { margin-bottom: 12px; }
+/* 줄 서는 모습 접기: 세 근무표 비교 제목 줄의 "접기 ⌃"(.er-fold summary::after)와 같은 글자 크기·색 */
+.er-queue-close { display: block; margin-left: auto; padding: 4px 0; border: 0; background: none; font: inherit; font-size: 0.85em; color: #555; cursor: pointer; }
+.er-queue-close:hover { color: var(--ink); }
+.er-jumps { display: flex; flex-wrap: wrap; margin-top: 8px; }
+/* 말로 바꾼 뒤 다시 계산하기 전 확인 상자 */
+.er-pending { margin-top: 12px; padding: 14px 16px; border: 1px solid #c7d7fe; border-radius: 12px; background: #eef4ff; }
+.er-pending-title { margin: 0 0 6px; font-weight: 700; }
+.er-pending ul { margin: 0 0 8px; padding-left: 1.2em; }
+.er-pending p { margin: 0 0 8px; }
+.er-pending .easy-actions { justify-content: flex-end; margin: 0; }
+/* 계산 중 진행 상황(요일이 끝나는 대로) */
+.er-running { flex-direction: column; align-items: stretch; }
+.er-running-top { display: flex; align-items: center; gap: 14px; }
+.er-progress { margin-top: 16px; font-weight: 400; }
+.er-progress-head { margin: 0 0 6px; }
+.er-progress-bar { height: 8px; border-radius: 4px; background: #e8ecf3; overflow: hidden; }
+.er-progress-bar i { display: block; height: 100%; background: var(--blue); transition: width 0.4s; }
+.er-progress ul { list-style: none; margin: 12px 0 8px; padding: 0; display: grid; gap: 6px; }
+.er-progress li { display: flex; gap: 12px; align-items: baseline; }
+.er-progress li b { width: 1.6em; flex: none; }
+.er-progress li.wait span { color: var(--gray); }
+.er-progress li.done span { color: var(--ink); }
+.er-progress li.fail span { color: #b42318; }
+.er-progress small { color: var(--gray); }
+.er-more { margin-left: 6px; padding: 0; border: 0; background: none; color: #1d4ed8; font: inherit; font-size: 0.9em; cursor: pointer; }
+.er-facts li.er-team { display: block; }
+.er-team ul { margin: 0 0 6px; padding-left: 1em; font-size: 0.92em; }
+.er-team li { display: list-item; padding: 2px 0; border: 0; }
+.er-team small { color: var(--gray); }
+/* 하루 근무표: 시간 막대(DayTimeline). 하루일 때는 요일 표 대신 이걸 보이고, 요일 표는 인쇄할 때만 */
+.er-week-day { display: none; }
+.er-day { margin: 8px 0 12px; }
+.er-day-row { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; min-height: 48px; }
+.er-day-head { min-height: 24px; }
+.er-day-name { display: flex; flex-direction: column; font-size: 0.95em; }
+.er-day-name small { color: #1f7a3a; font-size: 0.82em; }
+.er-day-track { position: relative; height: 40px; }
+.er-day-head .er-day-track { height: 22px; }
+.er-day-head i { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 0.78em; color: var(--gray); white-space: nowrap; }
+.er-day-head i:last-child { transform: translateX(-100%); }
+.er-day-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eef0f4; }
+.er-day-bar { position: absolute; top: 4px; bottom: 4px; display: flex; align-items: center; padding: 0 8px; border-radius: 8px; background: #e5f6ec; font-size: 0.88em; white-space: nowrap; overflow: hidden; }
+.er-day-row.owner .er-day-bar { background: var(--blue-soft); }
+.er-day-row.hire .er-day-bar { background: #fff7d6; border: 1.5px dashed #c99a1c; }
+.er-day-row.hire .er-day-name b { color: var(--accent); }
+.er-day-need { color: var(--accent); font-weight: 700; font-size: 0.9em; }
+/* 하루 근무표: 바쁠 때 더 둔 사람은 주황 막대(새로 뽑을 직원의 노란 점선과 구분) */
+.er-day-bar.extra { background: #ffe1bf; border: 1.5px solid #e8890c; }
+.er-legend i.extra { background: #ffe1bf; border: 1px solid #e8890c; }
+.er-added-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 6px; background: var(--blue-soft); color: var(--blue-dark); font-size: 0.75em; font-weight: 700; }
+.er-changed { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 0.92em; }
+/* 하루 근무표의 바쁜 시간 띠(막대 뒤) */
+.er-day-busy { position: absolute; top: 0; bottom: 0; background: rgba(255, 170, 60, 0.13); pointer-events: none; }
+.er-legend i.busy { background: rgba(255, 170, 60, 0.35); }
+@media print { .er-legend-busy { display: none; } }
+.er-day-rest { position: absolute; top: 0; bottom: 0; background-image: repeating-linear-gradient(135deg, rgba(120,128,140,.35) 0 4px, transparent 4px 8px); }
+@media print { .er-day { display: none; } .er-week-day { display: block; } }

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { workflowApi } from '../../api/workflowApi'
 import type { Confirmation, SessionSummary } from '../../types/workflow'
-import { CHOICE, FEATURE, STEP, cleanTitle, when } from './recentFormat'
+import { CHOICE, STEP, cleanTitle, featureTag, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
 
 const EASY_FEATURES = new Set(['purchase', 'operation'])
@@ -111,7 +111,7 @@ export function SessionList() {
               {items.map((s: SessionSummary) => (
                 <li key={s.session_id}>
                   <a href={`#/work/${s.session_id}`}>
-                    <span className={`easy-tag ${s.feature_type}`}>{FEATURE[s.feature_type] ?? s.feature_type}</span>
+                    <span className={`easy-tag ${s.feature_type}`}>{featureTag(s.feature_type, { title: s.title })}</span>
                     <b>{cleanTitle(s.title)}{summaries[s.session_id] && <span className="easy-list-sum"> · {summaries[s.session_id]}</span>}</b>
                     <small>{STEP[s.step] ?? s.step} · {when(s.updated_at)}</small>
                     <span className="easy-list-go" aria-hidden>›</span>
@@ -149,7 +149,7 @@ export function PlanList() {
               {items.map((p: Confirmation) => (
                 <li key={p.confirmation_id}>
                   <a href={`#/plans/${p.confirmation_id}`}>
-                    <span className={`easy-tag ${p.feature_type}`}>{FEATURE[p.feature_type] ?? p.feature_type}</span>
+                    <span className={`easy-tag ${p.feature_type}`}>{featureTag(p.feature_type, { choiceKey: p.selected_choice_key })}</span>
                     <b>{CHOICE[p.selected_choice_key] ?? p.selected_choice_key}</b>
                     <small>{when(p.confirmed_at)}에 저장{p.is_current_version ? '' : ' · 이후 조건이 바뀜'}</small>
                     <span className="easy-list-go" aria-hidden>›</span>

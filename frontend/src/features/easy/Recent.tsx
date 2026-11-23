@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { workflowApi } from '../../api/workflowApi'
 import type { Confirmation, SessionSummary } from '../../types/workflow'
-import { CHOICE, FEATURE, STEP, cleanTitle, when } from './recentFormat'
+import { CHOICE, STEP, cleanTitle, featureTag, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
 
 type Fetch<T> = () => Promise<{ items: T[] }>
@@ -53,7 +53,7 @@ export default function Recent() {
                 {sessions.map((s) => (
                   <li key={s.session_id}>
                     <a href={`#/work/${s.session_id}`}>
-                      <span className={`easy-tag ${s.feature_type}`}>{FEATURE[s.feature_type] ?? s.feature_type}</span>
+                      <span className={`easy-tag ${s.feature_type}`}>{featureTag(s.feature_type, { title: s.title })}</span>
                       <b>{cleanTitle(s.title)}</b>
                       <small>{summaries[s.session_id] ? `${summaries[s.session_id]} · ` : ''}{STEP[s.step] ?? s.step} · {when(s.updated_at)}</small>
                     </a>
@@ -75,7 +75,7 @@ export default function Recent() {
                 {plans.map((p) => (
                   <li key={p.confirmation_id}>
                     <a href={`#/plans/${p.confirmation_id}`}>
-                      <span className={`easy-tag ${p.feature_type}`}>{FEATURE[p.feature_type] ?? p.feature_type}</span>
+                      <span className={`easy-tag ${p.feature_type}`}>{featureTag(p.feature_type, { choiceKey: p.selected_choice_key })}</span>
                       <b>{CHOICE[p.selected_choice_key] ?? p.selected_choice_key}</b>
                       <small>{when(p.confirmed_at)}에 저장</small>
                     </a>

@@ -1,5 +1,5 @@
 import type { JsonObject } from '../../../types/workflow'
-import { DAY_HOURS, readOperationDraft, readOperationInput, rushLength, rushText } from './operationInput'
+import { MENUS, hoursText, readOperationDraft, readOperationInput, rushLength, rushText } from './operationInput'
 import { won } from './format'
 
 /** 업무 화면 01 · 계산 전 조건 확인(운영). 저장된 입력에서 사장님이 확인할 핵심만 보여 준다. */
@@ -63,6 +63,10 @@ export default function OperationInputReview({ input, confirmed }: { input: Json
           <b>{saved.dailyOrders.toLocaleString('ko-KR')}건</b>
         </div>
         <div>
+          <small>영업시간</small>
+          <b>{hoursText(saved.hours)}</b>
+        </div>
+        <div>
           <small>라스트 오더</small>
           <b>{saved.chosenLastOrder ?? `기본 ${saved.lastOrderTime}`}</b>
         </div>
@@ -79,7 +83,7 @@ export default function OperationInputReview({ input, confirmed }: { input: Json
         <li>
           <b>현재 방식</b>
           <span>
-            {staff} {DAY_HOURS}, 각자 맡은 일만
+            {staff} {hoursText(saved.hours)}, 각자 맡은 일만
           </span>
         </li>
         <li>
@@ -93,6 +97,19 @@ export default function OperationInputReview({ input, confirmed }: { input: Json
           </span>
         </li>
       </ul>
+      {saved.store && (
+        <p className="muted opw-review-note">
+          가게 데이터:{' '}
+          {Object.entries(saved.store.menu_cups ?? {})
+            .filter(([, n]) => n > 0)
+            .map(([id, n]) => `${MENUS.find((m) => m.menu_id === id)?.menu_name ?? id} ${n}잔`)
+            .join(', ')}
+          {saved.store.manufacture_sec_by_menu &&
+            ` · 제조시간 ${Object.entries(saved.store.manufacture_sec_by_menu)
+              .map(([id, sec]) => `${MENUS.find((m) => m.menu_id === id)?.menu_name ?? id} ${sec}초`)
+              .join(', ')}`}
+        </p>
+      )}
       <p className="muted opw-review-note">
         시간대별 손님은 을지로입구 상권 비중으로 나누고, 바쁜 시간은 그중 손님이 가장 많은 {rushText(saved.rush)}이에요.
         처리시간은 가정값이에요. 같은 손님 조건으로 30번 돌려 비교해요. 라스트 오더는 "라스트오더 7시"처럼 말로도 바꿀 수
