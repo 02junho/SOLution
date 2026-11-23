@@ -268,9 +268,12 @@ export default function EasyRoster({
         if (back === 'shown' && !opened.readOnly) await readSample(SAMPLES[0].file, MYSHOP_LABEL)
         return
       }
-      // 그사이 사장님이 다른 파일을 골라 이 읽기가 버려졌으면(false) 단계를 건드리지 않는다(계산 중 화면을 되돌리지 않게).
-      const applied = await readSample(SAMPLES[0].file, MYSHOP_LABEL)
-      if (applied && mounted.current) onPhase('confirm')
+      // 읽기 번호는 applyImport가 바로(기다리기 전에) 하나 올린다. 끝났을 때 번호가 그대로면 이 읽기가 마지막이다.
+      // 마지막이면 성공이든 실패든 조건 확인 단계로(실패면 데이터 고르기 화면에 오류와 다시 고르기가 보인다).
+      // 그사이 사장님이 다른 파일을 골라 이 읽기가 버려졌으면 단계를 건드리지 않는다(계산 중 화면을 되돌리지 않게).
+      const mine = readSeq.current + 1
+      await readSample(SAMPLES[0].file, MYSHOP_LABEL)
+      if (readSeq.current === mine && mounted.current) onPhase('confirm')
     })()
     // 처음 한 번만. 다른 업무를 열면 쉬운 화면이 이 조각을 새로 만든다(key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
