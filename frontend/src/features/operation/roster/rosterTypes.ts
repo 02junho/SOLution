@@ -1,4 +1,5 @@
 import type { JsonObject } from '../../../types/workflow'
+import { OPTION_NAME } from '../easy/rosterNames'
 
 /** ai-server /tools/simulation/daily-roster 응답(operation.daily_roster.v1). */
 export type RosterShift = {
@@ -229,7 +230,8 @@ export function rosterDigest(data: RosterOptions): JsonObject {
     ),
     options: data.options.map((o) => ({
       key: o.key,
-      title: o.title,
+      // 화면과 같은 이름으로 보낸다(AI 설명이 "아끼는 안" 같은 서버 이름을 쓰지 않게).
+      title: OPTION_NAME[o.key] ?? o.title,
       peak_wait_min_avg: min(avg(days.map((d) => o.peak_wait_sec[d] ?? null))),
       cost_krw: o.plan_cost_krw,
       people_used: o.weekly.people_used,

@@ -90,6 +90,9 @@ const toHHMM = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart
 const lastOrderLabel = (minutes: number) => `오후 ${Math.floor(minutes / 60) - 12}시${minutes % 60 ? ` ${minutes % 60}분` : ''}`
 const LARGE_KEY = 'solution.easy.large'
 // 업무를 만드는 매장. 예전 업무 화면·견적 화면과 같은 값을 쓴다.
+/** 없는 업무·계획(404). 서버 문장("…찾을 수 없습니다") 대신 쉬운 말로 알려 준다. */
+const notFound = (cause: unknown) => cause instanceof WorkflowError && cause.httpStatus === 404
+
 const STORE_ID = Number(import.meta.env.VITE_STORE_ID ?? 1)
 /** 아직 응답을 못 받은 말·답. 연결이 끊겼을 때 같은 요청 키로 다시 보내 중복 저장을 막는다. */
 type Pending = { kind: EasyFeature; sessionId: number; payload: JsonObject; key: string }
@@ -366,7 +369,7 @@ export default function EasyPage() {
       setPhase('confirm')
     } catch (cause) {
       if (token !== tokenRef.current) return
-      setError(cause instanceof Error ? cause.message : '업무를 불러오지 못했어요.')
+      setError(notFound(cause) ? '이 업무를 찾지 못했어요. 지워졌거나 주소가 바뀌었을 수 있어요.' : cause instanceof Error ? cause.message : '업무를 불러오지 못했어요.')
       setFeature(null) // 열다가 멈춘 것: "다시 시도"는 다시 여는 것으로
       setPhase('error')
     }
@@ -401,7 +404,7 @@ export default function EasyPage() {
       setPhase('result')
     } catch (cause) {
       if (token !== tokenRef.current) return
-      setError(cause instanceof Error ? cause.message : '계획을 불러오지 못했어요.')
+      setError(notFound(cause) ? '이 저장한 계획을 찾지 못했어요. 지워졌을 수 있어요.' : cause instanceof Error ? cause.message : '계획을 불러오지 못했어요.')
       setFeature(null) // 열다가 멈춘 것: "다시 시도"는 다시 여는 것으로
       setPhase('error')
     }

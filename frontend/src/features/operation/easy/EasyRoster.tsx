@@ -318,6 +318,12 @@ export default function EasyRoster({
     }
   }
 
+  /** 세 근무표의 주 인건비와 요일별 가장 긴 대기가 모두 같으면 같은 결과로 본다. */
+  function sameOutcome(a: RosterOptions, b: RosterOptions) {
+    const key = (o: RosterOptions) => JSON.stringify(o.options.map((x) => [x.key, x.plan_cost_krw, x.peak_wait_sec]))
+    return key(a) === key(b)
+  }
+
   function show(data: StoredRosterResult) {
     const next = optionsFromStored(data)
     setOptions(next)
@@ -431,6 +437,7 @@ export default function EasyRoster({
 
   async function run(c: RosterConditions | null = cond) {
     if (!c || stops.length || (!restored && (!imp || !plan))) return
+    const before = options
     const people = { isOwnerWorking: c.owner, hourlyWage: Number(c.wage) }
     const form = !restored && imp && plan ? formFromPlan(imp, plan, people, equipment(c)) : null
     const stop = { stopped: false }
@@ -478,7 +485,10 @@ export default function EasyRoster({
       if (detail.status !== 'ok' || !detail.data) throw new Error(detail.message ?? '근무표를 불러오지 못했어요.')
       if (stop.stopped) return
       show(detail.data)
-      setLastChange(nextChange.current) // 말로 바꿔 다시 계산한 게 아니면 지운다
+      // 말로 바꿔 다시 계산했는데 세 근무표의 인건비·대기가 그대로면 그렇다고 알려 준다(바꾼 게 반영 안 된 걸로 보이지 않게).
+      const change = nextChange.current
+      const same = change && before && sameOutcome(before, optionsFromStored(detail.data))
+      setLastChange(change && same ? { ...change, text: `${change.text} · 결과는 이전과 같아요(이 조건은 이번 근무표를 바꾸지 않았어요)` } : change) // 말로 바꿔 다시 계산한 게 아니면 지운다
       nextChange.current = null
       onPhase('result')
     } catch (cause) {
@@ -837,7 +847,7 @@ export default function EasyRoster({
           </li>
           <li>
             <span>바쁜 시간 <em className="er-tag">자동으로 찾음</em></span>
-            <b>{peakNow ? `${clock(peakNow.start)} ~ ${clock(peakNow.end)}` : '찾지 못했어요'}{' · 요일마다 다시 찾아요'}</b>
+            <b>{peakNow ? `${clock(peakNow.start)} ~ ${clock(peakNow.end)}` : '찾지 못했어요'}{' · 요일마다 다시 찾고, 아침처럼 붐비는 때가 더 있으면 함께 봐요'}</b>
           </li>
           <li className={row('owner')}>
             <span>사장님 근무</span>
