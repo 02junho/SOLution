@@ -52,6 +52,8 @@ _SYSTEM = (
     "배송 횟수는 max_delivery_count이다. 금액·기간·횟수의 unit은 반드시 null이다.\n"
     "7) 품목 수치의 target은 gross_need/usable_inventory/safety_stock/storage_capacity/max_end_inventory이며 "
     "unit은 해당 품목의 base_unit(g/ml/ea)이다. 어느 칸인지 불명확하면 changes 대신 unresolved로 질문한다.\n"
+    "8) reply·unresolved.text처럼 사장님이 읽는 문장에서 거래처는 이름(supplier·supplier_name)으로 부른다. "
+    "supplier_id(R1·M2 같은 내부 번호)는 쓰지 않는다.\n"
     "JSON 스키마: {intent: change_input|ask|unsupported|smalltalk, "
     "changes:[{field,label,value,unit,target,item_id}], unresolved:[{question_key,text,choices}], "
     "evidence:[string], reply:string}"
@@ -129,6 +131,26 @@ class LlmInterpreter:
         return str(content)
 
 
+def _named_suppliers(current: dict) -> dict:
+    """매입 입력의 quotes에서 supplier_id를 거래처 이름으로 바꾼 사본. 거래처 목록이 없으면 그대로."""
+    suppliers = current.get("suppliers")
+    quotes = current.get("quotes")
+    if not isinstance(suppliers, list) or not isinstance(quotes, list):
+        return current
+    # 번호가 글자인 것만 바꾼다(목록·객체 같은 값은 그대로 두어 요약을 만들다 멈추지 않게).
+    names = {
+        s["supplier_id"]: s["supplier_name"]
+        for s in suppliers
+        if isinstance(s, dict) and isinstance(s.get("supplier_id"), str) and isinstance(s.get("supplier_name"), str)
+    }
+    named = []
+    for quote in quotes:
+        if isinstance(quote, dict) and isinstance(quote.get("supplier_id"), str) and quote["supplier_id"] in names:
+            quote = {**{k: v for k, v in quote.items() if k != "supplier_id"}, "supplier": names[quote["supplier_id"]]}
+        named.append(quote)
+    return {**current, "quotes": named}
+
+
 def _build_user_prompt(req: InterpretRequest) -> str:
     """LLM에 줄 입력. 전체 DTO가 아니라 해석에 필요한 작은 요약만 담는다."""
     req = InterpretRequest.model_validate(sanitize(req.model_dump()))
@@ -137,8 +159,9 @@ def _build_user_prompt(req: InterpretRequest) -> str:
     if operation is not None:
         lines.append(f"지금까지의 입력(요약): {operation}")
     elif req.current_input:
-        # 큰 입력은 잘라서 요약만 전달한다.
-        summary = json.dumps(req.current_input, ensure_ascii=False)
+        # 큰 입력은 잘라서 요약만 전달한다. 견적의 거래처 번호(R1 등)는 이름으로 바꿔 넣는다
+        # (거래처 목록은 입력 끝에 있어 잘리기 쉽고, 사장님께는 이름으로 말해야 하므로).
+        summary = json.dumps(_named_suppliers(req.current_input), ensure_ascii=False)
         if len(summary) > 1500:
             summary = summary[:1500] + "…(생략)"
         lines.append(f"지금까지의 입력(요약): {summary}")

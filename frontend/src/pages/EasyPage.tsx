@@ -283,7 +283,7 @@ export default function EasyPage() {
     window.history.replaceState(null, '', routeHash({ kind: 'home' }))
     open({ kind: 'home' })
     say('owner', '받은 견적으로 장보기')
-    begin('purchase')
+    begin('purchase', null, true)
     setQuoteOpen(true)
   }
 
@@ -408,7 +408,7 @@ export default function EasyPage() {
   }
 
   /** 새 업무 시작: 연습 가게 값으로 업무를 바로 만들어 두고, 사장님이 한 말은 AI에게 보낸다(말 속 조건이 있으면 바로 반영). */
-  function begin(next: EasyFeature, words?: string | null) {
+  function begin(next: EasyFeature, words?: string | null, lazy = false) {
     const practice = next === 'purchase' ? PURCHASE_INPUT : NEW_OPERATION
     setFeature(next)
     // 직원 근무표(2번)는 EasyRoster가 업무 만들기·조건·말로 고치기를 맡는다. 여기서는 업무를 만들거나 AI에 보내지 않는다.
@@ -427,23 +427,34 @@ export default function EasyPage() {
     say('agent', next === 'purchase'
       ? '이번 주 장보기 계획을 세워 볼게요. 바꿀 조건이 있으면 말로 알려 주세요.'
       : '점심 인원 배치를 돌려 볼게요. 바꿀 조건이 있으면 말로 알려 주세요.')
+    // lazy: 받은 견적으로 시작할 때는 업무를 미리 만들지 않는다(견적이 따로 업무를 만들므로, 빈 업무가 목록에 쌓이지 않게).
+    // 그 뒤 말로 바꾸거나 계산하면 그때 만든다(talk·ready).
+    if (lazy) return
     const screen = screenRef.current
     const job = prepRef.current.catch(() => undefined).then(async () => {
       if (screen !== screenRef.current) throw new Error('다른 화면으로 옮겼어요.')
-      const created = await workflowApi.create(STORE_ID, next, 'agent', next === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
-      if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
-      const saved = await saveInput(created.session_id, null, practice, values, screen, false)
-      if (screen !== screenRef.current) return
-      // 주소도 이 업무로 바꿔, 새로 고쳐도 같은 업무가 다시 열리게 한다.
-      window.history.replaceState(null, '', routeHash({ kind: 'session', id: created.session_id }))
-      setRoute({ kind: 'session', id: created.session_id })
-      setStartedHere(true)
-      return saved
+      return createSession(next, practice, values, screen)
     })
     prepRef.current = job
     job.catch((cause) => { if (screen === screenRef.current) setChatError(cause instanceof Error ? cause.message : '업무를 만들지 못했어요.') })
     // 따라 하며 배우기 중에는 안내 순서가 흐트러지지 않게 AI에게 보내지 않는다.
     if (words && !tourOn) talk(next, { event_type: 'message', content: words }, null)
+  }
+
+  /** 연습 가게 값으로 업무를 만들고 조건을 저장한다(확인 전). 주소도 이 업무로 바꿔, 새로 고쳐도 같은 업무가 다시 열리게 한다. */
+  async function createSession(next: EasyFeature, input: JsonObject, values: string, screen: number) {
+    const created = await workflowApi.create(STORE_ID, next, 'agent', next === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
+    if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
+    markSession(created.session_id, screen)
+    return saveInput(created.session_id, null, input, values, screen, false)
+  }
+
+  /** 업무를 만들자마자 주소를 그 업무로 바꾼다(같은 화면일 때만). 조건 저장·계산이 실패하거나 멈춰도 새로 고치면 그 업무가 다시 열린다. */
+  function markSession(id: number, screen: number) {
+    if (screen !== screenRef.current) return
+    window.history.replaceState(null, '', routeHash({ kind: 'session', id }))
+    setRoute({ kind: 'session', id })
+    setStartedHere(true)
   }
 
   function send(value: string) {
@@ -486,8 +497,19 @@ export default function EasyPage() {
     const edited = !again && phase === 'confirm' && inputRef.current && !noInput && featureNow === kind ? { input: buildInput(kind), values: valuesNow } : null
     const job = prepRef.current.catch(() => undefined).then(async () => {
       if (screen !== screenRef.current) return
+      // 업무를 아직 안 만든 채 시작했으면(받은 견적 넣기) 지금 화면 조건으로 먼저 만든다.
+      if (!resumeRef.current && !again && inputRef.current && !noInput) {
+        await createSession(kind, edited?.input ?? inputRef.current, edited?.values ?? valuesNow, screen)
+        if (screen !== screenRef.current) return
+      }
       let resume = resumeRef.current
       if (!resume) throw new Error('업무를 아직 만들지 못했어요. "↺ 처음부터 다시"를 눌러 주세요.')
+      // 업무는 있는데 첫 조건 저장이 실패했으면(버전 없음) 화면 조건부터 저장한다. 안 그러면 AI가 빈 조건을 보고 답한다.
+      if (resume.versionId === null && !again && inputRef.current && !noInput) {
+        await saveInput(resume.sessionId, null, edited?.input ?? inputRef.current, edited?.values ?? valuesNow, screen, false)
+        if (screen !== screenRef.current) return
+        resume = resumeRef.current ?? resume
+      }
       let payload = body
       if (edited && resume.versionId !== null && resume.values !== edited.values) {
         await saveInput(resume.sessionId, resume.versionId, edited.input, edited.values, screen, false)
@@ -607,6 +629,7 @@ export default function EasyPage() {
       const created = await workflowApi.create(STORE_ID, kind, 'agent', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
       // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
       if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
+      markSession(created.session_id, screen)
       return saveInput(created.session_id, null, input, values, screen)
     }
     // changed: 확인 카드에 없는 칸(품목 보관 한도 등)만 바꾼 경우에도 새 조건으로 저장한다.
@@ -646,15 +669,16 @@ export default function EasyPage() {
       })
       prepRef.current = job
       const done = await job
-      if (token !== tokenRef.current) return
-      // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
-      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
-      setPrepared(done)
-      if (route.kind !== 'session') {
+      // 계산을 그만둬도 이미 만든 업무의 주소는 남긴다(같은 화면일 때만). 새로 고쳐도 그 업무가 다시 열리게.
+      if (screen === screenRef.current && route.kind !== 'session') {
         window.history.replaceState(null, '', routeHash({ kind: 'session', id: done.sessionId }))
         setRoute({ kind: 'session', id: done.sessionId })
         setStartedHere(true)
       }
+      if (token !== tokenRef.current) return
+      // 다시 계산하면 같은 업무 안에서 이어지게 한다.
+      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
+      setPrepared(done)
       if (feature === 'purchase') {
         const response = await workflowApi.calculate(done.sessionId, done.versionId, crypto.randomUUID())
         const resultId = Number((response.data as JsonObject | null)?.result_id)
@@ -1067,7 +1091,7 @@ export default function EasyPage() {
           <ol className="easy-guide">
             <li><b>하고 싶은 일을 말로 적어요</b><span>{ROSTER_MODE ? '“일주일 근무표 만들어 줘”' : '“점심에 줄이 길어요”'}처럼 평소 말투면 돼요</span></li>
             <li><b>조건을 확인해요</b><span>틀린 곳은 말로 바꾸거나 "고치기"로 바꿔요</span></li>
-            <li><b>결과를 보고 저장해요</b><span>배치표·구매안·주문 문구가 나와요</span></li>
+            <li><b>결과를 보고 저장해요</b><span>{ROSTER_MODE ? '구매안·주문 문구·근무표가 나와요' : '배치표·구매안·주문 문구가 나와요'}</span></li>
           </ol>
         </section>
       </aside>
@@ -1082,9 +1106,11 @@ export default function EasyPage() {
         <Modal title="쉬운 화면 사용법" description="세 단계면 끝나요." onClose={() => setGuideOpen(false)} wide closeOnBackdrop>
           <div className="easy-modal-body">
           <ol className="easy-guide easy-guide-modal">
-            <li><b>하고 싶은 일을 말로 적어요</b><span>장보기든 점심 인원이든 고를 필요 없이, 말한 내용에 맞춰 바로 시작해요.</span></li>
+            <li><b>하고 싶은 일을 말로 적어요</b><span>{ROSTER_MODE ? '장보기든 근무표든' : '장보기든 점심 인원이든'} 고를 필요 없이, 말한 내용에 맞춰 바로 시작해요.</span></li>
             <li><b>조건을 확인해요</b><span>미리 채워진 조건이 맞으면 그대로, 틀린 곳은 "예산은 15만 원까지만"처럼 말로 바꾸거나 "고치기"로 바꿔요. 받은 견적 문자를 붙여 넣어 계산할 수도 있어요.</span></li>
-            <li><b>결과를 보고 저장해요</b><span>맨 위가 추천이에요. "설명 듣기"를 누르면 쉬운 말로 풀어 드려요. 배치표는 인쇄하고, 주문 문구는 복사해서 보내요.</span></li>
+            <li><b>결과를 보고 저장해요</b><span>{ROSTER_MODE
+              ? '맨 위가 추천이에요. 장보기는 "설명 듣기"로 쉬운 말 설명을 듣고 주문 문구를 복사해서 보내요. 근무표는 세 안을 비교하고 인쇄해요.'
+              : '맨 위가 추천이에요. "설명 듣기"를 누르면 쉬운 말로 풀어 드려요. 배치표는 인쇄하고, 주문 문구는 복사해서 보내요.'}</span></li>
             <li><b>나중에 이어서 봐요</b><span>"하던 일 이어하기"에서 멈춘 곳부터, "저장한 계획"에서 저장한 결과를 다시 볼 수 있어요.</span></li>
           </ol>
           <div className="easy-actions">

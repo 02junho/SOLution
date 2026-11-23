@@ -203,11 +203,10 @@ export default function EasyRosterResult({
             </ul>
           </Info>
         </div>
-        {!readOnly && (
-          <div className="easy-actions easy-noprint">
-            <button type="button" className="easy-secondary" onClick={() => window.print()}>근무표 인쇄</button>
-          </div>
-        )}
+        {/* 저장한 계획 보기(readOnly)에서도 인쇄는 된다(고치기·저장만 막는다) */}
+        <div className="easy-actions easy-noprint">
+          <button type="button" className="easy-secondary" onClick={() => window.print()}>근무표 인쇄</button>
+        </div>
       </section>
 
       {/* 따라 하며 배우기 6단계는 비교와 바로 아래 말 칸을 함께 비춘다 */}
