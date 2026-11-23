@@ -20,11 +20,43 @@ export type ManualQuote = {items: {
 }[]}
 export type Batch = {
   quote_batch_id: string
-  normalization: {items: {
-    line_id: string; item_id: string | null; raw_item_name: string; supplier_name: string | null
-    specification_text: string | null; normalized_quantity_per_pack: Amount; normalized_unit: string | null
-    pack_price: Amount; vat_status: string; issues: Issue[]
-  }[]}
+  
+  //normalization: {items: {
+  //  line_id: string; item_id: string | null; raw_item_name: string; supplier_name: string | null
+ //   specification_text: string | null; normalized_quantity_per_pack: Amount; normalized_unit: string | null
+ //   pack_price: Amount; vat_status: string; issues: Issue[]
+//  }[]}
+
+  normalization: {
+  dictionary_version: number
+
+  items: {
+    line_id: string
+    item_id: string | null
+    raw_item_name: string
+    supplier_name: string | null
+    specification_text: string | null
+
+    // 추가: RAG 추천 품목 ID
+    candidate_item_ids: string[]
+
+    // 추가: 단위당 수량
+    quantity_per_unit: Amount
+
+    // 추가: 수량 단위
+    quantity_unit: string | null
+
+    // 추가: 묶음당 구성 수량
+    units_per_pack: number | null
+
+    normalized_quantity_per_pack: Amount
+    normalized_unit: string | null
+    pack_price: Amount
+    vat_status: string
+    issues: Issue[]
+  }[]
+}
+
   confirmations: Record<string, boolean>
   delivery: {supplier_name: string | null; fee_amount: Amount; free_shipping_minimum: Amount; minimum_order_amount?: Amount}[]
   sales_candidates: unknown[]

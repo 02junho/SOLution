@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     postgres_user: str = "solution"
     postgres_password: str = ""
 
+     # RAG
+    rag_auto_index: bool = True
+    rag_min_score: float = 0.67
+
     @property
     def database_conninfo(self) -> str:
         return make_conninfo(

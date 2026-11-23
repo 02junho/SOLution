@@ -1,6 +1,11 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+from app.core.config import get_settings
+from app.rag.quote_search import embedding
 
 from app.agent.router import router as agent_router
 from app.core.db import check_database, close_pool, open_pool
@@ -12,12 +17,39 @@ from app.tools.simulation.router import router as simulation_router
 
 # 라우터 추가
 from app.tools.quote.router import router as quote_router
+from app.scripts.index_quote_rag import initialize_quote_rag
+
+log = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+     # PostgreSQL Connection Pool 초기화
     open_pool()
-    yield
-    close_pool()
+
+    try:
+
+        if get_settings().rag_auto_index:
+
+            # 기존 RAG 데이터 자동 적재
+            await asyncio.to_thread(
+                initialize_quote_rag
+            )
+
+            # 추가: KURE-v1 모델 사전 로딩
+            log.info("RAG 임베딩 모델 초기화 시작")
+
+            await asyncio.to_thread(
+                embedding,
+                "임베딩 모델 초기화"
+            )
+
+            log.info("RAG 임베딩 모델 초기화 완료")
+
+        yield
+
+    finally:
+
+        close_pool()
 
 
 app = FastAPI(title="SOLution AI Server", lifespan=lifespan)

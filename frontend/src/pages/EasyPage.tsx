@@ -473,6 +473,12 @@ export default function EasyPage() {
             <a key={item.label} {...link(item.route)} aria-current={item.current ? 'page' : undefined}>{item.label}</a>
           ))}
           <a href="#" onClick={(e) => { e.preventDefault(); setGuideOpen(true) }}>사용법</a>
+        
+        {/* 견적 및 매입 정리 메뉴 추가 */}
+  <a href="/?mode=quote">
+    견적·매입 정리
+  </a>
+        
         </nav>
         <div className="easy-tools">
           {!fresh && (
