@@ -241,7 +241,7 @@ export default function EasyPage() {
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
-    resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setRosterWords(''); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
     shownResultRef.current = null
     setQuestion(null); setThinking(false); setPending(null); setChatError(''); setReply(''); setNoInput(false); setQuoteOpen(false); setBlocked(null)
     inputRef.current = null; firstWordsRef.current = null
