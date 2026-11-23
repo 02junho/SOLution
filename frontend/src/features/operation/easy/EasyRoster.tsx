@@ -268,8 +268,9 @@ export default function EasyRoster({
         if (back === 'shown' && !opened.readOnly) await readSample(SAMPLES[0].file, MYSHOP_LABEL)
         return
       }
-      await readSample(SAMPLES[0].file, MYSHOP_LABEL)
-      if (mounted.current) onPhase('confirm')
+      // 그사이 사장님이 다른 파일을 골라 이 읽기가 버려졌으면(false) 단계를 건드리지 않는다(계산 중 화면을 되돌리지 않게).
+      const applied = await readSample(SAMPLES[0].file, MYSHOP_LABEL)
+      if (applied && mounted.current) onPhase('confirm')
     })()
     // 처음 한 번만. 다른 업무를 열면 쉬운 화면이 이 조각을 새로 만든다(key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -639,7 +640,7 @@ export default function EasyRoster({
           </ul>
           <p>이 조건으로 다시 계산할까요? 더 고칠 게 있으면 위 칸에 이어서 말해 주세요.</p>
           <div className="easy-actions">
-            <button type="button" className="easy-primary" onClick={rerunPending}>다시 계산하기</button>
+            <button type="button" className="easy-primary" disabled={chatBusy} onClick={rerunPending}>다시 계산하기</button>
             <button type="button" className="easy-secondary" onClick={() => chatInput.current?.focus()}>더 고칠게요</button>
             <button type="button" className="easy-secondary" onClick={cancelPending}>취소</button>
           </div>
@@ -924,7 +925,7 @@ export default function EasyRoster({
         )}
         {error && <p className="easy-error">{error}</p>}
         <div className={`easy-cta${editing ? ' easy-cta-static' : ''}`}>
-          <button type="button" className="easy-primary" disabled={stops.length > 0} onClick={() => void run()}>
+          <button type="button" className="easy-primary" disabled={stops.length > 0 || chatBusy} onClick={() => void run()}>
             추천 근무표 만들기
           </button>
           {editing ? (
