@@ -106,7 +106,8 @@ test('작은 표: 날짜+시간 두 열, 오전/오후, 탭 구분, 시각 없�
   assert.equal(plan.ordersBySlot, null)
   assert.equal(plan.dailyOrders, 100)
   assert.deepEqual(plan.menuCups, { hot_cafe_latte: 30, iced_americano: 70 })
-  assert.ok(plan.defaults.some((d) => d.startsWith('시간대별 손님')))
+  // 결제 시각이 없으면 요일·시간대를 알 수 없어 근무표를 만들지 않고 이유를 보여 준다
+  assert.ok(plan.problems.some((p) => p.includes('결제 날짜·시각이 없어')))
   assert.throws(() => f.analyzeTable(f.parseCsv('이름,전화\n가,1\n'), 'c.csv'), /열을 찾지 못했어요/)
 })
 
@@ -212,4 +213,58 @@ test('메뉴 이름이 constructor·toString이어도 그대로 센다', () => {
   assert.equal(imp.undated.toString, 2)
   const plan = f.planFrom(imp)
   assert.deepEqual(plan.menus.map((m) => m.chosen), [false, false])
+})
+
+test('CodeRabbit 반영: 취소·중복·머리글·날짜·시각·구분자·수량', () => {
+  // 거래구분과 취소여부가 같이 있으면 둘 다 본다. "미취소"는 취소가 아니다.
+  const both = f.analyzeTable(
+    f.parseCsv('거래일시,거래구분,취소여부,품목\n2026-11-02 09:10,승인,N,아메리카노\n2026-11-02 09:20,승인,Y,아메리카노\n2026-11-02 09:30,미취소,N,카페라떼\n'),
+    'a.csv',
+  )
+  assert.equal(both.excluded.cancelled, 1)
+  assert.equal(both.byDate['2026-11-02'].hours[9], 2)
+  // 거래 번호가 없으면 같은 분·같은 메뉴 두 줄을 모두 센다. 번호가 있으면 똑같은 줄만 뺀다.
+  const noId = f.analyzeTable(f.parseCsv('거래일시,품목\n2026-11-02 09:10,아메리카노\n2026-11-02 09:10,아메리카노\n'), 'b.csv')
+  assert.equal(noId.excluded.duplicate, 0)
+  assert.equal(noId.sameRows, 1) // 빼지 않고 안내만
+  assert.equal(noId.byDate['2026-11-02'].hours[9], 2)
+  // 초 단위 시각이 있으면 초·메뉴까지 똑같은 줄은 중복으로 뺀다
+  const precise = f.analyzeTable(f.parseCsv('거래일시,품목\n2026-11-02 09:10:37,아메리카노\n2026-11-02 09:10:37,아메리카노\n2026-11-02 09:10:38,아메리카노\n'), 'b2.csv')
+  assert.equal(precise.excluded.duplicate, 1)
+  assert.equal(precise.sameRows, 0)
+  const withId = f.analyzeTable(f.parseCsv('거래일시,승인번호,품목\n2026-11-02 09:10,1,아메리카노\n2026-11-02 09:10,1,아메리카노\n2026-11-02 09:10,2,아메리카노\n'), 'c.csv')
+  assert.equal(withId.excluded.duplicate, 1)
+  // 정확한 머리글을 먼저: "상품구분"(부분 일치 '구분')이 상태 열 "거래구분"보다 앞에 있어도 상태는 거래구분
+  const cols = f.analyzeTable(f.parseCsv('거래일시,상품구분,거래구분,품목\n2026-11-02 09:10,음료,취소,아메리카노\n2026-11-02 09:20,음료,승인,아메리카노\n'), 'd.csv')
+  assert.equal(cols.columns.status, '거래구분')
+  assert.equal(cols.excluded.cancelled, 1)
+  // 달력에 없는 날은 읽지 못한 줄
+  const bad = f.analyzeTable(f.parseCsv('거래일시,품목\n2026-02-31 09:10,아메리카노\n2026-02-28 09:10,아메리카노\n'), 'e.csv')
+  assert.equal(bad.excluded.unreadable, 1)
+  // 엑셀 시각: 08:59:45는 8시 칸, 정확히 09:00은 9시 칸
+  const serial = (h, m, s) => 46000 + (h * 3600 + m * 60 + s) / 86400
+  const xl = f.analyzeTable([['거래일시', '품목'], [serial(8, 59, 45), '아메리카노'], [serial(9, 0, 0), '아메리카노']], 'f.xlsx')
+  const day = Object.values(xl.byDate)[0]
+  assert.equal(day.hours[8], 1)
+  assert.equal(day.hours[9], 1)
+  // 탭 파일의 금액에 쉼표가 많아도 탭으로 나눈다
+  const tsv = f.parseCsv('거래일시\t금액\t품목\n2026-11-02 09:10\t1,234,500\t아메리카노\n2026-11-02 09:20\t1,234,500\t카페라떼\n')
+  assert.equal(tsv[0].length, 3)
+  // 메뉴 열이 없으면 수량과 상관없이 한 줄이 주문 1건
+  const noMenu = f.analyzeTable(f.parseCsv('거래일시,수량\n2026-11-02 09:10,3\n2026-11-02 09:20,\n'), 'g.csv')
+  assert.equal(noMenu.byDate['2026-11-02'].hours[9], 2)
+  assert.equal(noMenu.excluded.unreadable, 0)
+})
+
+test('CodeRabbit 반영: 빼는 메뉴는 팔린 시간에서만 덜어 낸다', () => {
+  const rows = ['거래일시,품목']
+  for (let d = 2; d <= 3; d++) {
+    for (let h = 8; h <= 17; h++) for (let k = 0; k < 4; k++) rows.push(`2026-11-0${d} ${String(h).padStart(2, '0')}:${String(k * 10).padStart(2, '0')},아이스 아메리카노`)
+    for (let k = 0; k < 6; k++) rows.push(`2026-11-0${d} 12:${String(k * 5 + 1).padStart(2, '0')},햄치즈 샌드위치`)
+  }
+  const imp = f.analyzeTable(f.parseCsv(rows.join('\n')), 'h.csv')
+  const plan = f.planFrom(imp, 'AVERAGE', null, { '햄치즈 샌드위치': null })
+  // 샌드위치는 12시에만 팔렸으니 다른 시간 주문은 그대로 4건
+  assert.equal(plan.ordersBySlot['09:00-10:00'], 4)
+  assert.equal(plan.ordersBySlot['12:00-13:00'], 4)
 })

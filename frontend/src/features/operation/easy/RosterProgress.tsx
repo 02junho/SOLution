@@ -8,8 +8,11 @@ import { mergedWindows, rangeText, waitText } from './easyRosterModel'
  * 전체 시간은 같지만 기다리는 동안 볼 것이 생겨 덜 지루하게(토스·배민의 "점진적 표시"와 같은 생각).
  * 직원 배정(누가 언제)은 모든 요일이 끝나야 해서 근무표 표는 마지막에 나온다.
  */
-export default function RosterProgress({ progress }: { progress: Progress | null }) {
-  if (!progress || !progress.order.length) return null
+export default function RosterProgress({ progress: real, days = [] }: { progress: Progress | null; days?: string[] }) {
+  // 서버 진행 정보가 아직 없으면(앞 계산이 끝나길 줄에서 기다리는 중) 보낸 요일로 목록만 먼저 보여 준다.
+  const waiting = !real || !real.order.length
+  const progress: Progress | null = waiting ? (days.length ? { total: days.length, done: 0, order: days, days: {} } : null) : real
+  if (!progress) return null
   const total = progress.total ?? progress.order.length
   return (
     <div className="er-progress">
@@ -27,7 +30,7 @@ export default function RosterProgress({ progress }: { progress: Progress | null
             return (
               <li key={d} className="wait">
                 <b>{name}</b>
-                <span>계산 중…</span>
+                <span>{waiting ? '차례를 기다리는 중…' : '계산 중…'}</span>
               </li>
             )
           if ('failed' in day)

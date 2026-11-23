@@ -79,7 +79,7 @@ const HEADER_SCAN_ROWS = 20
  * 칸 구분자: 앞쪽 줄들 가운데 따옴표 밖 구분자가 가장 많은 줄(표 머리글 후보)을 보고, 탭이 쉼표보다 많으면 탭.
  * 첫 줄이 "조회 기간: …" 같은 설명이어도 그 아래 머리글로 정한다.
  */
-function pickSeparator(text: string): '\t' | ',' {
+function countSeparators(text: string): '\t' | ',' {
   let tabs = 0
   let commas = 0
   for (const line of text.split(/\r?\n/, HEADER_SCAN_ROWS)) {
@@ -89,9 +89,23 @@ function pickSeparator(text: string): '\t' | ',' {
   return tabs > commas ? '\t' : ','
 }
 
-/** CSV(따옴표·줄바꿈 포함 칸 처리). 탭이 쉼표보다 많으면 탭으로 나눈다. */
+/** 앞쪽 줄에서 알아본 머리글 열 수의 최댓값(구분자 고르기용). */
+const knownColumns = (rows: Table) =>
+  Math.max(0, ...rows.slice(0, HEADER_SCAN_ROWS).map((r) => Object.keys(findColumns(r)).length))
+
+/**
+ * CSV(따옴표·줄바꿈 포함 칸 처리). 탭·쉼표 두 가지로 나눠 보고 머리글 열을 더 많이 알아본 쪽을 쓴다.
+ * 같으면 앞쪽 줄의 구분자 개수로 정한다(탭 파일의 금액 "4,500" 쉼표나 설명 줄에 끌려가지 않게).
+ */
 export function parseCsv(text: string): Table {
-  const sep = pickSeparator(text)
+  const tab = splitCsv(text, '\t')
+  const comma = splitCsv(text, ',')
+  const [a, b] = [knownColumns(tab), knownColumns(comma)]
+  if (a !== b) return a > b ? tab : comma
+  return countSeparators(text) === '\t' ? tab : comma
+}
+
+function splitCsv(text: string, sep: '\t' | ','): Table {
   const rows: Table = []
   let row: Cell[] = []
   let cell = ''
@@ -130,7 +144,11 @@ const HEADERS = {
   datetime: ['승인일시', '거래일시', '결제일시', '주문일시', '판매일시', '매출일시', '일시', 'datetime', 'timestamp'],
   date: ['승인일자', '거래일자', '결제일자', '주문일자', '판매일자', '매출일자', '일자', '날짜', '승인일', '거래일', '결제일', 'date'],
   time: ['승인시간', '거래시간', '결제시간', '주문시간', '판매시간', '승인시각', '거래시각', '결제시각', '시간', '시각', 'time'],
-  status: ['승인구분', '거래구분', '결제구분', '거래상태', '승인상태', '상태', '구분', '취소여부', 'status'],
+  status: ['승인구분', '거래구분', '결제구분', '거래상태', '승인상태', '상태', '구분', 'status'],
+  // 예/아니오로 적는 취소 열. 상태 열과 따로 찾아 둘 다 본다.
+  cancel: ['취소여부', '취소유무', 'cancelled', 'canceled', 'iscancel'],
+  // 같은 거래를 알아볼 번호. 있을 때만 똑같은 줄을 중복으로 뺀다.
+  id: ['승인번호', '거래번호', '주문번호', '영수증번호', 'transactionid', 'orderid', 'approvalno'],
   amount: ['승인금액', '결제금액', '거래금액', '판매금액', '매출금액', '금액', '합계', 'amount'],
   menu: ['메뉴명', '상품명', '품목명', '메뉴', '상품', '품목', 'item', 'product', 'menu'],
   qty: ['수량', '판매수량', '개수', 'qty', 'quantity'],
@@ -142,14 +160,18 @@ function findColumns(header: Cell[]): Columns {
   const names = header.map(squash)
   const used = new Set<number>()
   const cols: Columns = {}
-  for (const field of Object.keys(HEADERS) as Field[]) {
-    for (const key of HEADERS[field]) {
-      const exact = names.findIndex((n, i) => !used.has(i) && n === key)
-      const partial = exact >= 0 ? exact : names.findIndex((n, i) => !used.has(i) && n.includes(key))
-      if (partial >= 0) {
-        cols[field] = partial
-        used.add(partial)
-        break
+  // 1차: 모든 칸을 정확한 이름으로 먼저 잡는다(앞 칸의 부분 일치가 뒤 칸의 정확한 머리글을 가져가지 않게)
+  // 2차: 못 찾은 칸만 부분 일치로 찾는다.
+  for (const match of [(n: string, key: string) => n === key, (n: string, key: string) => n.includes(key)]) {
+    for (const field of Object.keys(HEADERS) as Field[]) {
+      if (cols[field] !== undefined) continue
+      for (const key of HEADERS[field]) {
+        const at = names.findIndex((n, i) => !used.has(i) && match(n, key))
+        if (at >= 0) {
+          cols[field] = at
+          used.add(at)
+          break
+        }
       }
     }
   }
@@ -166,7 +188,8 @@ const ymd = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`
 /** 엑셀 날짜 일련번호(1900 체계) → [날짜, 하루 중 분]. */
 function fromSerial(n: number): [string | null, number | null] {
   const days = Math.floor(n)
-  const minutes = Math.round((n - days) * 1440) % 1440
+  // 초가 있으면 그 분에 둔다(08:59:45가 9시 칸으로 넘어가지 않게). 09:00이 8:59.9999로 읽히는 오차만 보정한다.
+  const minutes = Math.floor((n - days) * 1440 + 1e-6) % 1440
   if (days < 1) return [null, minutes]
   const date = new Date(Date.UTC(1899, 11, 30) + days * 86_400_000)
   return [ymd(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()), minutes]
@@ -179,7 +202,9 @@ function readDate(v: Cell): string | null {
   const m = text.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/) ?? text.match(/^(\d{4})(\d{2})(\d{2})/)
   if (!m) return null
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
-  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? ymd(y, mo, d) : null
+  // 달력에 없는 날(2월 31일 등)은 읽지 못한 줄로 둔다
+  const real = new Date(Date.UTC(y, mo - 1, d))
+  return real.getUTCFullYear() === y && real.getUTCMonth() === mo - 1 && real.getUTCDate() === d ? ymd(y, mo, d) : null
 }
 
 function readMinute(v: Cell): number | null {
@@ -297,11 +322,14 @@ export function classifyMenu(name: string): { menuId: string | null; how: MenuHo
 }
 
 // ---------------------------------------------------------------- 표 → 날짜별 집계
-export type DayCounts = { hours: number[]; menus: Record<string, number> }
+/** hours: 시간(0~23시)별 주문 수, menus: 메뉴별 하루 잔 수, hourMenus: 시간별 메뉴 잔 수(빼는 메뉴·영업시간 밖을 시간마다 덜어 내려고) */
+export type DayCounts = { hours: number[]; menus: Record<string, number>; hourMenus: Record<string, number>[] }
 export type StoreImport = {
   fileName: string
   rowsRead: number
   excluded: { cancelled: number; unreadable: number; duplicate: number }
+  /** 중복으로 빼지 않았지만 다른 줄과 똑같은 줄 수(거래 번호도 초 단위 시각도 없어 같은 분의 다른 주문일 수 있음). 화면 안내용 */
+  sameRows: number
   hasTime: boolean
   hasMenu: boolean
   /** 날짜 → 시간(0~23시)별 주문 수, 파일 메뉴 이름별 잔 수 */
@@ -311,11 +339,30 @@ export type StoreImport = {
   columns: Partial<Record<Field, string>>
 }
 
-/** "취소여부"처럼 예/아니오로 적는 상태 열이면 Y·예·1·true가 취소다. */
+/** 시각 칸에 초가 들어 있는지(09:10:37, 091037, 초가 있는 엑셀 시각). 초가 0인 값은 분 단위와 구분할 수 없어 보지 않는다. */
+function hasSeconds(v: Cell): boolean {
+  if (v instanceof Date) return v.getUTCSeconds() !== 0
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return v >= 2400 && v < 240000 && v % 100 !== 0
+    const sec = Math.round((v - Math.floor(v)) * 86400) % 60
+    return sec !== 0
+  }
+  const m = String(v ?? '').match(/\d{1,2}:\d{2}:(\d{2})/) ?? String(v ?? '').trim().match(/^\d{4}(\d{2})$/)
+  return Boolean(m && m[1] !== '00')
+}
+
+/** "취소여부"처럼 예/아니오로 적는 열이면 Y·예·1·true가 취소다. */
 const YES = /^(y|yes|예|o|1|true)$/i
-const isCancelled = (status: Cell, amount: Cell, yesNo: boolean) =>
-  (yesNo ? YES.test(String(status ?? '').trim()) : /취소|환불|반품|cancel|refund/i.test(String(status ?? ''))) ||
-  (typeof amount === 'number' ? amount < 0 : /^\s*-\s*\d/.test(String(amount ?? '')))
+/** 상태 글자에 "취소"가 있어도 취소가 아니라는 말(미취소·취소 없음 등) */
+const NOT_CANCELLED = /미취소|비취소|취소\s*(없음|아님|안\s*함)|not\s*cancel|uncancel/i
+const isCancelled = (status: Cell, cancelFlag: Cell, amount: Cell) => {
+  const text = String(status ?? '')
+  return (
+    (/취소|환불|반품|cancel|refund/i.test(text) && !NOT_CANCELLED.test(text)) ||
+    YES.test(String(cancelFlag ?? '').trim()) ||
+    (typeof amount === 'number' ? amount < 0 : /^\s*-\s*\d/.test(String(amount ?? '')))
+  )
+}
 
 /** 메뉴 이름을 키로 쓰는 집계: 프로토타입이 없어 "constructor" 같은 메뉴 이름도 그대로 센다. */
 const tally = <T,>(): Record<string, T> => Object.create(null) as Record<string, T>
@@ -342,29 +389,39 @@ export function analyzeTable(table: Table, fileName: string): StoreImport {
     fileName,
     rowsRead: 0,
     excluded: { cancelled: 0, unreadable: 0, duplicate: 0 },
+    sameRows: 0,
     hasTime,
     hasMenu,
     byDate: tally<DayCounts>(),
     undated: tally<number>(),
     columns: Object.fromEntries(Object.entries(cols).map(([k, i]) => [k, String(header[i as number] ?? '')])),
   }
-  const yesNo = cols.status !== undefined && /여부|cancelled|canceled|iscancel/.test(squash(header[cols.status]))
+  const rows = table.slice(headerAt + 1)
+  // 똑같은 줄을 중복으로 빼는 경우: 거래 번호 열이 있거나, 시각이 초 단위까지 있을 때(초·메뉴·금액까지 같은 두 주문은 거의 없다).
+  // 둘 다 없으면(분 단위) 같은 분에 같은 메뉴를 판 두 건과 구분할 수 없어 모두 세고, 똑같은 줄 수만 알려 준다.
+  const timeCol = cols.datetime ?? cols.time
+  const precise = timeCol !== undefined && rows.some((r) => hasSeconds(r[timeCol]))
+  const dedupe = cols.id !== undefined || precise
   const seen = new Set<string>()
-  for (const row of table.slice(headerAt + 1)) {
+  for (const row of rows) {
     out.rowsRead++
     const key = row.map((c) => (c instanceof Date ? c.toISOString() : String(c ?? ''))).join('\u0001')
     if (seen.has(key)) {
-      out.excluded.duplicate++
-      continue
+      if (dedupe) {
+        out.excluded.duplicate++
+        continue
+      }
+      // 시각이 없으면 똑같은 줄이 당연히 많아서 안내하지 않는다
+      if (timeCol !== undefined) out.sameRows++
     }
     seen.add(key)
     const get = (f: Field) => (cols[f] === undefined ? null : (row[cols[f] as number] ?? null))
-    if (isCancelled(get('status'), get('amount'), yesNo)) {
+    if (isCancelled(get('status'), get('cancel'), get('amount'))) {
       out.excluded.cancelled++
       continue
     }
-    const qtyCell = get('qty')
-    const qty = cols.qty === undefined ? 1 : Number(String(qtyCell ?? '').replace(/,/g, ''))
+    // 메뉴 열이 없으면 한 줄이 결제 한 건이다(수량 칸이 있어도 주문 1건으로 센다).
+    const qty = cols.qty === undefined || !hasMenu ? 1 : Number(String(get('qty') ?? '').replace(/,/g, ''))
     if (!Number.isFinite(qty) || qty <= 0 || !Number.isInteger(qty)) {
       out.excluded.unreadable++
       continue
@@ -384,9 +441,13 @@ export function analyzeTable(table: Table, fileName: string): StoreImport {
       out.excluded.unreadable++
       continue
     }
-    const day = (out.byDate[date] ??= { hours: Array(24).fill(0), menus: tally<number>() })
-    day.hours[Math.floor(minute / 60)] += qty
-    if (menu) day.menus[menu] = (own(day.menus, menu) ?? 0) + qty
+    const day = (out.byDate[date] ??= { hours: Array(24).fill(0), menus: tally<number>(), hourMenus: Array.from({ length: 24 }, () => tally<number>()) })
+    const hour = Math.floor(minute / 60)
+    day.hours[hour] += qty
+    if (menu) {
+      day.menus[menu] = (own(day.menus, menu) ?? 0) + qty
+      day.hourMenus[hour][menu] = (own(day.hourMenus[hour], menu) ?? 0) + qty
+    }
   }
   if (hasTime && !Object.keys(out.byDate).length) throw new Error('읽을 수 있는 결제 줄이 없어요. 날짜·시각 형식을 확인해 주세요.')
   if (!hasTime && !Object.keys(out.undated).length) throw new Error('읽을 수 있는 판매 줄이 없어요.')
@@ -511,17 +572,15 @@ export function planFrom(
   let peakOut: StorePlan['peak'] = null
   let outsideHours = 0
   let dailyOrders = 0
+  /** 영업시간 안에서 팔린 메뉴별 잔 수(시각이 있을 때). 메뉴 비중은 이 값으로 정해 영업시간 밖 주문이 섞이지 않게 한다. */
+  let inHoursCups: Record<string, number> | null = null
   if (imp.hasTime) {
     if (!dates.length) problems.push('고른 요일의 데이터가 없어요.')
     const hourly = Array(24).fill(0)
     for (const d of dates) {
       const day = imp.byDate[d]
-      const droppedShare = (h: number) => {
-        // 빼는 메뉴의 시간대별 몫: 메뉴 열이 있으면 그날 그 시간의 비율만큼 덜어 낸다(시간별 메뉴는 따로 세지 않으므로 하루 비율로).
-        const total = Object.values(day.menus).reduce((a, b) => a + b, 0)
-        const gone = [...dropped].reduce((a, n) => a + (own(day.menus, n) ?? 0), 0)
-        return total > 0 ? day.hours[h] * (gone / total) : 0
-      }
+      // 빼는 메뉴는 그 시간에 실제로 팔린 잔 수만큼 덜어 낸다(점심에 몰린 음식이 다른 시간 주문을 깎지 않게).
+      const droppedShare = (h: number) => [...dropped].reduce((a, n) => a + (own(day.hourMenus[h], n) ?? 0), 0)
       for (let h = 0; h < 24; h++) {
         const n = day.hours[h] - droppedShare(h)
         hourly[h] += n
@@ -542,6 +601,10 @@ export function planFrom(
     open = hh(first)
     close = hh(last + 1)
     outsideHours = Math.round(avg.reduce((a, n, h) => (h < first || h > last ? a + n : a), 0) * 10) / 10
+    inHoursCups = tally<number>()
+    for (const d of dates)
+      for (let h = first; h <= last; h++)
+        for (const [n, c] of Object.entries(imp.byDate[d].hourMenus[h])) inHoursCups[n] = (own(inHoursCups, n) ?? 0) + c
     const inside = avg.slice(first, last + 1)
     const counts = roundKeepingTotal(inside)
     ordersBySlot = Object.fromEntries(counts.map((n, i) => [`${hh(first + i)}-${hh(first + i + 1)}`, n]))
@@ -563,15 +626,18 @@ export function planFrom(
       peakOut = { start: hh(first + best), end: hh(first + best + len) }
     }
   } else {
-    fill('HOURS', '시간대별 손님: 파일에 결제 시각이 없어 을지로입구 상권 비중으로 나눠요.')
-    fill('HOURS', '영업시간·바쁜 시간: 기본(07~19시, 바쁜 시간 11~14시)이에요.')
+    // 요일·시간대를 알 수 없어 요일별 근무표를 만들 수 없다(기본 영업시간을 지어내지 않고 이유를 보여 준다).
+    problems.push('파일에 결제 날짜·시각이 없어 요일·시간대별 근무표를 만들 수 없어요. 결제 일시가 들어 있는 파일을 올려 주세요.')
   }
 
   // 메뉴 → 카탈로그 잔 수
   let menuCups: Record<string, number> | null = null
   if (imp.hasMenu) {
     const byId: Record<string, number> = {}
-    for (const m of menus) if (m.menuId) byId[m.menuId] = (byId[m.menuId] ?? 0) + m.cups
+    for (const m of menus) {
+      const cups = inHoursCups ? (own(inHoursCups, m.name) ?? 0) / nDays : m.cups
+      if (m.menuId && cups > 0) byId[m.menuId] = (byId[m.menuId] ?? 0) + cups
+    }
     const ids = Object.keys(byId).sort()
     if (ids.length) {
       const target = imp.hasTime ? dailyOrders : Math.round(ids.reduce((a, id) => a + byId[id], 0) / share)

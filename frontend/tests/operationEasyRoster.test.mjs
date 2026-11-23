@@ -386,3 +386,21 @@ test('결론 한 줄: 새로 뽑지 않고 더 배치하면 그렇다고 말한�
   assert.match(model.headline(rec, ['MON', 'TUE']), /더 배치하면 돼요 · 새로 뽑지 않고 지금 직원으로 채워요/)
 })
 
+
+test('CodeRabbit 반영: 사장님 시작이 끝보다 늦어지는 변경은 되돌리고 이유를 준다', () => {
+  const reply = { source: 'LLM', intent: 'EDIT', changes: [{ key: 'owner_start', value: '16:00' }], worker_changes: [], reply: '바꿨어요' }
+  const out = chat.applyReply(cond, reply, { open: '07:00', close: '19:00' })
+  assert.equal(out.changed, false)
+  assert.equal(out.next.team.ownerStart, '07:00')
+  assert.match(out.rejected, /시작\(16:00\)이 끝\(15:00\)보다/)
+  // 시작과 끝을 같이 옮기면 받는다
+  const both = chat.applyReply(cond, { ...reply, changes: [{ key: 'owner_start', value: '16:00' }, { key: 'owner_end', value: '19:00' }] }, { open: '07:00', close: '19:00' })
+  assert.equal(both.rejected, undefined)
+  assert.equal(both.next.team.ownerStart, '16:00')
+})
+
+test('CodeRabbit 반영: 가장 긴 대기는 요일 평균이 아니라 가장 긴 요일', () => {
+  const o = { peak_wait_sec: { MON: 100, TUE: 300 } }
+  assert.equal(model.worstPeak(o, ['MON', 'TUE']), 300)
+  assert.equal(model.averagePeak(o, ['MON', 'TUE']), 200)
+})

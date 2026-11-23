@@ -5,7 +5,7 @@ import { workflowApi } from '../../../api/workflowApi'
 import type { JsonObject } from '../../../types/workflow'
 import { Card, Pick } from '../../easy/views'
 import { blocking, formFromPlan } from '../roster/labModel'
-import { rosterDays, rosterWorkers } from '../roster/rosterRequest'
+import { rosterDays, rosterWorkers, skipReason } from '../roster/rosterRequest'
 import { optionsFromStored, rosterDigest } from '../roster/rosterTypes'
 import type { OptionKey, RosterOptions, RosterSummary, StoredRosterResult } from '../roster/rosterTypes'
 import { waitRoster } from '../roster/rosterJob'
@@ -106,6 +106,7 @@ export default function EasyRoster({
   const [legacy, setLegacy] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [progress, setProgress] = useState<RosterProgressData | null>(null) // 계산 중 끝난 요일
+  const [runDays, setRunDays] = useState<string[]>([]) // 이번 계산에 보낸 요일(진행 정보가 오기 전 목록용)
   const stopRef = useRef<{ stopped: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   // 새로 시작하면 먼저 데이터를 고른다(한 화면에 하나만 묻기). 이어서 열거나 다시 계산할 때는 건너뛴다.
@@ -117,7 +118,20 @@ export default function EasyRoster({
   const facts = restored?.facts ?? null
   const open = facts?.open ?? plan?.open ?? DEFAULT_OPEN
   const close = facts?.close ?? plan?.close ?? DEFAULT_CLOSE
-  const dataDays: Weekday[] = facts ? facts.days : plan ? WEEKDAYS.filter((w) => plan.weekdayDays[w]) : []
+  const daysWithData: Weekday[] = facts ? facts.days : plan ? WEEKDAYS.filter((w) => plan.weekdayDays[w]) : []
+  // 데이터는 있지만 계산할 수 없는 요일(주문 시간이 너무 짧음 등): 고르는 목록에서 빼고 조건 카드에 이유를 보여 준다.
+  const skippedDays = useMemo(
+    () =>
+      !imp || facts
+        ? []
+        : daysWithData
+            .map((day) => ({ day, reason: skipReason(planFrom(imp, day, null, {}, 1, aiTypes)) }))
+            .filter((s): s is { day: Weekday; reason: string } => s.reason !== null),
+    // daysWithData는 imp·facts에서 나온다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [imp, facts, aiTypes, daysWithData.join(',')],
+  )
+  const dataDays = daysWithData.filter((d) => !skippedDays.some((s) => s.day === d))
   // 근무표 범위: 'week' = 데이터가 있는 요일 전부, 요일 하나 = 그 요일 하루만(빠름). null이면 기본값(ROSTER_SCOPE_DEFAULT).
   const [scopePick, setScopePick] = useState<'week' | Weekday | null>(null)
   const busiestDataDay = useMemo<Weekday | null>(() => {
@@ -427,6 +441,7 @@ export default function EasyRoster({
       // 보낼 요일이 없으면 업무에 조건 버전을 남기기 전에 멈춘다(빈 버전이 쌓이지 않게).
       const body = rosterBody(c)
       if (!(body.days as JsonObject[]).length) throw new Error('근무표를 만들 요일 데이터가 없어요.')
+      setRunDays((body.days as JsonObject[]).map((d) => String(d.day)))
       if (form) await draftOperationInput(form)
       let sessionId = session
       if (!sessionId) {
@@ -434,6 +449,7 @@ export default function EasyRoster({
         const from = source ? source.label.replace(/\s*\(.*\)$/, '').replace(/^내 판매 내역$/, source.label.match(/\((.*)\)$/)?.[1] ?? '내 판매 내역') : ''
         const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', `[쉬운 화면] 추천 근무표${from ? ` · ${from}` : ''}`)
         sessionId = created.session_id
+        if (!mounted.current) return // 만드는 사이 화면을 떠났으면 부모 상태를 바꾸지 않는다
         setSession(sessionId)
         onSession(sessionId)
       }
@@ -559,8 +575,9 @@ export default function EasyRoster({
       const applied = applyReply(cond, reply, { open, close, nextId: maxPersonId.current + 1 })
       setChatText('')
       chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: reply.reply })
-      const shown = toNames(reply.reply, cond.team.people)
-      setChatReply({ text: shown, ok: applied.changed })
+      // 사장님 시간처럼 합쳐 보니 앞뒤가 안 맞아 되돌린 변경이 있으면 그 이유를 답장 대신 보여 준다.
+      const shown = applied.rejected ?? toNames(reply.reply, cond.team.people)
+      setChatReply({ text: shown, ok: applied.changed && !applied.rejected })
       if (applied.changed) {
         setCond(applied.next)
         setChangedRows(applied.rows)
@@ -663,7 +680,7 @@ export default function EasyRoster({
             <small className="er-running-note">창을 닫아도 계산은 계속돼요. "하던 일 이어하기"에서 다시 열 수 있어요.</small>
           </span>
         </div>
-        <RosterProgress progress={progress} />
+        <RosterProgress progress={progress} days={runDays} />
       </div>
     )
 
@@ -711,19 +728,6 @@ export default function EasyRoster({
     )
   }
 
-  // 조건 확인
-  if (!cond || (!plan && !facts))
-    return error ? (
-      <Card title="가게 데이터를 읽지 못했어요">
-        <p>{error}</p>
-      </Card>
-    ) : null
-  const row = (key: string) => (changedRows.includes(key) ? 'er-changed' : undefined)
-  const ownerText = cond.owner
-    ? `${cond.team.ownerDays.map((d) => WEEKDAY_LABEL[d]).join('·') || '근무 요일 없음'} · ${clock(cond.team.ownerStart)} ~ ${clock(cond.team.ownerEnd)}`
-    : '매장에서 일하지 않아요'
-  const withCurrent = (list: number[], v: number) => [...new Set([...list, v])].sort((a, b) => a - b)
-  const wageNumber = Number(cond.wage)
   // 파일 고르기 창(첫 단계와 고치기에서 같이 쓴다)
   const fileInput = (
     <input
@@ -789,6 +793,19 @@ export default function EasyRoster({
         {error && <p className="easy-error">{error}</p>}
       </Card>
     )
+  // 조건 확인
+  if (!cond || (!plan && !facts))
+    return error ? (
+      <Card title="가게 데이터를 읽지 못했어요">
+        <p>{error}</p>
+      </Card>
+    ) : null
+  const row = (key: string) => (changedRows.includes(key) ? 'er-changed' : undefined)
+  const ownerText = cond.owner
+    ? `${cond.team.ownerDays.map((d) => WEEKDAY_LABEL[d]).join('·') || '근무 요일 없음'} · ${clock(cond.team.ownerStart)} ~ ${clock(cond.team.ownerEnd)}`
+    : '매장에서 일하지 않아요'
+  const withCurrent = (list: number[], v: number) => [...new Set([...list, v])].sort((a, b) => a - b)
+  const wageNumber = Number(cond.wage)
   const sourceTag = facts ? '지난번 조건' : source?.label === MYSHOP_LABEL ? '마이샵' : source?.label.startsWith('내 판매 내역') ? '내 파일' : '예시'
   return (
     // 조건 카드와 아래 말로 고치기 칸을 한 묶음으로(따라 하며 배우기 3단계가 둘을 같이 비춘다)
@@ -862,7 +879,18 @@ export default function EasyRoster({
         </ul>
         {facts && <p className="easy-muted er-small">지난번에 저장한 조건과 직원 명단을 그대로 불러왔어요. 고친 뒤 다시 계산하면 같은 업무에 새로 저장돼요.</p>}
         {!facts && aiCount > 0 && <p className="easy-muted er-small">메뉴 이름만으로 모른 {aiCount}개는 AI가 음료 종류를 골랐어요.</p>}
+        {!facts && imp && imp.sameRows > 0 && (
+          <p className="easy-muted er-small">
+            파일에 날짜·시각·메뉴까지 똑같은 줄이 {imp.sameRows}건 있어요. 같은 분에 온 다른 손님일 수 있어 모두 셌어요. 같은 파일을 두 번
+            받으셨다면 확인해 주세요.
+          </p>
+        )}
         {stops.length > 0 && <p className="easy-error">{stops[0]}</p>}
+        {stops.length === 0 && skippedDays.length > 0 && (
+          <p className="easy-muted er-small" role="status">
+            이 요일은 빼고 계산해요: {skippedDays.map((s) => `${WEEKDAY_LABEL[s.day]}요일(${s.reason})`).join(', ')}
+          </p>
+        )}
         {editing && (
           <div className="easy-edit">
             {dataDays.length > 1 && (

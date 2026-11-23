@@ -294,8 +294,10 @@ export default function EasyPage() {
       const values = fill(kind, session.current_input ?? null)
       setFeature(kind)
       setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
-      if (kind === 'operation' && (await isRosterResult(session.latest_result_id, session.current_input ?? null))) {
-        if (token !== tokenRef.current) return
+      const roster = kind === 'operation' && (await isRosterResult(session.latest_result_id, session.current_input ?? null))
+      // 판별을 기다리는 사이 다른 업무를 열었으면(결과가 근무표든 아니든) 여기서 멈춘다.
+      if (token !== tokenRef.current) return
+      if (roster) {
         // 추천 근무표 업무: 조각이 결과(있으면)나 조건 확인을 열고 단계를 알려 준다.
         setRoster(true)
         setRosterOpened({ sessionId: id, resultId: session.latest_result_id })

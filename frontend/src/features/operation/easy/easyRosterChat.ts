@@ -113,7 +113,7 @@ export function applyReply(
   reply: RosterChatReply,
   /** nextId: 새 직원에게 줄 가장 작은 번호(화면이 지금까지 쓴 번호 + 1). 없으면 지금 명단 기준 */
   defaults: { open: string; close: string; nextId?: number },
-): { next: RosterConditions; rows: string[]; changed: boolean } {
+): { next: RosterConditions; rows: string[]; changed: boolean; rejected?: string } {
   let next = { ...c, team: { ...c.team } }
   const rows = new Set<string>()
   for (const { key, value } of reply.changes) {
@@ -131,6 +131,15 @@ export function applyReply(
     else if (key === 'owner_end' && typeof value === 'string') next.team.ownerEnd = value
     else continue
     if (ROW_OF[key]) rows.add(ROW_OF[key])
+  }
+  // 사장님 출근·퇴근을 하나씩 바꿔도 합친 결과의 시작이 끝보다 늦으면 받지 않고 원래 시간을 둔다.
+  let rejected: string | undefined
+  if (next.team.ownerStart >= next.team.ownerEnd && (next.team.ownerStart !== c.team.ownerStart || next.team.ownerEnd !== c.team.ownerEnd)) {
+    rejected = `사장님 근무 시간은 시작(${next.team.ownerStart})이 끝(${next.team.ownerEnd})보다 빨라야 해서 바꾸지 않았어요.`
+    next.team.ownerStart = c.team.ownerStart
+    next.team.ownerEnd = c.team.ownerEnd
+    const ownerStill = reply.changes.some((ch) => ch.key === 'owner_working' || ch.key === 'owner_days')
+    if (!ownerStill) rows.delete('owner')
   }
   let people = [...next.team.people]
   const byAlias = new Map(people.map((p) => [aliasOf(p), p.id]))
@@ -164,7 +173,7 @@ export function applyReply(
   }
   next = { ...next, team: { ...next.team, people } }
   const changed = rows.size > 0
-  return { next, rows: [...rows], changed }
+  return { next, rows: [...rows], changed, ...(rejected ? { rejected } : {}) }
 }
 
 /**

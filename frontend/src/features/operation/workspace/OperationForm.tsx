@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Alert, Icon, Modal } from '../../../components/common/Ui'
 import type { JsonObject } from '../../../types/workflow'
@@ -72,6 +72,12 @@ export default function OperationForm({
   const orders = form.store ? cupsTotal(form.store) : Number(form.dailyOrders) || 0
   const counts = slotCounts({ ...form, dailyOrders: String(orders) })
   const [storeError, setStoreError] = useState('')
+  // 가게 데이터 고르기 순번: 파일 읽기와 시연 데이터 중 마지막으로 고른 것만 폼에 넣는다.
+  const storeSeq = useRef(0)
+  const [reading, setReading] = useState(false)
+  const jsonRef = useRef<HTMLInputElement>(null)
+  // 가게 데이터에 시간대별 주문이 있으면 영업시간은 그 데이터로 정해져서 오픈·마감은 고를 수 없다.
+  const storeHours = Boolean(form.store?.orders_by_slot && Object.keys(form.store.orders_by_slot).length)
   const loadStore = (raw: unknown) => {
     try {
       const { store, openTime, closeTime } = parseStoreData(raw)
@@ -91,18 +97,28 @@ export default function OperationForm({
   }
   const readStoreFile = async (file: File | undefined) => {
     if (!file) return
+    const seq = ++storeSeq.current
+    setReading(true)
     try {
-      loadStore(JSON.parse(await file.text()))
+      const raw = JSON.parse(await file.text())
+      if (seq === storeSeq.current) loadStore(raw)
     } catch {
-      setStoreError('JSON 파일을 읽지 못했어요. 형식을 확인해 주세요.')
+      if (seq === storeSeq.current) setStoreError('JSON 파일을 읽지 못했어요. 형식을 확인해 주세요.')
+    } finally {
+      if (seq === storeSeq.current) setReading(false)
     }
+  }
+  const loadDemoStore = () => {
+    storeSeq.current++ // 읽는 중인 파일이 있으면 그 결과는 버린다
+    setReading(false)
+    loadStore(DEMO_STORE)
   }
   const menuName = (id: string) => MENUS.find((m) => m.menu_id === id)?.menu_name ?? id
   const weightSum = form.menuIds.reduce((s, id) => s + (Number(form.weights[id]) || 0), 0)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (problems.length) return
+    if (problems.length || reading) return
     setError('')
     setBuilding(true)
     try {
@@ -116,7 +132,8 @@ export default function OperationForm({
     }
   }
 
-  const locked = busy || building
+  // 파일을 읽는 동안에는 저장·닫기를 막는다(파일이 들어가기 전 조건이 저장되지 않게).
+  const locked = busy || building || reading
   return (
     <Modal
       title="운영 실험 조건 입력"
@@ -143,7 +160,7 @@ export default function OperationForm({
             <div className="form-grid">
               <label>
                 오픈
-                <select value={form.openTime} onChange={(e) => set({ openTime: e.target.value })}>
+                <select value={form.openTime} disabled={storeHours} onChange={(e) => set({ openTime: e.target.value })}>
                   <option value="">기본 ({DEFAULT_OPEN})</option>
                   {OPEN_TIMES.filter((t) => t !== DEFAULT_OPEN).map((t) => (
                     <option key={t} value={t}>
@@ -156,6 +173,7 @@ export default function OperationForm({
                 마감
                 <select
                   value={form.closeTime}
+                  disabled={storeHours}
                   onChange={(e) => {
                     const close = e.target.value || DEFAULT_CLOSE
                     set({
@@ -171,6 +189,7 @@ export default function OperationForm({
                     </option>
                   ))}
                 </select>
+                {storeHours && <small>가게 데이터의 영업시간({hoursText(hours)})이라 바꿀 수 없어요.</small>}
               </label>
             </div>
             <div className="form-grid">
@@ -215,21 +234,23 @@ export default function OperationForm({
                 </>
               ) : (
                 <>
-                  <button type="button" className="button secondary" onClick={() => loadStore(DEMO_STORE)}>
+                  <button type="button" className="button secondary" onClick={loadDemoStore}>
                     시연 데이터 넣기
                   </button>
-                  <label className="button secondary">
-                    JSON 불러오기
-                    <input
-                      type="file"
-                      accept="application/json,.json"
-                      hidden
-                      onChange={(e) => {
-                        void readStoreFile(e.target.files?.[0])
-                        e.target.value = ''
-                      }}
-                    />
-                  </label>
+                  {/* 키보드로도 열 수 있게 버튼이 숨긴 파일 칸을 연다 */}
+                  <button type="button" className="button secondary" onClick={() => jsonRef.current?.click()}>
+                    {reading ? '읽는 중…' : 'JSON 불러오기'}
+                  </button>
+                  <input
+                    ref={jsonRef}
+                    type="file"
+                    accept="application/json,.json"
+                    hidden
+                    onChange={(e) => {
+                      void readStoreFile(e.target.files?.[0])
+                      e.target.value = ''
+                    }}
+                  />
                 </>
               )}
               {storeError && (

@@ -24,6 +24,13 @@ export const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
 export const shownDays = (data: RosterOptions): Weekday[] => WEEKDAYS.filter((d) => d in data.days)
 
 /** 요일 평균 "바쁜 시간 가장 긴 대기". */
+/** 요일 가운데 가장 긴 대기(초). 화면의 "가장 긴 대기"는 평균이 아니라 이 값을 쓴다. */
+export function worstPeak(option: Option, days: Weekday[]): number | null {
+  const values = days.map((d) => option.peak_wait_sec[d]).filter((v): v is number => v != null)
+  return values.length ? Math.max(...values) : null
+}
+
+/** 요일별 가장 긴 대기의 평균(초). 두 근무표를 견줄 때만 쓴다. */
 export function averagePeak(option: Option, days: Weekday[]): number | null {
   const values = days.map((d) => option.peak_wait_sec[d]).filter((v): v is number => v != null)
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null

@@ -24,6 +24,10 @@ export function ownerWindow(
   return start < end ? { start, end } : null
 }
 
+/** 이 요일을 계산에서 빼야 하면 이유(영업시간이 없거나 문제가 있음), 계산할 수 있으면 null. */
+export const skipReason = (plan: StorePlan): string | null =>
+  !plan.open || !plan.close || plan.problems.length ? (plan.problems[0] ?? '시간대 데이터가 없어요.') : null
+
 /** 요일별 계산 본문. 데이터가 없거나 문제가 있는 요일은 skipped에 이유를 담는다. */
 export function rosterDays(
   weekdays: Weekday[],
@@ -36,8 +40,9 @@ export function rosterDays(
   const skipped: string[] = []
   for (const day of weekdays) {
     const plan = planFor(day)
-    if (!plan.open || !plan.close || plan.problems.length) {
-      skipped.push(`${WEEKDAY_LABEL[day]}요일: ${plan.problems[0] ?? '시간대 데이터가 없어요.'}`)
+    const reason = skipReason(plan)
+    if (reason || !plan.open || !plan.close) {
+      skipped.push(`${WEEKDAY_LABEL[day]}요일: ${reason}`)
       continue
     }
     const owner = ownerWindow(ownerWorking, team, day, plan.open, plan.close)

@@ -6,7 +6,7 @@ import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
 import DayTimeline from './DayTimeline'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won } from './easyRosterModel'
+import { busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won, worstPeak } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -59,7 +59,7 @@ export default function EasyRosterResult({
   const added = new Set(changed?.added ?? [])
   const hasExtra = rows.some((r) => r.cells.some((c) => c?.extra))
   const holes = unfilledCells(option, days)
-  const peak = averagePeak(option, days)
+  const peak = worstPeak(option, days)
   const recommended = data.options.find((o) => o.key === 'RECOMMENDED') ?? option
   const rules = option.days[days[0]]?.rules as { short_shift_hours?: number; long_shift_hours?: number } | undefined
   const warnings = (summary?.warnings ?? []).filter((w) => w.requires_ack && (w.choice_keys === null || w.choice_keys.includes(option.key)))
@@ -87,7 +87,7 @@ export default function EasyRosterResult({
         {explain && <Explain label={explain.ai ? 'AI 설명' : '요약'} text={explain.text} />}
       </section>
 
-      {day && bars.length > 1 && (
+      {day && (bars.length > 1 || days.length > 1) && (
         <section className="easy-card easy-noprint">
           <h2>사람을 늘리면 대기가 얼마나 줄까요?</h2>
           <p className="easy-muted">
@@ -97,6 +97,7 @@ export default function EasyRosterResult({
           {days.length > 1 && (
             <Pick label="요일" value={days.indexOf(day)} options={days.map((_, i) => i)} format={(i) => WEEKDAY_LABEL[days[i]]} onPick={(i) => setLadderDay(days[i])} />
           )}
+          {bars.length > 1 && (
           <div className="er-ladder" role="img" aria-label={bars.map((b) => `${b.label} ${waitText(b.sec)}`).join(', ')}>
             {bars.map((b) => (
               <div key={b.extra} className={`er-bar${b.pick === 'RECOMMENDED' ? ' pick' : ''}`}>
@@ -109,6 +110,7 @@ export default function EasyRosterResult({
               </div>
             ))}
           </div>
+          )}
           {resultId != null && (
             <RosterQueue key={`${day}:${option.key}`} resultId={resultId} day={day} windows={data.days[day].windows} chosen={option.key} repetitions={repetitionsOf(data)} />
           )}
@@ -218,7 +220,7 @@ export default function EasyRosterResult({
               {o.key === 'RECOMMENDED' && <span className="er-badge">추천</span>}
               <b>{OPTION_NAME[o.key]}</b>
               <span>가장 긴 대기</span>
-              <strong>{waitText(averagePeak(o, days))}</strong>
+              <strong>{waitText(worstPeak(o, days))}</strong>
               <span>{period.per} 인건비</span>
               <strong>{won(o.plan_cost_krw)}</strong>
               <span>직원 {o.weekly.people_used}명{o.shortfall.more_people_under_15h > 0 ? ` · ${o.shortfall.more_people_under_15h}명 더 필요` : ''}</span>

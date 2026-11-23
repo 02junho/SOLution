@@ -481,7 +481,8 @@ export function formFromInput(input: JsonObject | null): OperationFormValues {
   const menuIds = DEFAULT_FORM.menuIds
   // 가게 데이터가 있으면 메뉴·비중은 잔 수에서 오므로, 폼 칸은 기본값으로 둔다(가게 데이터를 빼면 이 값을 쓴다).
   const sameMenus = [...saved.menuIds].sort().join() === [...menuIds].sort().join()
-  const hasWeights = sameMenus && Object.values(saved.weights).every((w) => typeof w === 'number')
+  // 가게 데이터가 있으면 저장된 비중은 잔 수에서 온 값이라 되살리지 않는다(위 설명대로 기본값).
+  const hasWeights = !saved.store && sameMenus && Object.values(saved.weights).every((w) => typeof w === 'number')
   return {
     openTime: saved.openTime,
     closeTime: saved.closeTime,

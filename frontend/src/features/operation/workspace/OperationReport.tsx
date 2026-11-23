@@ -16,8 +16,6 @@ import {
   hours,
   minutes,
   percent,
-  pos,
-  span,
   won,
 } from './format'
 import { MENUS, SLOT_KEYS, hoursText, readOperationInput, rushText, slotLabel } from './operationInput'
@@ -173,6 +171,13 @@ function DaySchedule({ choice, detail, plan }: { choice: OperationPlan; detail: 
   const rows = groupByWorker(shifts)
   const hasBreak = shifts.some((s) => s.breaks.length > 0)
   const hasHelp = shifts.some((s) => s.task_code.includes('_HELP_'))
+  // 눈금과 막대가 같은 시간 범위를 쓴다: 기본 07~19시, 근무가 그 밖에 있으면 그만큼 넓힌다(가게 데이터 영업시간 05~23:30).
+  const times = shifts.flatMap((s) => [hourOf(s.start_time), hourOf(s.end_time)])
+  const lo = Math.min(7, Math.floor(Math.min(...times, 7)))
+  const hi = Math.max(19, Math.ceil(Math.max(...times, 19)))
+  const pos = (h: number) => `${((h - lo) / (hi - lo)) * 100}%`
+  const span = (start: number, end: number) => `${((end - start) / (hi - lo)) * 100}%`
+  const ticks = Array.from({ length: Math.floor((hi - lo) / 2) + 1 }, (_, i) => lo + i * 2)
   return (
     <section className="opw-card">
       <div className="section-heading">
@@ -183,7 +188,7 @@ function DaySchedule({ choice, detail, plan }: { choice: OperationPlan; detail: 
       {rows.length ? (
         <div className="opw-gantt">
           <div className="opw-axis">
-            {[7, 9, 11, 13, 15, 17, 19].map((h) => (
+            {ticks.map((h) => (
               <span key={h} style={{ left: pos(h) }}>
                 {String(h).padStart(2, '0')}
               </span>
@@ -404,7 +409,9 @@ function ReportSheet({
               <th>주문</th>
               <td>
                 {saved
-                  ? saved.slotOrders
+                  ? saved.store?.orders_by_slot
+                    ? `하루 ${saved.dailyOrders}건 (영업 ${hoursText(saved.hours)} · 가게 데이터의 시간대별 주문)`
+                    : saved.slotOrders
                     ? `하루 ${saved.dailyOrders}건 (${saved.slotOrders.map((n, i) => `${slotLabel(SLOT_KEYS[i])} ${n}건`).join(', ')} · 을지로입구 상권 비중)`
                     : `하루 ${saved.dailyOrders}건 (영업 ${hoursText(saved.hours)} · 을지로입구 상권 비중을 영업시간에 맞춰 나눔)`
                   : '—'}
@@ -414,7 +421,7 @@ function ReportSheet({
               <th>라스트 오더 / 바쁜 시간</th>
               <td>
                 {saved
-                  ? `${saved.chosenLastOrder ?? `기본 ${saved.lastOrderTime}`} / ${rushText(saved.rush)} (상권 데이터의 가장 바쁜 시간대. 서로 돕기·한 명 추가 적용, 휴게 피함)`
+                  ? `${saved.chosenLastOrder ?? `기본 ${saved.lastOrderTime}`} / ${rushText(saved.rush)} (${saved.store?.peak_start_time ? '가게 데이터' : '상권 데이터'}의 가장 바쁜 시간대. 서로 돕기·한 명 추가 적용, 휴게 피함)`
                   : '—'}
               </td>
             </tr>
