@@ -106,8 +106,8 @@ export function SaveBox({ lines, warnings, onSave, saved }: { lines: string[]; w
         <button type="button" className="easy-primary" disabled={!ready || busy} onClick={async () => {
           setBusy(true); setError('')
           try { await onSave(acks) } catch (cause) { setError(cause instanceof Error ? cause.message : '저장하지 못했어요. 다시 눌러 주세요.') } finally { setBusy(false) }
-        }}>{busy ? '저장하는 중…' : '저장'}</button>
-        <button type="button" className="easy-secondary" onClick={() => setOpen(false)}>취소</button>
+        }}>{busy ? '저장하는 중…' : '저장하기'}</button>
+        <button type="button" className="easy-secondary" onClick={() => setOpen(false)}>취소하기</button>
       </div>
     </div>
   )

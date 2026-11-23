@@ -11,6 +11,8 @@ export type TourStep = {
   body: string
   /** 사장님이 화면에서 직접 해야 넘어가는 단계면 true (다음 버튼 대신 안내) */
   waitsForAction: boolean
+  /** 'side'면 말풍선을 비춘 곳 옆(오른쪽 → 왼쪽)에 먼저 둔다. 단계마다 위·아래·옆으로 튀지 않게(추천 근무표). */
+  place?: 'side'
 }
 
 export const TOUR_TOTAL = 5
@@ -53,7 +55,7 @@ export function currentStep(phase: TourPhase, feature: EasyFeature | null, resul
       step: {
         key: 'input', target: 'input', waitsForAction: true,
         title: '하고 싶은 일을 적어 보세요',
-        body: '“점심에 줄이 길어요”처럼 평소 말투면 돼요. 다 적으면 "보내기"를 누르세요. 아래 카드를 눌러도 돼요.',
+        body: '“일주일 근무표 만들어 줘”처럼 평소 말투면 돼요. 다 적으면 "보내기"를 누르세요. 아래 카드를 눌러도 돼요.',
       },
     }
   }

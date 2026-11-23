@@ -81,6 +81,22 @@ public class RosterResultService {
 	private static String jobKey(long sessionId, String requestKey) {
 		return sessionId + ":" + requestKey;
 	}
+
+	/**
+	 * ai-server 진행 상황 키: 업무 번호 + 요청 키의 SHA-256 앞 32자(숫자·소문자·밑줄만).
+	 * 요청 키에는 ":"·"%" 같은 글자가 올 수 있는데, 조회 주소에 넣을 때 두 번 인코딩되면("%3A" → "%253A")
+	 * ai-server가 다른 키로 읽어 끝난 요일을 못 찾았다. 주소에 그대로 넣어도 되는 글자만 쓴다.
+	 */
+	static String progressKey(long sessionId, String requestKey) {
+		try {
+			byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+					.digest(requestKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			return sessionId + "_" + java.util.HexFormat.of().formatHex(hash).substring(0, 32);
+		}
+		catch (java.security.NoSuchAlgorithmException impossible) {
+			throw new IllegalStateException(impossible);
+		}
+	}
 	private final Executor executor;
 	private final CalculationRuns runs;
 
@@ -201,7 +217,7 @@ public class RosterResultService {
 		if (job != null && job.sessionId() == sessionId) {
 			ApiResponse<Map<String, Object>> current = state(job, requestKey);
 			if ("RUNNING".equals(job.state())) {
-				Map<String, Object> progress = rosters.rosterProgress(jobKey(sessionId, requestKey));
+				Map<String, Object> progress = rosters.rosterProgress(progressKey(sessionId, requestKey));
 				if (progress != null) {
 					current.data().put("progress", progress);
 				}
@@ -237,7 +253,7 @@ public class RosterResultService {
 		try (run) {
 			// 작업의 요청 키를 진행 상황 키로 같이 보낸다(상태 조회가 이 키로 끝난 요일을 꺼낸다).
 			Map<String, Object> request = new LinkedHashMap<>(body);
-			request.put("progress_key", jobKey(sessionId, key)); // 상태 조회와 같은 업무별 키
+			request.put("progress_key", progressKey(sessionId, key)); // 상태 조회와 같은 업무별 키(주소에 안전한 글자만)
 			Map<String, Object> options = rosters.rosterOptions(request).data();
 			run.requireActive();
 			save(sessionId, versionId, options, body, key);
