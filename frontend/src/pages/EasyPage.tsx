@@ -422,17 +422,31 @@ export default function EasyPage() {
     if (shown) say('owner', shown)
     setThinking(true); setChatError('')
     const screen = screenRef.current
+    // "고치기"로 바꾼 값이 아직 저장 전이면, 그 값을 먼저 저장하고 그 버전 기준으로 말을 보낸다(AI 응답이 고친 값을 덮지 않게).
+    const edited = !again && phase === 'confirm' && inputRef.current && !noInput && featureNow === kind ? { input: buildInput(kind), values: valuesNow } : null
     const job = prepRef.current.catch(() => undefined).then(async () => {
       if (screen !== screenRef.current) return
-      const resume = resumeRef.current
+      let resume = resumeRef.current
       if (!resume) throw new Error('업무를 아직 만들지 못했어요. "↺ 처음부터 다시"를 눌러 주세요.')
-      const request: Pending = again ?? { kind, sessionId: resume.sessionId, payload: { ...body, base_version_id: resume.versionId }, key: crypto.randomUUID() }
+      let payload = body
+      if (edited && resume.versionId !== null && resume.values !== edited.values) {
+        await saveInput(resume.sessionId, resume.versionId, edited.input, edited.values, screen, false)
+        if (screen !== screenRef.current) return
+        resume = resumeRef.current ?? resume
+        // 조건을 새로 저장하면 그 전 질문은 지난 질문이 된다. 답은 보통 말로 보낸다.
+        if (body.event_type === 'question_reply') {
+          payload = { event_type: 'message', content: String(body.answer ?? '') }
+          setQuestion(null)
+        }
+      }
+      const request: Pending = again ?? { kind, sessionId: resume.sessionId, payload: { ...payload, base_version_id: resume.versionId }, key: crypto.randomUUID() }
       setPending(request)
       try {
         const response = await workflowApi.event(request.sessionId, request.payload, request.key)
         if (screen !== screenRef.current) return
-        setPending(null)
         await apply(kind, resume.sessionId, outcome(response, resume.versionId), screen)
+        // 조건을 다시 읽는 데까지 끝난 뒤에 지운다. 그 전에 실패하면 "다시 보내기"로 같은 요청(같은 키)을 다시 보낸다.
+        if (screen === screenRef.current) setPending(null)
       } catch (cause) {
         // 서버가 받지 않은 요청(조건이 바뀜 등)은 다시 보내도 소용없다. 연결이 끊긴 것만 같은 키로 다시 보낸다.
         if (cause instanceof WorkflowError && cause.httpStatus && cause.httpStatus < 500) setPending(null)
@@ -513,7 +527,10 @@ export default function EasyPage() {
     const versionId = Number(data?.input_version_id)
     const versionNo = Number(data?.version_no)
     if (response.status !== 'ok' || !versionId) throw new Error(response.message || '조건을 저장하지 못했어요.')
-    if (screen === screenRef.current) resumeRef.current = { sessionId, versionId, versionNo, confirmed: false, values: valueKey }
+    if (screen === screenRef.current) {
+      resumeRef.current = { sessionId, versionId, versionNo, confirmed: false, values: valueKey }
+      inputRef.current = input // 저장한 조건이 지금 조건(계산 불가 제안도 이 조건에 적용한다)
+    }
     if (confirm) {
       await workflowApi.confirmInput(versionId, versionNo)
       if (screen === screenRef.current) resumeRef.current = { sessionId, versionId, versionNo, confirmed: true, values: valueKey }
@@ -793,7 +810,7 @@ export default function EasyPage() {
             )}
             {!purchaseReady && <p className="easy-note">예산과 배송 받는 횟수를 골라 주세요.</p>}
             <div className={`easy-cta${editing ? ' easy-cta-static' : ''}`}>
-              <button type="button" className="easy-primary" disabled={!purchaseReady} onClick={() => void calculate()}>구매안 계산하기</button>
+              <button type="button" className="easy-primary" disabled={!purchaseReady || thinking} onClick={() => void calculate()}>구매안 계산하기</button>
               {editing ? (
                 <>
                   <button type="button" className="easy-secondary" onClick={() => { setEditing(false); setSnapshot(null) }}>다 고쳤어요</button>
@@ -830,7 +847,7 @@ export default function EasyPage() {
               </div>
             )}
             <div className={`easy-cta${editing ? ' easy-cta-static' : ''}`}>
-              <button type="button" className="easy-primary" onClick={() => void calculate()}>배치표 만들기</button>
+              <button type="button" className="easy-primary" disabled={thinking} onClick={() => void calculate()}>배치표 만들기</button>
               {operationForm && (editing ? (
                 <>
                   <button type="button" className="easy-secondary" onClick={() => { setEditing(false); setSnapshot(null) }}>다 고쳤어요</button>

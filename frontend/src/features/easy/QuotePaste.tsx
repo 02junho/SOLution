@@ -6,6 +6,7 @@ import { quoteIntegrationApi } from '../../api/quoteIntegrationApi'
 import { dictionary, inventory, recipes, sales, sampleQuotes, upsertBatch } from '../purchase-preparation/quoteTestData'
 import type { Batch } from '../../types/quoteIntegration'
 
+const supplierNames = (batch: Batch) => [...new Set(batch.normalization.items.map((row) => row.supplier_name ?? '거래처 모름'))]
 const itemName = (id: string | null) => dictionary.items.find((item) => item.item_id === id)?.name ?? null
 const money = (value: unknown) => (typeof value === 'number' ? `${value.toLocaleString('ko-KR')}원` : typeof value === 'string' && value ? `${Number(value).toLocaleString('ko-KR')}원` : '가격 확인 필요')
 const size = (amount: unknown, unit: string | null) => {
@@ -54,8 +55,12 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
   }
   async function analyzeOne(name: string, body: string) {
     const batch = await api.analyze(body.trim(), name.trim(), true)
-    setBatches((list) => upsertBatch(list, batch))
+    // 같은 거래처 견적을 고쳐 다시 넣으면 예전 견적은 빼고 새 견적만 쓴다(옛 가격으로 계산되지 않게).
+    const mine = supplierNames(batch)
+    setBatches((list) => upsertBatch(list.filter((old) => old.quote_batch_id === batch.quote_batch_id || !supplierNames(old).some((n) => mine.includes(n))), batch))
   }
+  const removeSupplier = (name: string) =>
+    setBatches((list) => list.filter((batch) => !supplierNames(batch).includes(name)))
 
   return (
     <section className="easy-card easy-quote" aria-label="받은 견적 붙여넣기">
@@ -99,7 +104,8 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
           <h3>정리한 견적 · 거래처 {suppliers.length}곳</h3>
           {suppliers.map((name) => (
             <div key={name} className="easy-quote-supplier">
-              <b>{name}</b>
+              <b>{name}</b>{' '}
+              <button type="button" className="easy-text-button" disabled={!!busy} onClick={() => removeSupplier(name)}>이 거래처 빼기</button>
               <ul>
                 {rows.filter((row) => (row.supplier_name ?? '거래처 모름') === name).map((row) => {
                   const blocked = !row.item_id || row.issues.some((issue) => issue.blocks_comparison)
