@@ -19,6 +19,8 @@ export const ROSTER_SCOPE_DEFAULT: 'week' | 'day' = 'week'
 export async function isRosterResult(resultId: number | null | undefined, input: JsonObject | null): Promise<boolean> {
   if (resultId) {
     const response = await loadOperationResult(resultId, 'summary')
+    // 판별을 못 하면 일반 결과 화면으로 잘못 열지 않고 오류로 알린다(업무를 다시 열면 다시 판별한다).
+    if (response.status !== 'ok') throw new Error(response.message ?? '결과를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.')
     const summary = (response.data as { summary?: { result_kind?: string } } | null | undefined)?.summary
     return summary?.result_kind === 'ROSTER_OPTIONS'
   }

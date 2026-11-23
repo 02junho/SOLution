@@ -87,13 +87,16 @@ export default function EasyRosterResult({
         {explain && <Explain label={explain.ai ? 'AI 설명' : '요약'} text={explain.text} />}
       </section>
 
-      {day && (bars.length > 1 || days.length > 1) && (
+      {/* 막대 안내는 비교할 막대가 둘 이상일 때만, 요일 고르기와 줄 서는 모습은 막대 수와 상관없이 보여 준다 */}
+      {day && (bars.length > 1 || days.length > 1 || resultId != null) && (
         <section className="easy-card easy-noprint">
-          <h2>사람을 늘리면 대기가 얼마나 줄까요?</h2>
+          <h2>{bars.length > 1 ? '사람을 늘리면 대기가 얼마나 줄까요?' : '줄 서는 모습'}</h2>
+          {bars.length > 1 && (
           <p className="easy-muted">
             {WEEKDAY_LABEL[day]}요일 바쁜 시간({windows})에 가장 오래 기다리는 손님 기준이에요. 더 늘려도 {Math.round(data.min_gain_sec)}초 넘게 줄지
             않으면 거기서 멈추고 그 앞을 추천해요.
           </p>
+          )}
           {days.length > 1 && (
             <Pick label="요일" value={days.indexOf(day)} options={days.map((_, i) => i)} format={(i) => WEEKDAY_LABEL[days[i]]} onPick={(i) => setLadderDay(days[i])} />
           )}

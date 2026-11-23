@@ -149,6 +149,8 @@ export default function EasyPage() {
   // 점심 인원을 추천 근무표(2번)로 볼지. 새로 시작하면 주소(기본 2번, ?mode=lunch면 1번)로, 이어서 열면 결과 종류로 정한다.
   const [roster, setRoster] = useState(false)
   const [rosterOpened, setRosterOpened] = useState<RosterOpened | null>(null)
+  // 근무표를 고르기 전 사장님이 먼저 한 말: 근무표 화면의 말 칸에 채워 두고, 데이터를 고른 뒤 사장님이 보내게 한다(이름은 보낼 때 별칭으로 바뀜).
+  const [rosterWords, setRosterWords] = useState('')
   // 근무표 화면 안의 한 단계 뒤로(조건 확인 → 데이터 고르기). 있으면 "← 이전" 줄이 이걸 쓴다.
   const [rosterBack, setRosterBack] = useState<{ label: string; run: () => void } | null>(null)
   const [rosterStage, setRosterStage] = useState<RosterStage>(null) // 따라 하며 배우기: 데이터 고르기/조건 확인
@@ -415,6 +417,7 @@ export default function EasyPage() {
     const rosterOn = next === 'operation' && ROSTER_MODE
     setRoster(rosterOn)
     if (rosterOn) {
+      setRosterWords(words?.trim() ?? '')
       setBase(NEW_OPERATION)
       setPhase('confirm')
       say('agent', '일주일 근무표를 짜 볼게요.')
@@ -889,6 +892,7 @@ export default function EasyPage() {
           <Suspense fallback={null}>
             <EasyRoster
               key={screenNo}
+              firstWords={rosterWords}
               phase={phase}
               onPhase={setPhase}
               opened={rosterOpened}

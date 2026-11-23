@@ -57,6 +57,7 @@ const WARM_RETRIES = 9
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback)
 
 export default function EasyRoster({
+  firstWords = '',
   phase,
   onPhase,
   onSession,
@@ -69,6 +70,8 @@ export default function EasyRoster({
   /** 업무를 만들면 알린다(쉬운 화면이 주소를 이 업무로 바꿔 새로 고쳐도 다시 열리게). */
   onSession: (sessionId: number) => void
   opened?: RosterOpened | null
+  /** 근무표를 고르기 전에 사장님이 먼저 한 말. 말 칸에 채워 두기만 하고 바로 보내지 않는다(데이터를 고른 뒤 보냄). */
+  firstWords?: string
   /** 위 "← 이전" 줄을 이 화면 안의 한 단계(조건 확인 → 데이터 고르기)로 바꿀 때 알린다. null이면 쉬운 화면 기본. */
   onBack?: (back: { label: string; run: () => void } | null) => void
   /** 따라 하며 배우기가 데이터 고르기/조건 확인 중 어느 단계인지 알게 한다. */
@@ -83,7 +86,7 @@ export default function EasyRoster({
   const [editing, setEditing] = useState(false)
   const [showTeam, setShowTeam] = useState(false) // 조건 카드: 직원별 일할 수 있는 요일·시간 펼치기
   const [changedRows, setChangedRows] = useState<string[]>([])
-  const [chatText, setChatText] = useState('')
+  const [chatText, setChatText] = useState(firstWords)
   const [chatBusy, setChatBusy] = useState(false)
   /** 지금 조건(채팅 답을 기다리는 동안 사장님이 고쳤는지 보려고). */
   const condNow = useRef<RosterConditions | null>(null)
@@ -575,9 +578,11 @@ export default function EasyRoster({
       const applied = applyReply(cond, reply, { open, close, nextId: maxPersonId.current + 1 })
       setChatText('')
       chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: reply.reply })
-      // 사장님 시간처럼 합쳐 보니 앞뒤가 안 맞아 되돌린 변경이 있으면 그 이유를 답장 대신 보여 준다.
-      const shown = applied.rejected ?? toNames(reply.reply, cond.team.people)
-      setChatReply({ text: shown, ok: applied.changed && !applied.rejected })
+      // 사장님 시간처럼 합쳐 보니 앞뒤가 안 맞아 되돌린 변경이 있으면 그 이유를 보여 준다.
+      // 다른 변경은 반영됐으면(부분 반영) 답장과 이유를 같이, 모두 되돌렸으면 이유만.
+      const answer = toNames(reply.reply, cond.team.people)
+      const shown = applied.rejected ? (applied.changed ? `${answer} 단, ${applied.rejected}` : applied.rejected) : answer
+      setChatReply({ text: shown, ok: applied.changed })
       if (applied.changed) {
         setCond(applied.next)
         setChangedRows(applied.rows)
