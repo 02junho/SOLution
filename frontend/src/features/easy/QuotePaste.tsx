@@ -56,11 +56,13 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
   async function analyzeOne(name: string, body: string) {
     // 이름 칸이 비면 서버가 이름 없는 줄을 "거래처"로 채운다(거래처 없는 줄은 계산에서 빠지므로).
     const typed = name.trim()
-    const batch = await api.analyze(body.trim(), typed || '거래처', true)
-    // 한 번에 한 거래처씩 받는다. 여러 거래처가 섞이면 한 곳만 고치거나 뺄 수 없어서다.
-    // 이름을 안 적어 채운 "거래처"·"거래처 모름"은 따로 세지 않고, 서로 다른 이름이 둘 이상일 때만 막는다.
-    const named = supplierNames(batch).filter((n) => n !== '거래처 모름' && (typed !== '' || n !== '거래처'))
-    if (named.length > 1) throw new Error(`한 번에 한 거래처 견적만 넣어 주세요. 이 문자에는 ${named.join(', ')}가 함께 있어요.`)
+    const named = (b: Batch) => supplierNames(b).filter((n) => n !== '거래처 모름' && (typed !== '' || n !== '거래처'))
+    let batch = await api.analyze(body.trim(), typed || '거래처', true)
+    // 이름 칸을 비웠는데 일부 줄에만 거래처 이름(A)이 있으면, A 이름으로 한 번 더 정리해 모든 줄을 A로 맞춘다.
+    // (A 줄과 "거래처" 줄이 섞이면 한쪽을 빼거나 바꿀 때 다른 쪽 줄까지 지워진다.)
+    if (!typed && named(batch).length === 1 && supplierNames(batch).length > 1) batch = await api.analyze(body.trim(), named(batch)[0], true)
+    // 한 번에 한 거래처씩 받는다. 견적 하나에 거래처 이름이 하나여야 한 곳만 고치거나 뺄 수 있다.
+    if (supplierNames(batch).length > 1) throw new Error(`한 번에 한 거래처 견적만 넣어 주세요. 이 문자에는 ${supplierNames(batch).join(', ')}가 함께 있어요.`)
     // 같은 거래처 견적을 고쳐 다시 넣으면 예전 견적은 빼고 새 견적만 쓴다(옛 가격으로 계산되지 않게).
     const mine = supplierNames(batch)
     setBatches((list) => upsertBatch(list.filter((old) => old.quote_batch_id === batch.quote_batch_id || !supplierNames(old).some((n) => mine.includes(n))), batch))
