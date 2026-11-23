@@ -33,6 +33,10 @@ services:
     environment:
       DB_HOST: db
       POSTGRES_PORT: 5432
+      # 임베딩 모델(KURE-v1, 2GB 넘음)을 볼륨에 둔다. 재시작·배포 때 Hugging Face에서 다시 받지 않는다.
+      HF_HOME: /models/huggingface
+    volumes:
+      - model-cache:/models
     depends_on:
       db:
         condition: service_healthy
@@ -65,3 +69,4 @@ services:
 
 volumes:
   db-data:
+  model-cache:
