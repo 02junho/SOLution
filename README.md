@@ -241,7 +241,7 @@ GHCR 패키지는 비공개로 둡니다. 서버는 배포할 때만 그 작업�
 
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다. `-v`는 임베딩 모델을 둔 `model-cache` 볼륨도 지워서 다음에 뜰 때 모델(2GB 넘음)을 다시 받습니다. 시연 데이터만 지우려면 `down` 뒤 `docker volume rm solution_db-data`만 하고 `up -d` 합니다.
 
-**임베딩 모델**: AI 서버는 뜰 때 KURE-v1을 불러와야 준비 완료가 됩니다. 모델은 `model-cache` 볼륨(`HF_HOME=/models/huggingface`)에 두므로 처음 한 번만 Hugging Face에서 받고, 그 뒤 재시작·배포 때는 다시 받지 않습니다. torch는 CPU 전용으로 설치합니다(`ai-server/requirements.txt`). GPU용을 받으면 AI 서버 이미지가 10GB를 넘습니다.
+**임베딩 모델**: `RAG_AUTO_INDEX`가 켜져 있으면(기본값 `true`) AI 서버는 뜰 때 KURE-v1을 불러와야 준비 완료가 됩니다. `false`면 뜰 때 모델을 불러오지 않고 처음 검색할 때 불러옵니다. 모델은 `model-cache` 볼륨(`HF_HOME=/models/huggingface`)에 두므로 처음 한 번만 Hugging Face에서 받고, 그 뒤 재시작·배포 때는 다시 받지 않습니다. torch는 CPU 전용으로 설치합니다(`ai-server/requirements.txt`). GPU용을 받으면 AI 서버 이미지가 10GB를 넘습니다.
 
 ---
 

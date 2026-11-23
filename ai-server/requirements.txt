@@ -24,8 +24,9 @@ simpy==4.1.2    # 운영 시뮬레이션
 # RAG
 # 서버에는 GPU가 없으니 CPU 전용 torch만 받는다. 그냥 두면 sentence-transformers가 GPU용 torch와
 # CUDA 라이브러리까지 끌고 와서 AI 서버 이미지가 10GB가 넘는다(CPU용이면 수백 MB).
-# macOS용 torch는 원래 CUDA가 없어서 PyPI 것을 그대로 쓴다.
+# macOS용 torch는 원래 CUDA가 없어서 PyPI 것을 그대로 쓴다. 2.12부터는 macOS 14 이상용만 있어서
+# 범위로 둔다: macOS 14 이상은 2.15.0, macOS 13은 2.11.0이 깔린다.
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.15.0+cpu ; sys_platform == "linux" or sys_platform == "win32"
-torch==2.15.0 ; sys_platform == "darwin"
+torch>=2.11,<=2.15.0 ; sys_platform == "darwin"
 sentence-transformers==6.3.0
