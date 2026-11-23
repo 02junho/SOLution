@@ -7,13 +7,20 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import { loadOperationResult, runOperation } from '../api/operationApi'
-import { workflowApi } from '../api/workflowApi'
+import { workflowApi, WorkflowError } from '../api/workflowApi'
 import { Modal } from '../components/common/Ui'
 import { backOf } from '../features/easy/back'
 import type { BackAction } from '../features/easy/back'
 import { parseHash, routeHash } from '../features/easy/hashRoute'
 import type { EasyRoute } from '../features/easy/hashRoute'
+import { changeSentence, chatBubbles, openQuestion, outcome, questionChoices } from '../features/easy/agent'
+import type { Outcome } from '../features/easy/agent'
+import { itemFacts, needLine } from '../features/easy/amounts'
+import { applyChanges, changeText, usable } from '../features/easy/suggest'
+import type { Suggested } from '../features/easy/suggest'
+import Explain from '../features/easy/Explain'
 import { PlanList, SessionList } from '../features/easy/Lists'
+import QuotePaste from '../features/easy/QuotePaste'
 import { OPERATION_FORM, PURCHASE_INPUT } from '../features/easy/practiceStore'
 import Recent from '../features/easy/Recent'
 import { CHOICE, cleanTitle, featureTag, when } from '../features/easy/recentFormat'
@@ -30,7 +37,7 @@ import type { RosterOpened } from '../features/operation/easy/EasyRoster'
 import type { OperationResult } from '../features/operation/types'
 import { won } from '../features/operation/workspace/format'
 import type { OperationPlan } from '../types/api'
-import type { JsonObject, PurchaseResult } from '../types/workflow'
+import type { EventData, JsonObject, PurchaseResult } from '../types/workflow'
 import '../features/easy/easy.css'
 
 // 점심 인원 2번(추천 근무표). 고를 때만 불러온다(가게 파일 읽기 도구가 커서 첫 화면 번들에 넣지 않는다).
@@ -82,6 +89,12 @@ const toMinutes = (value: unknown) => {
 const toHHMM = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 const lastOrderLabel = (minutes: number) => `오후 ${Math.floor(minutes / 60) - 12}시${minutes % 60 ? ` ${minutes % 60}분` : ''}`
 const LARGE_KEY = 'solution.easy.large'
+// 업무를 만드는 매장. 예전 업무 화면·견적 화면과 같은 값을 쓴다.
+const STORE_ID = Number(import.meta.env.VITE_STORE_ID ?? 1)
+/** 아직 응답을 못 받은 말·답. 연결이 끊겼을 때 같은 요청 키로 다시 보내 중복 저장을 막는다. */
+type Pending = { kind: EasyFeature; sessionId: number; payload: JsonObject; key: string }
+/** 화면 상태에 그려지기 전의 최신 조건(AI가 방금 바꾼 값 등)으로 계산할 때 */
+type Fresh = { kind: EasyFeature; input: JsonObject; values: string; changed?: boolean }
 
 const asNumber = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 const asObject = (value: unknown): JsonObject | null => (value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : null)
@@ -158,6 +171,19 @@ export default function EasyPage() {
   const screenRef = useRef(0)
   // 지금 보이는 결과의 result_id. 늦게 끝난 저장 응답이 다른 결과에 "저장했어요"를 붙이지 않게 비교한다.
   const shownResultRef = useRef<number | null>(null)
+  // AI 대화: 답을 기다리는 서버 질문, AI가 읽는 중인지, 다시 보낼 말, 조건이 아직 없는 업무(견적에서 못 읽은 값 등)
+  const [question, setQuestion] = useState<EventData | null>(null)
+  const [thinking, setThinking] = useState(false)
+  const [pending, setPending] = useState<Pending | null>(null)
+  const [chatError, setChatError] = useState('')
+  const [reply, setReply] = useState('')
+  const [noInput, setNoInput] = useState(false)
+  const [quoteOpen, setQuoteOpen] = useState(false)
+  // 장보기 계산이 안 됐을 때 서버가 준 바꿀 값 제안(칸·값)과 문장 제안
+  const [blocked, setBlocked] = useState<{ changes: Suggested[]; tips: string[] } | null>(null)
+  // 지금 조건(서버 입력)과, 업무 종류를 못 정해서 되물을 때 사장님이 처음 한 말
+  const inputRef = useRef<JsonObject | null>(null)
+  const firstWordsRef = useRef<string | null>(null)
 
   // 대화 중에는 마지막 말이 보이게, 결과가 나오면 추천 문장부터 보이게(스크롤하지 않아도 결론이 보이도록).
   useEffect(() => {
@@ -215,6 +241,8 @@ export default function EasyPage() {
     setWage(OPERATION_FORM.hourly_wage_krw); setLastOrder(DEFAULT_LAST_ORDER)
     resumeRef.current = null; setContext(null); setPrepared(null); setRoster(false); setRosterOpened(null); setPurchase(null); setOperation(null); setSaved(''); setSavedFor(null); setSavedChoice(null)
     shownResultRef.current = null
+    setQuestion(null); setThinking(false); setPending(null); setChatError(''); setReply(''); setNoInput(false); setQuoteOpen(false); setBlocked(null)
+    inputRef.current = null; firstWordsRef.current = null
   }
 
   /** 저장이 끝났을 때: 저장을 누른 화면(screen)에서 같은 결과가 아직 보이고 있을 때만 "저장했어요"로 바꾼다.
@@ -250,9 +278,19 @@ export default function EasyPage() {
   })
   const restart = () => go({ kind: 'home' })
 
-  /** 업무에 저장된 조건으로 확인 카드를 채운다. */
-  function fill(kind: EasyFeature, input: JsonObject | null) {
-    const value = input ?? (kind === 'purchase' ? PURCHASE_INPUT : NEW_OPERATION)
+  /** 메뉴 "받은 견적 넣기": 장보기를 새로 시작하고 견적 붙여넣기를 바로 연다(거래처 견적 → 장보기 순서). */
+  function startQuote() {
+    window.history.replaceState(null, '', routeHash({ kind: 'home' }))
+    open({ kind: 'home' })
+    say('owner', '받은 견적으로 장보기')
+    begin('purchase')
+    setQuoteOpen(true)
+  }
+
+  /** 업무에 저장된 조건(새 업무면 연습 가게 값)으로 확인 카드를 채운다. 돌려주는 값은 저장 비교용 묶음. */
+  function fill(kind: EasyFeature, value: JsonObject) {
+    inputRef.current = value
+    setNoInput(false)
     setBase(value)
     if (kind === 'purchase') {
       const nextBudget = asNumber(value.budget_krw)
@@ -291,16 +329,25 @@ export default function EasyPage() {
       if (token !== tokenRef.current) return
       if (session.feature_type !== 'purchase' && session.feature_type !== 'operation') throw new Error('쉬운 화면에서 열 수 없는 업무예요.')
       const kind: EasyFeature = session.feature_type
-      const values = fill(kind, session.current_input ?? null)
-      setFeature(kind)
-      setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
       if (kind === 'operation' && (await isRosterResult(session.latest_result_id, session.current_input ?? null))) {
         if (token !== tokenRef.current) return
-        // 추천 근무표 업무: 조각이 결과(있으면)나 조건 확인을 열고 단계를 알려 준다.
+        // 추천 근무표 업무: 조각(EasyRoster)이 결과(있으면)나 조건 확인을 열고 단계를 알려 준다. 대화 기록·빠진 값 카드는 쓰지 않는다.
+        if (session.current_input) fill(kind, session.current_input)
+        setFeature(kind)
+        setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
         setRoster(true)
         setRosterOpened({ sessionId: id, resultId: session.latest_result_id })
         return
       }
+      const messages = await workflowApi.allMessages(id)
+      if (token !== tokenRef.current) return
+      // 조건이 아직 없는 업무(견적에서 못 읽은 값을 묻는 중 등)는 연습 가게 값으로 채우지 않는다. 질문에 답해서 채운다.
+      const values = session.current_input ? fill(kind, session.current_input) : ''
+      if (!session.current_input) { inputRef.current = null; setBase({}); setNoInput(true) }
+      setBubbles(chatBubbles(messages))
+      setQuestion(openQuestion(messages, session.current_version_id))
+      setFeature(kind)
+      setContext({ kind: 'session', feature: kind, title: cleanTitle(session.title), sessionId: id })
       resumeRef.current = { sessionId: id, versionId: session.current_version_id, versionNo: session.current_version, confirmed: session.input_confirmed, values }
       if (session.latest_result_id) {
         const result = await loadResult(kind, session.latest_result_id)
@@ -358,14 +405,41 @@ export default function EasyPage() {
     }
   }
 
-  function begin(next: EasyFeature) {
+  /** 새 업무 시작: 연습 가게 값으로 업무를 바로 만들어 두고, 사장님이 한 말은 AI에게 보낸다(말 속 조건이 있으면 바로 반영). */
+  function begin(next: EasyFeature, words?: string | null) {
+    const practice = next === 'purchase' ? PURCHASE_INPUT : NEW_OPERATION
     setFeature(next)
-    setRoster(next === 'operation' && ROSTER_MODE)
-    setBase(next === 'purchase' ? PURCHASE_INPUT : NEW_OPERATION)
+    // 직원 근무표(2번)는 EasyRoster가 업무 만들기·조건·말로 고치기를 맡는다. 여기서는 업무를 만들거나 AI에 보내지 않는다.
+    const rosterOn = next === 'operation' && ROSTER_MODE
+    setRoster(rosterOn)
+    if (rosterOn) {
+      setBase(NEW_OPERATION)
+      setPhase('confirm')
+      say('agent', '일주일 근무표를 짜 볼게요.')
+      return
+    }
+    const values = fill(next, practice)
     setPhase('confirm')
     say('agent', next === 'purchase'
-      ? '이번 주 장보기 계획을 세워 볼게요.'
-      : ROSTER_MODE ? '일주일 근무표를 짜 볼게요.' : '점심 인원 배치를 돌려 볼게요.')
+      ? '이번 주 장보기 계획을 세워 볼게요. 바꿀 조건이 있으면 말로 알려 주세요.'
+      : '점심 인원 배치를 돌려 볼게요. 바꿀 조건이 있으면 말로 알려 주세요.')
+    const screen = screenRef.current
+    const job = prepRef.current.catch(() => undefined).then(async () => {
+      if (screen !== screenRef.current) throw new Error('다른 화면으로 옮겼어요.')
+      const created = await workflowApi.create(STORE_ID, next, 'agent', next === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
+      if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
+      const saved = await saveInput(created.session_id, null, practice, values, screen, false)
+      if (screen !== screenRef.current) return
+      // 주소도 이 업무로 바꿔, 새로 고쳐도 같은 업무가 다시 열리게 한다.
+      window.history.replaceState(null, '', routeHash({ kind: 'session', id: created.session_id }))
+      setRoute({ kind: 'session', id: created.session_id })
+      setStartedHere(true)
+      return saved
+    })
+    prepRef.current = job
+    job.catch((cause) => { if (screen === screenRef.current) setChatError(cause instanceof Error ? cause.message : '업무를 만들지 못했어요.') })
+    // 따라 하며 배우기 중에는 안내 순서가 흐트러지지 않게 AI에게 보내지 않는다.
+    if (words && !tourOn) talk(next, { event_type: 'message', content: words }, null)
   }
 
   function send(value: string) {
@@ -374,11 +448,113 @@ export default function EasyPage() {
     say('owner', words)
     setText('')
     const guessed = guessFeature(words)
-    if (guessed) begin(guessed)
+    if (guessed) begin(guessed, words)
     else {
+      firstWordsRef.current = words
       setPhase('ask')
       say('agent', '어떤 일을 도와드릴까요?')
     }
+  }
+
+  /** 확인 카드에 보이는 값들. 무엇이 바뀌었는지 한 문장으로 알려 줄 때 쓴다. */
+  function facts(kind: EasyFeature, input: JsonObject | null): Record<string, string> {
+    if (!input) return {}
+    if (kind === 'purchase') {
+      const b = asNumber(input.budget_krw)
+      const d = asNumber(input.max_delivery_count)
+      return { '예산': b === null ? '정하지 않음' : won(b), '배송 횟수': d === null ? '정하지 않음' : `${d}번까지`, '계획 기간': `${asNumber(input.planning_days) ?? 7}일`, ...itemFacts(input.items) }
+    }
+    const form = asObject(input.operation_form) ?? {}
+    return {
+      '하루 주문': `${asNumber(form.daily_orders) ?? OPERATION_FORM.daily_orders}건`,
+      '사장님 근무': form.is_owner_working === false ? '안 함' : '함',
+      '직원 시급': won(asNumber(form.hourly_wage_krw) ?? OPERATION_FORM.hourly_wage_krw),
+      '라스트 오더': lastOrderLabel(toMinutes(form.last_order_time) ?? DEFAULT_LAST_ORDER),
+    }
+  }
+
+  /** 말·질문 답을 AI에게 보낸다. 업무 만들기·조건 저장 줄 뒤에 서서, 앞 요청이 끝난 최신 입력 버전 기준으로 보낸다. */
+  function talk(kind: EasyFeature, body: JsonObject, shown: string | null, again?: Pending) {
+    if (shown) say('owner', shown)
+    setThinking(true); setChatError('')
+    const screen = screenRef.current
+    // "고치기"로 바꾼 값이 아직 저장 전이면, 그 값을 먼저 저장하고 그 버전 기준으로 말을 보낸다(AI 응답이 고친 값을 덮지 않게).
+    const edited = !again && phase === 'confirm' && inputRef.current && !noInput && featureNow === kind ? { input: buildInput(kind), values: valuesNow } : null
+    const job = prepRef.current.catch(() => undefined).then(async () => {
+      if (screen !== screenRef.current) return
+      let resume = resumeRef.current
+      if (!resume) throw new Error('업무를 아직 만들지 못했어요. "↺ 처음부터 다시"를 눌러 주세요.')
+      let payload = body
+      if (edited && resume.versionId !== null && resume.values !== edited.values) {
+        await saveInput(resume.sessionId, resume.versionId, edited.input, edited.values, screen, false)
+        if (screen !== screenRef.current) return
+        resume = resumeRef.current ?? resume
+        // 조건을 새로 저장하면 그 전 질문은 지난 질문이 된다. 답은 보통 말로 보낸다.
+        if (body.event_type === 'question_reply') {
+          payload = { event_type: 'message', content: String(body.answer ?? '') }
+          setQuestion(null)
+        }
+      }
+      const request: Pending = again ?? { kind, sessionId: resume.sessionId, payload: { ...payload, base_version_id: resume.versionId }, key: crypto.randomUUID() }
+      setPending(request)
+      try {
+        const response = await workflowApi.event(request.sessionId, request.payload, request.key)
+        if (screen !== screenRef.current) return
+        await apply(kind, resume.sessionId, outcome(response, resume.versionId), screen)
+        // 조건을 다시 읽는 데까지 끝난 뒤에 지운다. 그 전에 실패하면 "다시 보내기"로 같은 요청(같은 키)을 다시 보낸다.
+        if (screen === screenRef.current) setPending(null)
+      } catch (cause) {
+        // 서버가 받지 않은 요청(조건이 바뀜 등)은 다시 보내도 소용없다. 연결이 끊긴 것만 같은 키로 다시 보낸다.
+        if (cause instanceof WorkflowError && cause.httpStatus && cause.httpStatus < 500) setPending(null)
+        throw cause
+      }
+    })
+    prepRef.current = job
+    job.catch((cause) => {
+      if (screen !== screenRef.current) return
+      setChatError(cause instanceof WorkflowError && cause.code === 'STALE_INPUT'
+        ? '그사이 조건이 바뀌었어요. 화면을 새로 열고 다시 말씀해 주세요.'
+        : cause instanceof Error ? cause.message : 'AI에게 보내지 못했어요.')
+    }).finally(() => { if (screen === screenRef.current) setThinking(false) })
+  }
+
+  async function apply(kind: EasyFeature, sessionId: number, out: Outcome, screen: number) {
+    if (out.kind === 'question') { setQuestion(out.question); say('agent', out.message || '조금 더 알려 주세요.'); return }
+    setQuestion(null)
+    if (out.kind === 'use-form') { say('agent', out.message); if (inputRef.current) openEdit(); return }
+    if (out.kind === 'refused') { say('agent', [out.message, ...out.suggestions].join(' ')); return }
+    if (out.kind === 'same') {
+      say('agent', out.message)
+      if (out.run && inputRef.current && resumeRef.current) void calculate({ kind, input: inputRef.current, values: resumeRef.current.values })
+      return
+    }
+    // 조건이 바뀜: 서버에 저장된 새 조건을 다시 읽어 확인 카드에 반영한다(아직 확인 전).
+    const session = await workflowApi.context(sessionId)
+    if (screen !== screenRef.current || !session.current_input) return
+    const before = facts(kind, inputRef.current)
+    const values = fill(kind, session.current_input)
+    resumeRef.current = { sessionId, versionId: out.versionId, versionNo: out.versionNo, confirmed: false, values }
+    const after = facts(kind, session.current_input)
+    // 조건이 없던 업무(빠진 값을 답한 경우)는 채운 값을, 있던 업무는 바뀐 값만 알려 준다.
+    // 바뀐 값은 사장님이 먼저 보고 계산한다(운영 AI 규칙: 값을 바꾼 말은 계산까지 바로 하지 않음).
+    const next = kind === 'purchase' ? '맞으면 "구매안 계산하기"를 눌러 주세요.' : '맞으면 "배치표 만들기"를 누르거나 "비교해 줘"라고 말해 주세요.'
+    // 채운 값은 큰 조건만(품목별 양까지 다 늘어놓으면 길다). 품목별 양은 카드의 "이번 주 쓸 양"에 보인다.
+    const filled = Object.entries(after).filter(([label]) => !label.endsWith(' 쓸 양') && !label.endsWith(' 재고'))
+    const said = Object.keys(before).length
+      ? changeSentence(before, after) || '말씀하신 대로 조건을 바꿨어요.'
+      : `조건을 채웠어요. ${filled.map(([label, value]) => `${label} ${value}`).join(' · ')}`
+    say('agent', `${said}${/[.요]$/.test(said) ? '' : '.'} ${next}`)
+    setEditing(false); setSnapshot(null)
+    // "비교해 줘"처럼 계산까지 부탁한 말이면, 방금 바뀐 조건(아직 화면에 그려지기 전)으로 바로 계산한다.
+    if (out.run) void calculate({ kind, input: session.current_input, values })
+  }
+
+  function sendReply(value: string) {
+    const words = value.trim()
+    if (!words || !feature || thinking) return
+    setReply('')
+    if (question?.question_id) talk(feature, { event_type: 'question_reply', question_id: question.question_id, answer: words }, words)
+    else talk(feature, { event_type: 'message', content: words }, words)
   }
 
   function submit(event: FormEvent) {
@@ -388,6 +564,9 @@ export default function EasyPage() {
 
   const operationForm = asObject(base.operation_form)
   const values = valuesKey(budget, deliveries, dailyOrders, ownerWorking, wage, lastOrder)
+  // ready·calculate 안에서 같은 이름(values·feature)을 덮어 쓰기 전에, 지금 화면 값을 따로 둔다.
+  const valuesNow = values
+  const featureNow = feature
 
   function buildInput(kind: EasyFeature): JsonObject {
     if (kind === 'purchase') return { ...base, budget_krw: budget, max_delivery_count: deliveries }
@@ -398,37 +577,58 @@ export default function EasyPage() {
   // 조건을 새 버전으로 저장하고 입력 확인까지 마친다.
   // 저장(이벤트)은 서버에 먼저 남으므로, 확인이 실패해도 다시 시도할 때 이 새 버전부터 이어 가게 바로 기록해 둔다.
   // (옛 버전을 base로 다시 보내면 서버가 STALE로 거부한다.) 계산을 멈췄어도 같은 화면이면 기록하고, 다른 화면으로 옮겼을 때만 건너뛴다.
-  async function saveInput(sessionId: number, baseVersionId: number | null, kind: EasyFeature, screen: number) {
-    const response = await workflowApi.event(sessionId, { event_type: 'form', form_input: buildInput(kind), base_version_id: baseVersionId }, crypto.randomUUID())
+  async function saveInput(sessionId: number, baseVersionId: number | null, input: JsonObject, valueKey: string, screen: number, confirm = true) {
+    const response = await workflowApi.event(sessionId, { event_type: 'form', form_input: input, base_version_id: baseVersionId }, crypto.randomUUID())
     const data = response.data as JsonObject | null
     const versionId = Number(data?.input_version_id)
     const versionNo = Number(data?.version_no)
     if (response.status !== 'ok' || !versionId) throw new Error(response.message || '조건을 저장하지 못했어요.')
-    if (screen === screenRef.current) resumeRef.current = { sessionId, versionId, versionNo, confirmed: false, values }
-    await workflowApi.confirmInput(versionId, versionNo)
-    return { versionId, versionNo }
+    if (screen === screenRef.current) {
+      resumeRef.current = { sessionId, versionId, versionNo, confirmed: false, values: valueKey }
+      inputRef.current = input // 저장한 조건이 지금 조건(계산 불가 제안도 이 조건에 적용한다)
+    }
+    if (confirm) {
+      await workflowApi.confirmInput(versionId, versionNo)
+      if (screen === screenRef.current) resumeRef.current = { sessionId, versionId, versionNo, confirmed: true, values: valueKey }
+    }
+    return { sessionId, versionId, versionNo }
   }
 
   // 새 업무면 만들고, 이어서 하는 업무면 그 업무 안에서. 조건이 그대로면 저장된 버전을 다시 쓴다.
-  async function ready(kind: EasyFeature, screen: number): Promise<Prepared> {
+  async function ready(kind: EasyFeature, screen: number, fresh?: Fresh): Promise<Prepared> {
+    const input = fresh?.input ?? buildInput(kind)
+    const values = fresh?.values ?? valuesNow
     const resume = resumeRef.current
     if (!resume) {
-      const created = await workflowApi.create(1, kind, 'form', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
+      const created = await workflowApi.create(STORE_ID, kind, 'agent', kind === 'purchase' ? '[쉬운 화면] 이번 주 장보기' : '[쉬운 화면] 점심 인원 배치')
       // 조건 저장이 실패해도 다시 시도할 때 업무를 또 만들지 않게, 만든 업무를 먼저 기록해 둔다.
       if (screen === screenRef.current) resumeRef.current = { sessionId: created.session_id, versionId: null, versionNo: 0, confirmed: false, values: '' }
-      return { sessionId: created.session_id, ...(await saveInput(created.session_id, null, kind, screen)) }
+      return saveInput(created.session_id, null, input, values, screen)
     }
-    if (resume.versionId === null || resume.values !== values) {
-      return { sessionId: resume.sessionId, ...(await saveInput(resume.sessionId, resume.versionId, kind, screen)) }
+    // changed: 확인 카드에 없는 칸(품목 보관 한도 등)만 바꾼 경우에도 새 조건으로 저장한다.
+    if (resume.versionId === null || resume.values !== values || fresh?.changed) {
+      return saveInput(resume.sessionId, resume.versionId, input, values, screen)
     }
     if (!resume.confirmed) await workflowApi.confirmInput(resume.versionId, resume.versionNo)
     return { sessionId: resume.sessionId, versionId: resume.versionId, versionNo: resume.versionNo }
   }
 
-  async function calculate() {
-    if (!feature) return
+  /** 계산 불가 제안대로 조건을 바꿔 바로 다시 계산한다. 바뀐 값은 확인 카드에도 반영되고, 새 조건 버전으로 저장된다. */
+  function applySuggested(changes: Suggested[]) {
+    const input = inputRef.current ? applyChanges(inputRef.current, changes) : null
+    if (!input || feature !== 'purchase') { setPhase('confirm'); openEdit(); return }
+    const values = fill('purchase', input)
+    say('agent', `제안대로 바꿨어요. ${changes.map(changeText).join(' · ')}. 이 조건으로 다시 계산할게요.`)
+    void calculate({ kind: 'purchase', input, values, changed: true })
+  }
+
+  /** fresh: AI가 방금 바꾼 조건처럼 아직 화면 상태에 반영되기 전 값으로 계산할 때 */
+  async function calculate(fresh?: Fresh) {
+    const feature = fresh?.kind ?? featureNow
+    // AI가 조건을 바꾸는 중에는 화면의 옛 값으로 계산(저장)하지 않는다. AI가 계산까지 부탁받은 경우는 fresh로 들어온다.
+    if (!feature || (noInput && !fresh) || (thinking && !fresh)) return
     const token = tokenRef.current
-    setPhase('running'); setError(''); setSaved(''); setSavedFor(null); setSavedChoice(null)
+    setPhase('running'); setError(''); setSaved(''); setSavedFor(null); setSavedChoice(null); setBlocked(null)
     // 이전 결과를 지운다. 계산이 실패했을 때 옛 결과와 새 조건(prepared)이 짝지어 보이거나 저장되지 않게.
     setPurchase(null); setOperation(null)
     shownResultRef.current = null
@@ -438,13 +638,13 @@ export default function EasyPage() {
       const job = prepRef.current.catch(() => undefined).then(() => {
         // 줄에서 기다리는 사이 다른 업무를 열었으면(화면이 바뀌면) 실행하지 않는다. 열린 업무에 이전 화면 조건이 저장되지 않게.
         if (screen !== screenRef.current) throw new Error('다른 화면으로 옮겨 계산을 멈췄어요.')
-        return ready(feature, screen)
+        return ready(feature, screen, fresh)
       })
       prepRef.current = job
       const done = await job
       if (token !== tokenRef.current) return
       // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
-      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values }
+      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
       setPrepared(done)
       if (route.kind !== 'session') {
         window.history.replaceState(null, '', routeHash({ kind: 'session', id: done.sessionId }))
@@ -456,7 +656,12 @@ export default function EasyPage() {
         const resultId = Number((response.data as JsonObject | null)?.result_id)
         const result = await workflowApi.result(resultId)
         if (token !== tokenRef.current) return
-        if (result.response_status !== 'ok') throw new InputError(result.summary.message || '이 조건으로는 살 수 있는 조합이 없어요.')
+        if (result.response_status !== 'ok') {
+          // 계산 불가: 서버가 준 "이 칸을 이 값으로" 제안과 문장 제안을 함께 보여 준다.
+          const summary = result.summary as PurchaseResult['summary'] & { suggestions?: unknown }
+          setBlocked({ changes: usable(summary.suggested_changes), tips: Array.isArray(summary.suggestions) ? summary.suggestions.filter((t): t is string => typeof t === 'string') : [] })
+          throw new InputError(summary.message || '이 조건으로는 살 수 있는 조합이 없어요.')
+        }
         shownResultRef.current = result.result_id
         setPurchase(result); setOperation(null)
       } else {
@@ -518,12 +723,7 @@ export default function EasyPage() {
             <a key={item.label} {...link(item.route)} aria-current={item.current ? 'page' : undefined}>{item.label}</a>
           ))}
           <a href="#" onClick={(e) => { e.preventDefault(); setGuideOpen(true) }}>사용법</a>
-        
-        {/* 견적 및 매입 정리 메뉴 추가 */}
-  <a href="/?mode=quote">
-    견적·매입 정리
-  </a>
-        
+          <a href="#" onClick={(e) => { e.preventDefault(); startQuote() }}>받은 견적 넣기</a>
         </nav>
         <div className="easy-tools">
           {!fresh && (
@@ -589,6 +789,7 @@ export default function EasyPage() {
             {bubbles.map((bubble, i) => (
               <p key={i} className={`easy-bubble ${bubble.role}`}>{bubble.text}</p>
             ))}
+            {thinking && <p className="easy-bubble agent easy-thinking" role="status">말씀을 읽고 있어요…</p>}
           </div>
         )}
 
@@ -596,8 +797,8 @@ export default function EasyPage() {
           <div data-tour={phase === 'start' ? 'input' : undefined}>
             {phase === 'ask' ? (
               <div className="easy-choices" data-tour="choices">
-                <button type="button" className="easy-big" onClick={() => { say('owner', '이번 주 장보기 계획'); begin('purchase') }}>이번 주 장보기 계획 세우기</button>
-                <button type="button" className="easy-big" onClick={() => { say('owner', ROSTER_MODE ? '직원 근무표' : '점심 인원 배치'); begin('operation') }}>{ROSTER_MODE ? '직원 근무표 짜 보기' : '점심 인원 배치 돌려 보기'}</button>
+                <button type="button" className="easy-big" onClick={() => { say('owner', '이번 주 장보기 계획'); begin('purchase', firstWordsRef.current) }}>이번 주 장보기 계획 세우기</button>
+                <button type="button" className="easy-big" onClick={() => { say('owner', ROSTER_MODE ? '직원 근무표' : '점심 인원 배치'); begin('operation', firstWordsRef.current) }}>{ROSTER_MODE ? '직원 근무표 짜 보기' : '점심 인원 배치 돌려 보기'}</button>
               </div>
             ) : null}
             <form className="easy-input" onSubmit={submit}>
@@ -642,15 +843,27 @@ export default function EasyPage() {
           </div>
         )}
 
-        {inFlow && phase === 'confirm' && feature === 'purchase' && (
+        {inFlow && phase === 'confirm' && feature && !roster && noInput && (
+          <Card title="조건을 마저 알려 주세요" tour="confirm">
+            <p>{question ? '아직 정해지지 않은 값이 있어요. 아래 질문에 답하면 조건이 채워져요.' : '이 업무에는 아직 저장된 조건이 없어요. 아래에 말로 알려 주세요.'}</p>
+          </Card>
+        )}
+
+        {inFlow && phase === 'confirm' && feature === 'purchase' && !noInput && (
           <Card title="이 조건이 맞나요?" tour="confirm">
             <ul className="easy-facts">
               <li><span>계획 기간</span><b>{asNumber(base.planning_days) ?? 7}일</b></li>
               <li><span>예산</span><b>{budget === null ? '정하지 않았어요' : `${won(budget)}까지`}</b></li>
               <li><span>배송 받는 횟수</span><b>{deliveries === null ? '정하지 않았어요' : `${deliveries}번까지`}</b></li>
               <li><span>살 품목</span><b>{items.length ? items.join(' · ') : '아직 없어요'}</b></li>
+              {items.length > 0 && <li><span>이번 주 쓸 양</span><b>{needLine(base.items)}</b></li>}
               <li><span>받은 견적</span><b>{supplierCount ? `거래처 ${supplierCount}곳` : '아직 없어요'}</b></li>
             </ul>
+            {!quoteOpen && (
+              <p className="easy-quote-open">
+                <button type="button" className="easy-text-button" onClick={() => setQuoteOpen(true)}>내가 받은 견적 문자로 계산하기 ›</button>
+              </p>
+            )}
             {editing && (
               <div className="easy-edit">
                 <Pick label="예산" value={budget ?? Number.NaN} options={withCurrent([150000, 200000, 250000], budget)} format={(v) => won(v)} onPick={setBudget} />
@@ -659,7 +872,7 @@ export default function EasyPage() {
             )}
             {!purchaseReady && <p className="easy-note">예산과 배송 받는 횟수를 골라 주세요.</p>}
             <div className={`easy-cta${editing ? ' easy-cta-static' : ''}`}>
-              <button type="button" className="easy-primary" disabled={!purchaseReady} onClick={() => void calculate()}>구매안 계산하기</button>
+              <button type="button" className="easy-primary" disabled={!purchaseReady || thinking} onClick={() => void calculate()}>구매안 계산하기</button>
               {editing ? (
                 <>
                   <button type="button" className="easy-secondary" onClick={() => { setEditing(false); setSnapshot(null) }}>다 고쳤어요</button>
@@ -691,7 +904,11 @@ export default function EasyPage() {
           </Suspense>
         )}
 
-        {inFlow && phase === 'confirm' && feature === 'operation' && !roster && (
+        {inFlow && phase === 'confirm' && feature === 'purchase' && quoteOpen && (
+          <QuotePaste key={screenNo} storeId={STORE_ID} onDone={(id) => go({ kind: 'session', id })} onClose={() => setQuoteOpen(false)} />
+        )}
+
+        {inFlow && phase === 'confirm' && feature === 'operation' && !roster && !noInput && (
           <Card title="이 조건이 맞나요?" tour="confirm">
             {operationForm ? (
               <ul className="easy-facts">
@@ -713,7 +930,7 @@ export default function EasyPage() {
               </div>
             )}
             <div className={`easy-cta${editing ? ' easy-cta-static' : ''}`}>
-              <button type="button" className="easy-primary" onClick={() => void calculate()}>배치표 만들기</button>
+              <button type="button" className="easy-primary" disabled={thinking} onClick={() => void calculate()}>배치표 만들기</button>
               {operationForm && (editing ? (
                 <>
                   <button type="button" className="easy-secondary" onClick={() => { setEditing(false); setSnapshot(null) }}>다 고쳤어요</button>
@@ -722,6 +939,44 @@ export default function EasyPage() {
               ) : <button type="button" className="easy-secondary" onClick={openEdit}>고치기</button>)}
             </div>
           </Card>
+        )}
+
+        {/* 말로 바꾸기: AI가 말을 조건으로 바꾸고, 모르는 값은 질문으로 되묻는다. 숫자 계산은 하지 않는다. */}
+        {inFlow && phase === 'confirm' && feature && !roster && !quoteOpen && (
+          <section className="easy-talk" aria-label="말로 바꾸기">
+            {question && (
+              <div className="easy-question" role="group" aria-label="AI 질문">
+                {/* 질문 문장은 바로 위 말풍선에 있다. 카드에는 답하는 방법만(같은 문장을 두 번 보이지 않게). */}
+                <p className="easy-question-label">AI가 물어봤어요</p>
+                <p><b>{questionChoices(question).length ? '아래에서 고르거나 직접 적어 주세요.' : '아래 칸에 답을 적어 주세요.'}</b></p>
+                {questionChoices(question).length > 0 && (
+                  <div className="easy-question-choices">
+                    {questionChoices(question).map((choice) => (
+                      <button key={choice} type="button" className="easy-secondary" disabled={thinking}
+                        onClick={() => question.question_id && talk(feature, { event_type: 'question_reply', question_id: question.question_id, answer: choice }, choice)}>
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {!question && <p className="easy-talk-label">바꿀 게 있으면 말로 적어 주세요</p>}
+            <form className="easy-input" onSubmit={(e) => { e.preventDefault(); sendReply(reply) }}>
+              <label htmlFor="easy-reply" className="easy-sr">{question ? '질문에 답하기' : '말로 조건 바꾸기'}</label>
+              <textarea id="easy-reply" rows={2} value={reply}
+                placeholder={question ? '여기에 답을 적어 주세요' : feature === 'purchase' ? '예: 예산은 15만 원까지만, 배송은 한 번만 받을게요' : '예: 내일은 바쁜 날이라 주문이 250건쯤 돼요'}
+                onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendReply(reply) } }} />
+              <button type="submit" className="easy-primary" disabled={!reply.trim() || thinking}>보내기</button>
+            </form>
+            {chatError && (
+              <p role="alert" className="easy-note">
+                {chatError}{' '}
+                {pending && !thinking && <button type="button" className="easy-text-button" onClick={() => talk(pending.kind, {}, null, pending)}>다시 보내기</button>}
+              </p>
+            )}
+          </section>
         )}
 
         {phase === 'running' && !roster && (
@@ -744,8 +999,20 @@ export default function EasyPage() {
           ) : errorKind === 'input' ? (
             <Card title="이 조건으로는 계산이 안 돼요">
               <p>{error}</p>
+              {inFlow && blocked && blocked.changes.length > 0 && (
+                <div className="easy-suggest">
+                  <h3>이렇게 바꾸면 살 수 있어요</h3>
+                  <ul>{blocked.changes.map((change) => <li key={change.path}>{changeText(change)}</li>)}</ul>
+                </div>
+              )}
+              {inFlow && blocked && !blocked.changes.length && blocked.tips.length > 0 && (
+                <ul className="easy-suggest">{blocked.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+              )}
               <div className="easy-actions">
-                {inFlow && <button type="button" className="easy-primary" onClick={() => { setPhase('confirm'); openEdit() }}>조건 고쳐서 다시 하기</button>}
+                {inFlow && blocked && blocked.changes.length > 0 && (
+                  <button type="button" className="easy-primary" disabled={thinking} onClick={() => applySuggested(blocked.changes)}>이렇게 바꿔서 다시 계산하기</button>
+                )}
+                {inFlow && <button type="button" className={blocked?.changes.length ? 'easy-secondary' : 'easy-primary'} onClick={() => { setPhase('confirm'); openEdit() }}>조건 고쳐서 다시 하기</button>}
                 <button type="button" className="easy-secondary" onClick={restart}>처음으로</button>
               </div>
             </Card>
@@ -754,7 +1021,7 @@ export default function EasyPage() {
               <p>{error}</p>
               <p className="easy-muted">조건은 그대로예요. 잠시 뒤 "다시 시도"를 눌러 주세요.</p>
               <div className="easy-actions">
-                {inFlow && <button type="button" className="easy-primary" onClick={() => void calculate()}>다시 시도</button>}
+                {inFlow && <button type="button" className="easy-primary" disabled={thinking} onClick={() => void calculate()}>다시 시도</button>}
                 {inFlow && <button type="button" className="easy-secondary" onClick={() => setPhase('confirm')}>조건 다시 보기</button>}
                 <button type="button" className="easy-secondary" onClick={restart}>처음으로</button>
               </div>
@@ -768,6 +1035,9 @@ export default function EasyPage() {
         )}
         {phase === 'result' && operation && prepared && (
           <OperationView result={operation} prepared={prepared} saved={saved} savedFor={savedFor} onSaved={(text, choiceKey) => markSaved(operation.result_id, text, choiceKey, screenNo)} savedChoice={savedChoice as OperationPlan | null} />
+        )}
+        {phase === 'result' && (purchase || operation) && prepared && (
+          <Explain key={(purchase ?? operation)!.result_id} resultId={(purchase ?? operation)!.result_id} />
         )}
         {phase === 'result' && route.kind === 'session' && !savedChoice && (
           <p className="easy-again">
@@ -792,7 +1062,7 @@ export default function EasyPage() {
           <h2>이렇게 쓰세요</h2>
           <ol className="easy-guide">
             <li><b>하고 싶은 일을 말로 적어요</b><span>“점심에 줄이 길어요”처럼 평소 말투면 돼요</span></li>
-            <li><b>조건을 확인해요</b><span>틀린 곳만 고치면 돼요</span></li>
+            <li><b>조건을 확인해요</b><span>틀린 곳은 말로 바꾸거나 "고치기"로 바꿔요</span></li>
             <li><b>결과를 보고 저장해요</b><span>배치표·구매안·주문 문구가 나와요</span></li>
           </ol>
         </section>
@@ -809,8 +1079,8 @@ export default function EasyPage() {
           <div className="easy-modal-body">
           <ol className="easy-guide easy-guide-modal">
             <li><b>하고 싶은 일을 말로 적어요</b><span>장보기든 점심 인원이든 고를 필요 없이, 말한 내용에 맞춰 바로 시작해요.</span></li>
-            <li><b>조건을 확인해요</b><span>미리 채워진 조건이 맞으면 그대로, 틀린 곳만 "고치기"로 바꿔요.</span></li>
-            <li><b>결과를 보고 저장해요</b><span>맨 위가 추천이에요. 배치표는 인쇄하고, 주문 문구는 복사해서 보내요.</span></li>
+            <li><b>조건을 확인해요</b><span>미리 채워진 조건이 맞으면 그대로, 틀린 곳은 "예산은 15만 원까지만"처럼 말로 바꾸거나 "고치기"로 바꿔요. 받은 견적 문자를 붙여 넣어 계산할 수도 있어요.</span></li>
+            <li><b>결과를 보고 저장해요</b><span>맨 위가 추천이에요. "설명 듣기"를 누르면 쉬운 말로 풀어 드려요. 배치표는 인쇄하고, 주문 문구는 복사해서 보내요.</span></li>
             <li><b>나중에 이어서 봐요</b><span>"하던 일 이어하기"에서 멈춘 곳부터, "저장한 계획"에서 저장한 결과를 다시 볼 수 있어요.</span></li>
           </ol>
           <div className="easy-actions">
