@@ -320,8 +320,14 @@ export default function EasyRoster({
 
   /** 세 근무표의 주 인건비와 요일별 가장 긴 대기가 모두 같으면 같은 결과로 본다. */
   function sameOutcome(a: RosterOptions, b: RosterOptions) {
-    const key = (o: RosterOptions) => JSON.stringify(o.options.map((x) => [x.key, x.plan_cost_krw, x.peak_wait_sec]))
-    return key(a) === key(b)
+    // 안은 key로, 요일은 요일 이름으로 짝지어 비교한다(배열·객체 순서가 달라도 같은 결과면 같다고 본다).
+    if (a.options.length !== b.options.length) return false
+    return a.options.every((x) => {
+      const y = b.options.find((o) => o.key === x.key)
+      if (!y || x.plan_cost_krw !== y.plan_cost_krw) return false
+      const days = new Set([...Object.keys(x.peak_wait_sec ?? {}), ...Object.keys(y.peak_wait_sec ?? {})])
+      return [...days].every((d) => (x.peak_wait_sec?.[d] ?? null) === (y.peak_wait_sec?.[d] ?? null))
+    })
   }
 
   function show(data: StoredRosterResult) {
