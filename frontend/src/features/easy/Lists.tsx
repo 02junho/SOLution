@@ -5,6 +5,7 @@ import { workflowApi } from '../../api/workflowApi'
 import type { Confirmation, SessionSummary } from '../../types/workflow'
 import { CHOICE, FEATURE, STEP, cleanTitle, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
+import { forgetSaves } from './saveKey'
 
 const EASY_FEATURES = new Set(['purchase', 'operation'])
 
@@ -157,7 +158,12 @@ export function PlanList() {
                   <DeleteRow
                     name={CHOICE[p.selected_choice_key] ?? p.selected_choice_key}
                     warn="저장한 계획을 지울까요? 지우면 되돌릴 수 없어요. 업무는 하던 일 목록에 그대로 남아요."
-                    onDelete={async () => { await workflowApi.deleteConfirmation(p.confirmation_id); remove((x) => x.confirmation_id !== p.confirmation_id) }}
+                    onDelete={async () => {
+                      const deleted = await workflowApi.deleteConfirmation(p.confirmation_id)
+                      // 지운 계획의 저장 키를 버려, 같은 결과를 다시 저장하면 새로 저장되게 한다.
+                      if (typeof deleted.result_id === 'number') forgetSaves(deleted.result_id)
+                      remove((x) => x.confirmation_id !== p.confirmation_id)
+                    }}
                   />
                 </li>
               ))}
