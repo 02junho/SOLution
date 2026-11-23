@@ -226,11 +226,14 @@ def test_진행_상황은_끝난_요일_요약을_모은다():
     assert out["days"]["MON"] == {"failed": True}
     assert ro.progress("없는키") is None
     assert ro._progress_start(None, ["MON"]) is None  # 키가 없으면 아무것도 안 남긴다
-    # 같은 키로 다시 계산하면 새 기록: 앞 실행이 늦게 끝낸 요일은 새 기록에 섞이지 않는다
+    # 같은 키로 다시 계산하면 새 기록: 앞 실행이 아직 못 끝낸 요일을 늦게 끝내도 새 기록에 섞이지 않는다
+    old = ro._progress_start("k1", ["MON", "TUE"])
+    ro._progress_day(old, "TUE", day, None)  # 앞 실행은 TUE만 끝낸 상태
     again = ro._progress_start("k1", ["MON", "TUE"])
-    ro._progress_day(entry, "TUE", day, None)
+    ro._progress_day(old, "MON", day, None)  # 앞 실행이 MON을 늦게 끝냄 → 자기 기록에만
     assert ro.progress("k1")["done"] == 0
-    ro._progress_day(again, "TUE", day, None)
+    assert "MON" in old["days"]
+    ro._progress_day(again, "MON", day, None)  # 새 실행이 MON을 끝낼 때만 늘어난다
     assert ro.progress("k1")["done"] == 1
 
 
