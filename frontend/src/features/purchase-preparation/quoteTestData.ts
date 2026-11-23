@@ -4,7 +4,8 @@ import type {Snapshot, Vat} from '../../types/purchasePreparation'
 // 견적 화면 샘플: 거래처 12곳 시연(업무 1005, data/demo/expanded)과 같은 숫자다.
 // 재료표 × 판매 계획 = 1005의 총필요량(원두 2,700g · 우유 10,400ml · 아이스컵 130 · 핫컵 20 · 뚜껑 150),
 // 재고·안전재고도 1005와 같다. 견적 원문 12개를 분석하면 구매안이 1005와 같은 값으로 나온다.
-export const dictionary: Dictionary = {version: 1, items: [
+// 버전은 AI 서버가 미리 넣어 둔 품목 검색(RAG) 자료(ai-server/app/scripts/quote-aliases-v2.jsonl)와 같아야 검색이 된다.
+export const dictionary: Dictionary = {version: 2, items: [
   {item_id: 'beans', name: '원두', base_unit: 'g', aliases: ['원두 블렌드', '블렌드 원두', '커피 원두']},
   {item_id: 'milk', name: '우유', base_unit: 'ml', aliases: ['흰우유', '멸균우유']},
   {item_id: 'ice_cup', name: '아이스컵', base_unit: '개', aliases: ['아이스 컵', 'PET 아이스컵', '플라스틱컵']},
