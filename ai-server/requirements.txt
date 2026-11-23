@@ -22,4 +22,10 @@ pulp[highs,cbc]==4.2.0
 simpy==4.1.2    # 운영 시뮬레이션
 
 # RAG
+# 서버에는 GPU가 없으니 CPU 전용 torch만 받는다. 그냥 두면 sentence-transformers가 GPU용 torch와
+# CUDA 라이브러리까지 끌고 와서 AI 서버 이미지가 10GB가 넘는다(CPU용이면 수백 MB).
+# macOS용 torch는 원래 CUDA가 없어서 PyPI 것을 그대로 쓴다.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu ; sys_platform == "linux" or sys_platform == "win32"
+torch==2.15.0 ; sys_platform == "darwin"
 sentence-transformers==6.3.0
