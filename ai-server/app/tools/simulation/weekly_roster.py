@@ -48,6 +48,21 @@ def _won(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _rest_minutes(start: int, end: int, breaks: list) -> int:
+    """근무 안에 든 휴게 분: 근무 밖은 잘라 내고 겹친 휴게는 한 번만 센다(외부에서 받은 휴게도 근무시간이 틀어지지 않게)."""
+    spans = sorted((max(start, _min(b["start_time"])), min(end, _min(b["end_time"]))) for b in breaks)
+    total, cur_s, cur_e = 0, None, None
+    for a, b in spans:
+        if b <= a:
+            continue
+        if cur_e is None or a > cur_e:
+            total += (cur_e - cur_s) if cur_e is not None else 0
+            cur_s, cur_e = a, b
+        else:
+            cur_e = max(cur_e, b)
+    return total + ((cur_e - cur_s) if cur_e is not None else 0)
+
+
 def _slots(days) -> list[dict]:
     if not isinstance(days, list) or not days:
         raise ValueError("요일별 근무조(days)가 필요해요.")
@@ -62,7 +77,7 @@ def _slots(days) -> list[dict]:
             start, end = _min(s["start_time"]), _min(s["end_time"])
             if start >= end:
                 raise ValueError(f"{DAY_LABEL[day]}요일 근무조 시간이 거꾸로예요.")
-            rest = sum(_min(b["end_time"]) - _min(b["start_time"]) for b in s.get("breaks") or [])
+            rest = _rest_minutes(start, end, s.get("breaks") or [])
             out.append(
                 {
                     "slot_id": f"{day}-{i}",

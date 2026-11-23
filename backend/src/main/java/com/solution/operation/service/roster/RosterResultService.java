@@ -76,6 +76,11 @@ public class RosterResultService {
 	}
 
 	private final Map<String, Job> jobs = new ConcurrentHashMap<>();
+
+	/** 작업 기록 키: 같은 요청 키라도 업무가 다르면 다른 작업이다(DB 조회도 업무별). */
+	private static String jobKey(long sessionId, String requestKey) {
+		return sessionId + ":" + requestKey;
+	}
 	private final Executor executor;
 	private final CalculationRuns runs;
 
@@ -146,7 +151,7 @@ public class RosterResultService {
 			return done(existing.get(), versionId);
 		}
 		synchronized (jobs) {
-			Job job = jobs.get(requestKey);
+			Job job = jobs.get(jobKey(sessionId, requestKey));
 			if (job != null) {
 				if (job.sessionId() != sessionId || job.versionId() != versionId) {
 					throw ApiException.badRequest("IDEMPOTENCY_KEY_REUSED", "같은 요청키로 다른 내용을 보낼 수 없습니다.");
@@ -156,18 +161,18 @@ public class RosterResultService {
 			// 계산 중 표시를 먼저 남기고(실패하면 시작하지 않음) 뒤에서 계산한다.
 			CalculationRuns.Run run = runs.start(sessionId, "operation", () -> checked(sessionId, versionId));
 			Job running = new Job(sessionId, versionId, "RUNNING", null, Instant.now());
-			jobs.put(requestKey, running);
+			jobs.put(jobKey(sessionId, requestKey), running);
 			try {
 				// 단계 표시도 try 안에서: 여기서 실패해도 계산 자리(run)를 돌려준다.
 				repository.markStep(sessionId, checked(sessionId, versionId).versionNo(), "running");
 				executor.execute(() -> compute(run, sessionId, versionId, body, requestKey));
 			} catch (RejectedExecutionException full) {
-				jobs.remove(requestKey);
+				jobs.remove(jobKey(sessionId, requestKey));
 				run.close();
 				resetStep(sessionId, versionId, requestKey);
 				throw ApiException.badRequest("CALCULATION_BUSY", "지금 계산이 많이 밀려 있어요. 잠시 뒤 다시 해 주세요.");
 			} catch (RuntimeException failure) {
-				jobs.remove(requestKey);
+				jobs.remove(jobKey(sessionId, requestKey));
 				run.close();
 				resetStep(sessionId, versionId, requestKey);
 				throw failure;
@@ -187,7 +192,7 @@ public class RosterResultService {
 		if (existing.isPresent()) {
 			return done(existing.get(), versionId);
 		}
-		Job job = jobs.get(requestKey);
+		Job job = jobs.get(jobKey(sessionId, requestKey));
 		if (job != null && job.sessionId() == sessionId) {
 			ApiResponse<Map<String, Object>> current = state(job, requestKey);
 			if ("RUNNING".equals(job.state())) {
@@ -231,11 +236,11 @@ public class RosterResultService {
 			Map<String, Object> options = rosters.rosterOptions(request).data();
 			run.requireActive();
 			save(sessionId, versionId, options, body, key);
-			jobs.remove(key);
+			jobs.remove(jobKey(sessionId, key));
 		} catch (RuntimeException failure) {
 			log.warn("추천 근무표 계산 실패 session={} key={}", sessionId, key, failure);
 			String message = failure instanceof ApiException api ? api.getMessage() : "추천 근무표를 만들지 못했어요. 다시 계산해 주세요.";
-			jobs.put(key, new Job(sessionId, versionId, "FAILED", message, Instant.now()));
+			jobs.put(jobKey(sessionId, key), new Job(sessionId, versionId, "FAILED", message, Instant.now()));
 			resetStep(sessionId, versionId, key);
 		}
 	}

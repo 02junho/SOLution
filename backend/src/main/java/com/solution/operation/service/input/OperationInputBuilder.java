@@ -468,7 +468,7 @@ public final class OperationInputBuilder {
 			String label = clock(span[0]) + "-" + clock(span[1]);
 			int n = countByStart.get(span[0]);
 			counts.put(label, n);
-			total += n;
+			total = (int) Math.min(MAX_DAILY_ORDERS + 1L, (long) total + n); // 넘침 없이: 한도를 넘으면 build()가 거절한다
 		}
 		edges.add(close);
 		return new Slots(open, close, List.copyOf(edges), counts, total);
@@ -509,7 +509,7 @@ public final class OperationInputBuilder {
 			if (n == null || n < 0) {
 				throw ApiException.badRequest(CODE, "메뉴별 잔 수는 0 이상의 정수로 넣어 주세요.");
 			}
-			total += n;
+			total = (int) Math.min(MAX_DAILY_ORDERS + 1L, (long) total + n); // 넘침 없이: 한도를 넘으면 build()가 거절한다
 			if (n > 0) {
 				ids.add(e.getKey());
 			}

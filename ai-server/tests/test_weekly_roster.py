@@ -138,3 +138,14 @@ def test_assignment_fills_as_many_hours_as_any_assignment_could():
                     best = max(best, sum(s["work_min"] for s, wi in zip(slots, choice) if wi is not None) / 60)
             assert filled == pytest.approx(best), (case, mode)
             assert got["optimal"] is True
+
+
+def test_휴게는_근무_안쪽만_겹침_없이_뺀다():
+    from app.tools.simulation.weekly_roster import _rest_minutes
+
+    t = lambda a, b: {"start_time": a, "end_time": b}  # noqa: E731
+    start, end = 9 * 60, 15 * 60
+    assert _rest_minutes(start, end, [t("12:00", "12:30")]) == 30
+    assert _rest_minutes(start, end, [t("12:00", "12:30"), t("12:15", "12:45")]) == 45  # 겹침은 한 번
+    assert _rest_minutes(start, end, [t("08:30", "09:30"), t("14:45", "16:00")]) == 45  # 근무 밖은 잘라 냄
+    assert _rest_minutes(start, end, []) == 0
