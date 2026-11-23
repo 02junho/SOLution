@@ -55,6 +55,8 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
   }
   async function analyzeOne(name: string, body: string) {
     const batch = await api.analyze(body.trim(), name.trim(), true)
+    // 한 번에 한 거래처씩 받는다. 여러 거래처가 섞이면 한 곳만 고치거나 뺄 수 없어서다.
+    if (supplierNames(batch).length > 1) throw new Error(`한 번에 한 거래처 견적만 넣어 주세요. 이 문자에는 ${supplierNames(batch).join(', ')}가 함께 있어요.`)
     // 같은 거래처 견적을 고쳐 다시 넣으면 예전 견적은 빼고 새 견적만 쓴다(옛 가격으로 계산되지 않게).
     const mine = supplierNames(batch)
     setBatches((list) => upsertBatch(list.filter((old) => old.quote_batch_id === batch.quote_batch_id || !supplierNames(old).some((n) => mine.includes(n))), batch))

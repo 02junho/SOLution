@@ -569,7 +569,8 @@ export default function EasyPage() {
   /** fresh: AI가 방금 바꾼 조건처럼 아직 화면 상태에 반영되기 전 값으로 계산할 때 */
   async function calculate(fresh?: Fresh) {
     const feature = fresh?.kind ?? featureNow
-    if (!feature || (noInput && !fresh)) return
+    // AI가 조건을 바꾸는 중에는 화면의 옛 값으로 계산(저장)하지 않는다. AI가 계산까지 부탁받은 경우는 fresh로 들어온다.
+    if (!feature || (noInput && !fresh) || (thinking && !fresh)) return
     const token = tokenRef.current
     setPhase('running'); setError(''); setSaved(''); setSavedFor(null); setSavedChoice(null); setBlocked(null)
     // 이전 결과를 지운다. 계산이 실패했을 때 옛 결과와 새 조건(prepared)이 짝지어 보이거나 저장되지 않게.
@@ -587,7 +588,7 @@ export default function EasyPage() {
       const done = await job
       if (token !== tokenRef.current) return
       // 다시 계산하면 같은 업무 안에서 이어지게 하고, 주소도 이 업무로 바꿔 새로 고쳐도 다시 열리게 한다.
-      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values }
+      resumeRef.current = { sessionId: done.sessionId, versionId: done.versionId, versionNo: done.versionNo, confirmed: true, values: fresh?.values ?? valuesNow }
       setPrepared(done)
       if (route.kind !== 'session') {
         window.history.replaceState(null, '', routeHash({ kind: 'session', id: done.sessionId }))
@@ -927,7 +928,7 @@ export default function EasyPage() {
               )}
               <div className="easy-actions">
                 {inFlow && blocked && blocked.changes.length > 0 && (
-                  <button type="button" className="easy-primary" onClick={() => applySuggested(blocked.changes)}>이렇게 바꿔서 다시 계산하기</button>
+                  <button type="button" className="easy-primary" disabled={thinking} onClick={() => applySuggested(blocked.changes)}>이렇게 바꿔서 다시 계산하기</button>
                 )}
                 {inFlow && <button type="button" className={blocked?.changes.length ? 'easy-secondary' : 'easy-primary'} onClick={() => { setPhase('confirm'); openEdit() }}>조건 고쳐서 다시 하기</button>}
                 <button type="button" className="easy-secondary" onClick={restart}>처음으로</button>
@@ -938,7 +939,7 @@ export default function EasyPage() {
               <p>{error}</p>
               <p className="easy-muted">조건은 그대로예요. 잠시 뒤 "다시 시도"를 눌러 주세요.</p>
               <div className="easy-actions">
-                {inFlow && <button type="button" className="easy-primary" onClick={() => void calculate()}>다시 시도</button>}
+                {inFlow && <button type="button" className="easy-primary" disabled={thinking} onClick={() => void calculate()}>다시 시도</button>}
                 {inFlow && <button type="button" className="easy-secondary" onClick={() => setPhase('confirm')}>조건 다시 보기</button>}
                 <button type="button" className="easy-secondary" onClick={restart}>처음으로</button>
               </div>
