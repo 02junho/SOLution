@@ -23,7 +23,12 @@ _SCALED = re.compile(r"\d\s*(?:십|백|천|만|억|조)")
 _SPELLED = re.compile(r"[일이삼사오육칠팔구십백천만억조]+\s*(?:원|회|퍼센트)|(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:번|명|개)")
 _SIMULATION = "모의 조건에 따른 시뮬레이션 결과이며 실제 효과를 보장하지 않습니다."
 # 화면에 있는 안 이름. 숫자를 글로 쓴 말("한 번")처럼 보여도 지어낸 숫자가 아니라 검사에서 뺀다.
+# 따옴표로 묶어 안 이름으로 쓴 경우만 뺀다(따옴표 없는 "한 곳에서 한 번에 받아요"는 배송 횟수 주장이라 그대로 검사한다).
 _SCREEN_LABELS = ("한 곳에서 한 번에",)
+_QUOTES_OPEN, _QUOTES_CLOSE = "“‘'\"", "”’'\""
+_QUOTED = re.compile(f"[{_QUOTES_OPEN}]([^{_QUOTES_OPEN}{_QUOTES_CLOSE}]{{1,30}})[{_QUOTES_CLOSE}]")
+# 화면에 없는 예전 안 이름. 이 이름으로 부른 문장은 쓰지 않고 템플릿을 둔다.
+_OLD_NAMES = re.compile(r"총비용\s*최소|단위\s*단가순|배송\s*1\s*회\s*안")
 # 매입은 견적으로 푼 최적화라 모의 조건·시뮬레이션 안내가 맞지 않는다.
 _SIMULATION_WORDS = re.compile(r"모의\s*조건|시뮬레이션")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -117,7 +122,7 @@ class LlmExplainer:
                 caveat = " ".join(s for s in _SENTENCE_END.split(caveat.strip()) if not _SIMULATION_WORDS.search(s))
                 if not caveat:
                     continue
-            if (not _safe_text(caveat, allowed)
+            if (not _safe_text(caveat, allowed) or _wrong_name(caveat, choices)
                     or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)):
                 continue
             money = _unit_numbers(caveat, "원")
@@ -137,7 +142,7 @@ class LlmExplainer:
                 return None
             seen.add(item["choice_key"])
             choice = choices[item["choice_key"]]
-            if not _safe_text(item["text"], _numbers_in(choice)):
+            if not _safe_text(item["text"], _numbers_in(choice)) or _wrong_name(item["text"], choices, item["choice_key"]):
                 return None
             expected_amount = {str(int(choice["total_krw"]))} if choice.get("total_krw") is not None else set()
             expected_delivery = {str(int(choice["delivery_count"]))} if choice.get("delivery_count") is not None else set()
@@ -261,9 +266,18 @@ def _percentages(obj) -> set[str]:
     return _unit_numbers(obj.replace("퍼센트", "%"), "%") if isinstance(obj, str) else set()
 
 
+def _wrong_name(text: str, choices: dict, own_key: str | None = None) -> bool:
+    """예전 안 이름이나, 이 안이 아닌 다른 안의 이름을 따옴표로 붙여 부른 문장인지."""
+    if _OLD_NAMES.search(text):
+        return True
+    if own_key is None:
+        return False
+    others = {c.get("label") for key, c in choices.items() if key != own_key} - {choices[own_key].get("label"), None}
+    return any(name.strip() in others for name in _QUOTED.findall(text))
+
+
 def _safe_text(text: str, allowed: set[str]) -> bool:
-    for label in _SCREEN_LABELS:
-        text = text.replace(label, "")
+    text = _QUOTED.sub(lambda m: "" if m.group(1).strip() in _SCREEN_LABELS else m.group(0), text)
     numbers = _numbers(text)
     return ("INVALID_NUMBER" not in numbers and not _UNSAFE.search(text) and not _SCALED.search(text)
             and not _SPELLED.search(text) and numbers <= allowed)

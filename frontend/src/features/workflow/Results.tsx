@@ -20,6 +20,7 @@ import type { ExplanationData, ExplanationState } from './ResultExplanation'
 import OperationComparison from '../operation/workspace/OperationComparison'
 import OperationConfirmationSummary from '../operation/workspace/OperationConfirmationSummary'
 import { CHOICE_TITLE } from '../operation/workspace/format'
+import { CHOICE } from '../easy/recentFormat'
 
 function nameOf(
   input: JsonObject | null,
@@ -136,6 +137,12 @@ export default function Results({
       item.label ?? `대안 ${index + 1}`,
     ]),
   )
+  // 설명 본문은 쉬운 화면과 같은 안 이름("가장 싸게" 등)으로 쓰므로 설명 칸의 이름도 같게 둔다.
+  const explanationLabels = {
+    ...choiceLabels,
+    purchase_1: CHOICE.purchase_1,
+    purchase_2: CHOICE.purchase_2,
+  }
   const choice = choices.find((item) => item.choice_key === selected)
   const resolved = choice ? resolveChoice(choice, choices) : null
   const warnings = applicableWarnings(
@@ -192,7 +199,7 @@ export default function Results({
         busy={!!busy}
         state={explanation}
         onRequest={() => void requestExplanation()}
-        choiceLabels={type === 'operation' ? CHOICE_TITLE : choiceLabels}
+        choiceLabels={type === 'operation' ? CHOICE_TITLE : explanationLabels}
         subject={type === 'operation' ? '세 운영안을 비교' : '구매안을 계산'}
       />
       {saved && (

@@ -6,7 +6,7 @@ export type ChatBubble = { role: 'owner' | 'agent'; text: string }
 
 /** 이벤트 응답을 보고 화면이 할 일 */
 export type Outcome =
-  | { kind: 'changed'; versionId: number; versionNo: number; message: string; run: boolean }
+  | { kind: 'changed'; versionId: number; versionNo: number; message: string; run: boolean; silent?: boolean }
   | { kind: 'same'; message: string; run: boolean }
   | { kind: 'question'; question: EventData; message: string }
   | { kind: 'use-form'; message: string }
@@ -43,7 +43,10 @@ export function outcome(
   const versionId = num(data.input_version_id)
   const versionNo = num(data.version_no)
   if (versionId !== null && versionNo !== null && versionId !== previousVersionId) {
-    return { kind: 'changed', versionId, versionNo, message, run }
+    // 다른 화면에서 조건이 바뀌어 버전이 달라졌어도, 업무 시작만 한 말(silent)이면 새 조건만 읽고 말풍선은 만들지 않는다.
+    return data.silent === true
+      ? { kind: 'changed', versionId, versionNo, message, run, silent: true }
+      : { kind: 'changed', versionId, versionNo, message, run }
   }
   // silent: 업무 시작만 하는 말("장보기 계획 세워 줘")이라 화면의 시작 안내 말고는 더 할 말이 없다.
   if (data.silent === true) return { kind: 'same', message: '', run }

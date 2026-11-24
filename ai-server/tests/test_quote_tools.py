@@ -124,6 +124,21 @@ class ToolsTest(unittest.TestCase):
         self.assertIn("INVALID_OR_MISSING_PACK_COUNT", codes)
         self.assertNotIn("PACK_ASSUMED", codes)
 
+    def test_pack_word_in_order_unit_or_whole_word_only(self):
+        # 주문 단위 칸이 "박스"인데 몇 개인지 없으면 막는다. 상품명 속 "set"(Sunset)은 묶음이 아니라 1개로 본다.
+        payload = {"store_id": "demo", "dictionary_version": 1, "use_rag": False,
+                   "dictionary": [{"item_id": "beans", "name": "원두", "base_unit": "g"},
+                                  {"item_id": "milk", "name": "우유", "base_unit": "ml"}],
+                   "items": [{"source_text": "우유 1L 29,000원", "raw_item_name": "우유", "supplier_name": "A",
+                              "quantity_per_unit": 1, "quantity_unit": "L", "order_unit": "박스", "price": 29000},
+                             {"source_text": "Sunset 원두 1kg 22,000원", "raw_item_name": "원두",
+                              "supplier_name": "A", "quantity_per_unit": 1, "quantity_unit": "kg", "price": 22000}]}
+        boxed, sunset = self.client.post("/tools/quote/normalize", json=payload).json()["items"]
+        self.assertFalse(boxed["comparable"])
+        self.assertNotIn("PACK_ASSUMED", [i["code"] for i in boxed["issues"]])
+        self.assertTrue(sunset["comparable"])
+        self.assertEqual((sunset["units_per_pack"], sunset["order_unit"]), (1, "개"))
+
     def test_complete_line_is_not_marked_assumed(self):
         payload = {"store_id": "demo", "dictionary_version": 1, "use_rag": False,
                    "dictionary": [{"item_id": "beans", "name": "원두", "base_unit": "g"}],

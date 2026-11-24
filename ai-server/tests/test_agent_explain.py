@@ -436,3 +436,25 @@ def test_템플릿_첫줄은_안_이름을_따옴표로_묶는다():
                                       {**SUMMARY["choices"][1], "label": "한 곳에서 한 번에"}]}
     template = explain_service.build_template(ExplainRequest(**{**REQ, "result_summary": summary}))
     assert template["explanation"]["headline"] == "“가장 싸게” 안이 120,400원으로 가장 쌉니다(다음 안보다 17,600원 적음)."
+
+
+def test_따옴표_없는_한_번에는_배송_주장이라_막는다():
+    # 안 이름은 따옴표로 묶어 쓸 때만 검사에서 뺀다. "한 곳에서 한 번에 받아요"는 배송 횟수를 지어낸 말이라 막는다.
+    allowed = {"127500"}
+    assert explain_service._safe_text("“한 곳에서 한 번에” 안은 127,500원이에요.", allowed)
+    assert not explain_service._safe_text("배송은 한 곳에서 한 번에 받아요.", allowed)
+
+
+def test_예전_이름이나_다른_안_이름으로_부르면_템플릿을_둔다(monkeypatch):
+    summary = {**SUMMARY, "choices": [{**SUMMARY["choices"][0], "label": "가장 싸게"},
+                                      {**SUMMARY["choices"][1], "label": "한 곳에서 한 번에"}]}
+    req = {**REQ, "result_summary": summary}
+    old = _model_output(monkeypatch, {"headline": "안내", "per_choice": [
+        {"choice_key": "purchase_1", "text": "총비용 최소 안은 배송 2회, 120,400원이에요."}], "caveats": []}, req)
+    assert old["source"] == "template"
+    swapped = _model_output(monkeypatch, {"headline": "안내", "per_choice": [
+        {"choice_key": "purchase_1", "text": "“한 곳에서 한 번에” 안은 배송 2회, 120,400원이에요."}], "caveats": []}, req)
+    assert swapped["source"] == "template"
+    right = _model_output(monkeypatch, {"headline": "안내", "per_choice": [
+        {"choice_key": "purchase_1", "text": "“가장 싸게” 안은 배송 2회, 120,400원이에요."}], "caveats": []}, req)
+    assert right["source"] == "llm"

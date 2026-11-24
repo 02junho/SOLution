@@ -1,3 +1,4 @@
+import re
 import unicodedata
 
 from fastapi import HTTPException
@@ -16,8 +17,10 @@ def key(value):
 
 
 def _pack_word(row):
-    text = key(" ".join(t for t in (row.source_text, row.specification_text or "") if t))
-    return next((w for w in PACK_WORDS if w in text), None)
+    # 주문 단위 칸(order_unit="박스")도 본다. 영어는 낱말로만 찾는다("Sunset 원두"의 set은 묶음이 아니다).
+    text = key(" ".join(t for t in (row.source_text, row.specification_text or "", row.order_unit or "") if t))
+    return next((w for w in PACK_WORDS
+                 if (re.search(rf"(?<![a-z]){w}(?![a-z])", text) if w.isascii() else w in text)), None)
 
 
 def _assume_pack(row):
