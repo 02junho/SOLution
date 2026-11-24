@@ -478,6 +478,11 @@
 /* 두 카드의 기존 컬러와 크기는 유지하고, 줄바꿈이 생겨도 시작 버튼은 오른쪽에 둔다. */
 .easy-starter-body, .easy-starter-result { word-break: keep-all; overflow-wrap: break-word; }
 .easy-starter-go { margin-left: auto; white-space: nowrap; }
+/* 한 줄 헤더에서 메뉴가 도구 영역을 침범하지 않도록 필요한 경우에만 가로 스크롤한다. */
+@media (min-width: 1025px) {
+  .easy .easy-header nav { flex: 0 1 auto; overflow-x: auto; }
+  .easy .easy-header nav a { flex-shrink: 0; }
+}
 /* 공통 헤더만 좁은 폭에서 메뉴를 다음 줄로 내려, 로고 추가로 인한 겹침을 막는다. */
 @media (max-width: 1024px) {
   .easy .easy-header { height: auto; flex-wrap: wrap; padding-block: 10px; gap: 8px 16px; }

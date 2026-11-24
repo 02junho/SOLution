@@ -199,8 +199,8 @@ export default function EasyPage() {
     const previousPhase = previousScrollPhase.current
     previousScrollPhase.current = phase
     // 점심 인원 추천 근무표(2번)는 결과 화면 맨 위(결론)부터 보이게 한다(결과 자리 표시가 근무표 화면 아래에 있어서).
-    // On a fresh home screen, the end marker is below the recent history cards.
-    if (route.kind === 'home' && phase === 'start' && bubbles.length === 0) {
+    // 빈 시작 화면에서는 끝 표시 대신 상단을 보여 준다. 주소만 바뀌는 경우에는 스크롤을 다시 실행하지 않는다.
+    if (phase === 'start' && bubbles.length === 0) {
       window.scrollTo({ top: 0 })
       return
     }
@@ -227,7 +227,7 @@ export default function EasyPage() {
     }
     if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'start' })
     else endRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [bubbles, phase, feature, roster, route.kind, rosterStage, tourOn])
+  }, [bubbles, phase, feature, roster, rosterStage, tourOn])
 
   function startTour() {
     restart()
