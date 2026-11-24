@@ -201,6 +201,7 @@ export default function EasyPage() {
     // 점심 인원 추천 근무표(2번)는 결과 화면 맨 위(결론)부터 보이게 한다(결과 자리 표시가 근무표 화면 아래에 있어서).
     // 빈 시작 화면에서는 끝 표시 대신 상단을 보여 준다. 주소만 바뀌는 경우에는 스크롤을 다시 실행하지 않는다.
     if (phase === 'start' && bubbles.length === 0) {
+      if (tourOn) return
       window.scrollTo({ top: 0 })
       return
     }
