@@ -1,3 +1,7 @@
+/* Pretendard 1.3.9 (SIL Open Font License 1.1): https://github.com/orioncactus/pretendard
+ * 웹폰트는 로고 문구와 첫 화면 제목/설명에만 적용하며, 로드 실패 시 기존 글꼴로 표시한다. */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css');
+
 /*
  * 쉬운 화면 테스트. 구성은 토스처럼 단정하게(넓은 여백, 크고 굵은 제목 한 줄, 강조색 하나, 아래쪽 꽉 찬 큰 버튼),
  * 색·로고·글꼴·패널·말풍선은 기존 SOL루션 업무 화면(index.css)을 따른다: 남색 #1b2545, 주 버튼 #1f54d6,
@@ -140,6 +144,8 @@
 .easy-message pre { margin: 0 0 10px; padding: 14px 16px; background: var(--bg-2); border-radius: 14px; white-space: pre-wrap; font: inherit; color: var(--ink-2); }
 
 /* 저장 확인 */
+.easy-purchase-save > .easy-primary { display: block; margin-left: auto; }
+.easy-purchase-save .easy-save .easy-actions { justify-content: flex-end; }
 .easy-save h3 { margin-top: 0; font-size: 1.15em; }
 .easy-save ul { margin: 0 0 8px; padding-left: 1.1em; color: var(--ink-2); }
 .easy-check { display: flex; flex-direction: row; gap: 12px; font-size: 1em; font-weight: 400; align-items: flex-start; margin: 12px 0; padding: 14px 16px; background: var(--warn-soft); border-radius: 14px; color: var(--ink-2); }
@@ -429,6 +435,10 @@
 .easy-quote-open { margin: 10px 0 0; }
 .easy-field { display: grid; gap: 6px; margin: 10px 0; font-weight: 700; color: var(--ink); }
 .easy-field input, .easy-field textarea { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; }
+/* Quote input typography only; follows the easy screen and large-text setting. */
+.easy-quote > .easy-field { font-size: 1em; }
+.easy-quote > .easy-field > input,
+.easy-quote > .easy-field > textarea { font-size: 1em; }
 .easy-field input:focus, .easy-field textarea:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
 .easy-quote-list { margin-top: 14px; }
 .easy-quote-supplier { padding: 10px 0; border-top: 1px solid var(--line); }
@@ -443,3 +453,49 @@
 .easy-suggest { margin: 12px 0 0; padding: 12px 16px; border-radius: 12px; background: var(--blue-soft); }
 .easy-suggest h3 { margin: 0 0 6px; font-size: 1em; color: var(--ink); }
 .easy-suggest ul, ul.easy-suggest { margin: 0; padding-left: 1.2em; }
+
+/* 메인 화면 개선: 브랜드 문구와 첫 화면 일러스트만 추가. 기존 공통 색상·폼·기록 영역 유지. */
+.easy .easy-header { gap: clamp(16px, 2.2vw, 40px); }
+.easy .easy-header .brand { gap: 9px; }
+.easy .easy-header .brand-logo { width: 64px; height: 64px; object-fit: contain; }
+.easy .easy-brand-copy, .easy .easy-hello-copy {
+  font-family: Pretendard, Inter, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+.easy .easy-brand-copy { display: flex; flex-direction: column; white-space: nowrap; line-height: 1.3; }
+.easy .easy-brand-copy strong { color: var(--ink); font-size: 1.12em; font-weight: 800; letter-spacing: -0.035em; }
+.easy .easy-brand-copy > span { color: var(--gray-2); font-size: .72em; font-weight: 400; letter-spacing: -.02em; }
+.easy .easy-header nav { gap: clamp(14px, 1.7vw, 31px); min-width: 0; }
+.easy .easy-header nav a { white-space: nowrap; }
+.easy .easy-tools { flex-shrink: 0; }
+.easy .easy-tools button { white-space: nowrap; }
+.easy-main-home { padding-top: 12px; }
+.easy-hello { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.easy-main-home .easy-chat:empty { display: none; }
+.easy-hello-copy { min-width: 0; flex: 1; }
+.easy-hello .easy-hello-copy h1 { font-size: 2.25em; font-weight: 700; margin: 0 0 6px; }
+.easy-hello .easy-hello-copy p { font-weight: 400; word-break: keep-all; margin: 0; }
+.easy-hello-art { display: block; width: clamp(155px, 34%, 388px); height: auto; flex-shrink: 0; align-self: center; }
+/* 두 카드의 기존 컬러와 크기는 유지하고, 줄바꿈이 생겨도 시작 버튼은 오른쪽에 둔다. */
+.easy-starter-body, .easy-starter-result { word-break: keep-all; overflow-wrap: break-word; }
+.easy-starter-go { margin-left: auto; white-space: nowrap; }
+/* 공통 헤더만 좁은 폭에서 메뉴를 다음 줄로 내려, 로고 추가로 인한 겹침을 막는다. */
+@media (max-width: 1024px) {
+  .easy .easy-header { height: auto; flex-wrap: wrap; padding-block: 10px; gap: 8px 16px; }
+  .easy .easy-header nav { order: 3; width: 100%; height: 44px; margin-left: 0; overflow-x: auto; }
+  .easy .easy-tools { flex-wrap: wrap; max-width: 100%; }
+  .easy-backbar { position: static; }
+  .easy-anchor { scroll-margin-top: 150px; }
+}
+@media (max-width: 720px) {
+  .easy .easy-header .brand-logo { width: 54px; height: 54px; }
+  .easy .easy-tools { margin-left: auto; }
+  .easy .easy-tools button { padding-inline: 12px; }
+  .easy-main-home { padding-top: 12px; }
+  .easy-hello { gap: 10px; }
+  .easy-hello .easy-hello-copy h1 { font-size: 1.9em; }
+  .easy-hello-art { display: none; } /* 작은 화면에서는 안내 문구와 입력창을 우선한다. */
+}
+@media (max-width: 480px) {
+  .easy .easy-tools { margin-left: 0; }
+  .easy .easy-header nav { gap: 16px; }
+}

@@ -7,6 +7,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import logo from '../assets/logo.png'
+import mollyCafe from '../assets/molly-cafe.webp'
 import { loadOperationResult, runOperation } from '../api/operationApi'
 import { workflowApi, WorkflowError } from '../api/workflowApi'
 import { Modal } from '../components/common/Ui'
@@ -64,8 +65,8 @@ const STARTERS = [
 
 /** 1번(점심 인원 배치) ↔ 2번(추천 근무표) 전환 주소. 1번을 없애면 이 링크도 뺀다. */
 const MODE_SWITCH = ROSTER_MODE
-  ? { href: `${window.location.pathname}?mode=${LUNCH_MODE_PARAM}`, label: '예전 "점심 인원 배치"로 보기' }
-  : { href: window.location.pathname, label: '새 "직원 근무표"로 보기' }
+  ? { href: `${window.location.pathname}?mode=${LUNCH_MODE_PARAM}`, label: '점심 인원 배치로 보기' }
+  : { href: window.location.pathname, label: '직원 근무표로 보기' }
 
 // 기능 카드 아이콘(선 그림). 장보기는 장바구니, 점심 인원은 사람 둘.
 function StarterIcon({ feature }: { feature: string }) {
@@ -79,6 +80,8 @@ function StarterIcon({ feature }: { feature: string }) {
     </svg>
   )
 }
+// 필요하면 true로 바꿔 기존 상단 사용법 메뉴와 우측 도움 받기 버튼을 복원한다.
+const GUIDE_IN_NAV = false
 const STEPS = ['말하기', '조건 확인', '계산', '결과']
 const NEW_OPERATION: JsonObject = { operation_form: { ...OPERATION_FORM } }
 // 라스트 오더는 분(0시부터)으로 다룬다. 서버는 "18:45" 모양으로 받고, 비우면 18:45를 쓴다(18:30~19:00).
@@ -166,6 +169,7 @@ export default function EasyPage() {
   // 이 화면에서 방금 저장한 안(choice_key). 다른 안으로 바꿔 보면 "저장했어요"를 숨기고 그 안도 따로 저장할 수 있게 한다.
   const [savedFor, setSavedFor] = useState<string | null>(null)
   const [savedChoice, setSavedChoice] = useState<string | null>(null)
+  const quoteMenuEntryRef = useRef(false)
   const endRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
   // 화면을 옮긴 뒤 늦게 도착한 응답이 새 화면을 덮지 않게 한다.
@@ -190,12 +194,40 @@ export default function EasyPage() {
   const firstWordsRef = useRef<string | null>(null)
 
   // 대화 중에는 마지막 말이 보이게, 결과가 나오면 추천 문장부터 보이게(스크롤하지 않아도 결론이 보이도록).
+  const previousScrollPhase = useRef<Phase>(phase)
   useEffect(() => {
+    const previousPhase = previousScrollPhase.current
+    previousScrollPhase.current = phase
     // 점심 인원 추천 근무표(2번)는 결과 화면 맨 위(결론)부터 보이게 한다(결과 자리 표시가 근무표 화면 아래에 있어서).
-    if (phase === 'result' && feature === 'operation' && roster) window.scrollTo({ top: 0 })
-    else if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'start' })
+    // On a fresh home screen, the end marker is below the recent history cards.
+    if (route.kind === 'home' && phase === 'start' && bubbles.length === 0) {
+      window.scrollTo({ top: 0 })
+      return
+    }
+    // 메뉴에서 견적 입력을 시작하면 대화 끝이 아니라 화면 상단부터 보여 준다.
+    if (quoteMenuEntryRef.current) {
+      quoteMenuEntryRef.current = false
+      window.scrollTo({ top: 0 })
+      return
+    }
+    // 근무표는 데이터 선택/조건 확인/계산/결과 단계가 바뀔 때만 상단을 보여 준다.
+    // 렌더링 뒤 한 프레임에 이동해 이전 단계의 아래쪽 스크롤이 남지 않게 한다.
+    // 사용법 따라 하기는 TourOverlay가 안내 대상의 위치를 관리한다.
+    if (feature === 'operation' && roster) {
+      if (tourOn) return
+      if (phase === 'confirm' || phase === 'running' || phase === 'result' || phase === 'error') {
+        const frame = window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+        return () => window.cancelAnimationFrame(frame)
+      }
+    }
+    // 장보기/기존 운영도 결과나 계산 화면에서 조건으로 돌아오면 상단부터 본다.
+    if (!tourOn && phase === 'confirm' && (previousPhase === 'result' || previousPhase === 'running' || previousPhase === 'error')) {
+      const frame = window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+      return () => window.cancelAnimationFrame(frame)
+    }
+    if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'start' })
     else endRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [bubbles, phase, feature, roster])
+  }, [bubbles, phase, feature, roster, route.kind, rosterStage, tourOn])
 
   function startTour() {
     restart()
@@ -239,6 +271,7 @@ export default function EasyPage() {
   const say = (role: Bubble['role'], value: string) => setBubbles((list) => [...list, { role, text: value }])
 
   function reset() {
+    quoteMenuEntryRef.current = false
     setBubbles([]); setText(''); setPhase('start'); setFeature(null); setError(''); setEditing(false); setSnapshot(null)
     setBase(PURCHASE_INPUT); setBudget(asNumber(PURCHASE_INPUT.budget_krw)); setDeliveries(asNumber(PURCHASE_INPUT.max_delivery_count))
     setDailyOrders(OPERATION_FORM.daily_orders); setOwnerWorking(OPERATION_FORM.is_owner_working)
@@ -288,6 +321,7 @@ export default function EasyPage() {
     open({ kind: 'home' })
     say('owner', '받은 견적으로 장보기')
     begin('purchase', null, true)
+    quoteMenuEntryRef.current = true
     setQuoteOpen(true)
   }
 
@@ -746,14 +780,18 @@ export default function EasyPage() {
     <div className={`easy${large ? ' easy-large' : ''}`}>
       {/* 기존 업무 화면과 같은 머리(로고 · 메뉴). 메뉴는 쉬운 화면에서 자주 찾을 일만 둔다. */}
       <header className="app-header easy-header">
-        <a className="brand" {...link({ kind: 'home' })}>
-          <img className="brand-logo" src={logo} alt="신한 SOL루션" />
+        <a className="brand" {...link({ kind: 'home' })} aria-label="SOL루션 홈">
+          <img className="brand-logo" src={logo} alt="" />
+          <span className="easy-brand-copy">
+            <strong>SOL루션</strong>
+            <span>사장님 업무 도우미</span>
+          </span>
         </a>
         <nav aria-label="주 메뉴">
           {nav.map((item) => (
             <a key={item.label} {...link(item.route)} aria-current={item.current ? 'page' : undefined}>{item.label}</a>
           ))}
-          <a href="#" onClick={(e) => { e.preventDefault(); setGuideOpen(true) }}>사용법</a>
+          {GUIDE_IN_NAV && <a href="#" onClick={(e) => { e.preventDefault(); setGuideOpen(true) }}>사용법</a>}
           <a href="#" onClick={(e) => { e.preventDefault(); startQuote() }}>받은 견적 넣기</a>
         </nav>
         <div className="easy-tools">
@@ -761,12 +799,14 @@ export default function EasyPage() {
             <button type="button" className="easy-tools-restart" onClick={restart}>↺ 처음부터 다시</button>
           )}
           <button type="button" onClick={toggleLarge} aria-pressed={large}>{large ? '글자 보통으로' : '글자 크게'}</button>
-          <button type="button" onClick={() => setHelpOpen(!helpOpen)} aria-expanded={helpOpen}>도움 받기</button>
+          {GUIDE_IN_NAV
+            ? <button type="button" onClick={() => setHelpOpen(!helpOpen)} aria-expanded={helpOpen}>도움 받기</button>
+            : <button type="button" onClick={() => setGuideOpen(true)} aria-haspopup="dialog" aria-expanded={guideOpen}>사용법</button>}
         </div>
       </header>
 
       <div className="easy-layout">
-      <main className="easy-main">
+      <main className={`easy-main${fresh ? ' easy-main-home' : ''}`}>
         {route.kind === 'sessions' && <SessionList />}
         {route.kind === 'plans' && <PlanList />}
 
@@ -809,8 +849,11 @@ export default function EasyPage() {
 
         {fresh && (
           <section className="easy-hello">
-            <h1>무엇을 도와드릴까요?</h1>
-            <p>{ROSTER_MODE ? '카페 사장님의 장보기와 직원 근무표를 대신 계산해 드려요.' : '카페 사장님의 장보기와 점심 인원 배치를 대신 계산해 드려요.'}</p>
+            <div className="easy-hello-copy">
+              <h1>무엇을 도와드릴까요?</h1>
+              <p>{ROSTER_MODE ? '카페 사장님의 장보기와 직원 근무표를 대신 계산해 드려요.' : '카페 사장님의 장보기와 점심 인원 배치를 대신 계산해 드려요.'}</p>
+            </div>
+            <img className="easy-hello-art" src={mollyCafe} alt="" width={388} height={147} />
           </section>
         )}
 
