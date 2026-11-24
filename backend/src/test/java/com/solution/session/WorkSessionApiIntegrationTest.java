@@ -720,6 +720,20 @@ class WorkSessionApiIntegrationTest {
 	}
 
 	@Test
+	void 업무_시작만_하는_말은_AI_답을_비워_말풍선이_생기지_않는다() throws Exception {
+		insertSession(500, 10, 1);
+		org.mockito.Mockito.doReturn(ApiResponse.ok(Map.of("detail_status", "NO_CHANGE", "silent", true)))
+				.when(aiServerClient).post(anyString(), any(), anyString(), any());
+		postEvent("start-only", "{\"event_type\":\"message\",\"content\":\"이번 주 장보기 계획 세워 줘\"}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.silent").value(true))
+				.andExpect(jsonPath("$.message").value(nullValue()));
+		// 사장님 말은 남고, AI 답은 빈 글자로 남는다(다시 열어도 "입력은 바꾸지 않았어요" 말풍선이 생기지 않게).
+		assertThat(jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM session_message WHERE session_id = 500 AND role = 'assistant' AND content = ''",
+				Integer.class)).isEqualTo(1);
+	}
+
+	@Test
 	void 같은_기준버전이어도_새_질문이_발급되면_지난_질문을_거부한다() throws Exception {
 		insertSession(500, 10, 1);
 		org.mockito.Mockito.doReturn(ApiResponse.needsInput(Map.of("missing_fields", List.of(Map.of("path", "budget_krw"))), "예산?"))

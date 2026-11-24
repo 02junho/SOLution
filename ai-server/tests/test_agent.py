@@ -191,6 +191,18 @@ def test_명시적_잡담은_NO_CHANGE이고_빈_질문은_되묻는다():
     assert client.post("/agent/interpret", json=BASE).json()["status"] == "needs_input"
 
 
+def test_업무_시작만_하는_말은_말풍선_없이_넘어간다():
+    # "이번 주 장보기 계획 세워 줘": 화면이 이미 시작 안내를 보였으니 AI 답을 더 만들지 않는다(silent, message 없음).
+    _use(FakeInterpreter(InterpretDraft(intent="smalltalk", reply="")))
+    body = client.post("/agent/interpret", json=BASE).json()
+    assert body["status"] == "ok" and body["data"]["detail_status"] == "NO_CHANGE"
+    assert body["data"]["silent"] is True and body["message"] is None
+    # 할 말이 있는 잡담은 그대로 보인다.
+    _use(FakeInterpreter(InterpretDraft(intent="smalltalk", reply="안녕하세요")))
+    body = client.post("/agent/interpret", json=BASE).json()
+    assert "silent" not in body["data"] and body["message"] == "안녕하세요"
+
+
 def test_모델_입력과_해석결과의_개인정보를_가린다():
     class CaptureInterpreter:
         def interpret(self, req):

@@ -20,6 +20,9 @@ import type { ExplanationData, ExplanationState } from './ResultExplanation'
 import OperationComparison from '../operation/workspace/OperationComparison'
 import OperationConfirmationSummary from '../operation/workspace/OperationConfirmationSummary'
 import { CHOICE_TITLE } from '../operation/workspace/format'
+import { CHOICE } from '../easy/recentFormat'
+
+const PURCHASE_NAME: Record<string, string> = { purchase_1: CHOICE.purchase_1, purchase_2: CHOICE.purchase_2 }
 
 function nameOf(
   input: JsonObject | null,
@@ -130,10 +133,11 @@ export default function Results({
     }
   }
   const choices = result?.summary.choices ?? []
+  // 설명 본문은 쉬운 화면과 같은 안 이름("가장 싸게" 등)으로 쓰므로 선택 카드·설명 칸의 이름도 같게 둔다.
   const choiceLabels = Object.fromEntries(
     choices.map((item, index) => [
       item.choice_key,
-      item.label ?? `대안 ${index + 1}`,
+      PURCHASE_NAME[item.choice_key] ?? item.label ?? `대안 ${index + 1}`,
     ]),
   )
   const choice = choices.find((item) => item.choice_key === selected)
@@ -370,7 +374,7 @@ export default function Results({
                           )}
                         </span>
                       </div>
-                      <h3>{item.label ?? item.choice_key}</h3>
+                      <h3>{choiceLabels[item.choice_key] ?? item.choice_key}</h3>
                       <strong className="choice-price">
                         {value ? amount(value.total_krw) : '선택 불가'}
                       </strong>
@@ -564,7 +568,8 @@ export function ConfirmationModal({
           </div>
           <h3>
             {String(
-              choice.label ??
+              PURCHASE_NAME[String(choice.choice_key)] ??
+                choice.label ??
                 (detail.feature_type === 'purchase'
                   ? '구매 계획'
                   : `운영 계획 · ${CHOICE_TITLE[choice.choice_key as keyof typeof CHOICE_TITLE] ?? ''}`),

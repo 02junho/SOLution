@@ -39,9 +39,11 @@ class ExplanationSummaryTest {
 		assertThat(choices).hasSize(1);
 		assertThat(choices.get(0)).containsOnlyKeys("choice_key", "label", "total_krw", "delivery_count",
 				"warning_ids", "suppliers")
-				.containsEntry("total_krw", 113280).containsEntry("suppliers", List.of("원두 로스터리 다"));
+				.containsEntry("total_krw", 113280).containsEntry("suppliers", List.of("원두 로스터리 다"))
+				// 설명에는 쉬운 화면과 같은 안 이름으로 넘긴다(저장된 "총비용 최소"가 아니라)
+				.containsEntry("label", "가장 싸게");
 		assertThat((Map<String, Object>) summary.get("baseline")).containsEntry("total_krw", 166090)
-				.containsEntry("label", "품목마다 가장 싼 견적만 고른 조합(비교용)")
+				.containsEntry("label", "단가만 보고 고르면(비교용)")
 				.containsEntry("confirmable", false);
 		assertThat((List<Map<String, Object>>) summary.get("warnings")).singleElement()
 				.satisfies(w -> assertThat(w).containsOnlyKeys("warning_id", "message", "requires_ack"));
@@ -61,7 +63,7 @@ class ExplanationSummaryTest {
 
 		List<Map<String, Object>> choices = (List<Map<String, Object>>) ExplanationSummary.purchase(stored).get("choices");
 
-		assertThat(choices.get(1)).containsEntry("label", "배송 1회").containsEntry("total_krw", 120400)
+		assertThat(choices.get(1)).containsEntry("label", "한 곳에서 한 번에").containsEntry("total_krw", 120400)
 				.containsEntry("delivery_count", 1).containsEntry("same_as", "purchase_1")
 				.containsEntry("warning_ids", List.of("VAT_UNKNOWN")).containsEntry("suppliers", List.of("카페 도매몰"));
 		// 자기 자신을 가리키는 잘못된 값은 따라가지 않고 원래 안 그대로 둔다.

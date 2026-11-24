@@ -22,6 +22,13 @@ _UNSAFE = re.compile(r"발주|결제|주문|(?:구매|구입).{0,12}(?:하세요
 _SCALED = re.compile(r"\d\s*(?:십|백|천|만|억|조)")
 _SPELLED = re.compile(r"[일이삼사오육칠팔구십백천만억조]+\s*(?:원|회|퍼센트)|(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:번|명|개)")
 _SIMULATION = "모의 조건에 따른 시뮬레이션 결과이며 실제 효과를 보장하지 않습니다."
+# 화면에 있는 안 이름. 숫자를 글로 쓴 말("한 번")처럼 보여도 지어낸 숫자가 아니라 검사에서 뺀다.
+# 따옴표로 묶어 안 이름으로 쓴 경우만 뺀다(따옴표 없는 "한 곳에서 한 번에 받아요"는 배송 횟수 주장이라 그대로 검사한다).
+_SCREEN_LABELS = ("한 곳에서 한 번에",)
+_QUOTES_OPEN, _QUOTES_CLOSE = "“‘'\"", "”’'\""
+_QUOTED = re.compile(f"[{_QUOTES_OPEN}]([^{_QUOTES_OPEN}{_QUOTES_CLOSE}]{{1,30}})[{_QUOTES_CLOSE}]")
+# 화면에 없는 예전 안 이름. 이 이름으로 부른 문장은 쓰지 않고 템플릿을 둔다.
+_OLD_NAMES = re.compile(r"총비용\s*최소|단위\s*단가순|배송\s*1\s*회\s*안")
 # 매입은 견적으로 푼 최적화라 모의 조건·시뮬레이션 안내가 맞지 않는다.
 _SIMULATION_WORDS = re.compile(r"모의\s*조건|시뮬레이션")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -66,7 +73,8 @@ def _headline(choices: list[dict]) -> str:
         difference = int(next_choice["total_krw"]) - int(cheap["total_krw"])
         label = cheap.get("label") or cheap["choice_key"]
         if difference > 0:
-            return f"{label}이(가) {_won(cheap['total_krw'])}으로 가장 쌉니다(다음 안보다 {_won(difference)} 적음)."
+            # 안 이름이 "가장 싸게"처럼 말이라 따옴표로 묶는다("가장 싸게가 … 가장 싸요"처럼 겹쳐 읽히지 않게).
+            return f"“{label}” 안이 {_won(cheap['total_krw'])}으로 가장 쌉니다(다음 안보다 {_won(difference)} 적음)."
         return f"가장 싼 두 안의 총액이 {_won(cheap['total_krw'])}으로 같습니다."
     if len(priced) == 1:
         choice = priced[0]
@@ -114,7 +122,7 @@ class LlmExplainer:
                 caveat = " ".join(s for s in _SENTENCE_END.split(caveat.strip()) if not _SIMULATION_WORDS.search(s))
                 if not caveat:
                     continue
-            if (not _safe_text(caveat, allowed)
+            if (not _safe_text(caveat, allowed) or _wrong_name(caveat, choices)
                     or not _unit_numbers(caveat.replace("퍼센트", "%"), "%") <= _percentages(req.result_summary)):
                 continue
             money = _unit_numbers(caveat, "원")
@@ -134,7 +142,7 @@ class LlmExplainer:
                 return None
             seen.add(item["choice_key"])
             choice = choices[item["choice_key"]]
-            if not _safe_text(item["text"], _numbers_in(choice)):
+            if not _safe_text(item["text"], _numbers_in(choice)) or _wrong_name(item["text"], choices, item["choice_key"]):
                 return None
             expected_amount = {str(int(choice["total_krw"]))} if choice.get("total_krw") is not None else set()
             expected_delivery = {str(int(choice["delivery_count"]))} if choice.get("delivery_count") is not None else set()
@@ -167,6 +175,8 @@ class LlmExplainer:
             "카페 계산 결과를 쉬운 한국어로 설명한다. 제공한 수치와 사실만 그대로 사용하고 "
             "원인·효과·보장을 지어내지 않는다. 발주·결제를 권하지 않는다. "
             "운영은 모의 조건임을 명시한다. 매입은 견적으로 푼 최적화이므로 모의 조건·시뮬레이션을 언급하지 않는다. 안마다 짧은 한 문장으로 설명한다. "
+            "사장님께 하는 해요체(~해요, ~예요)로 쓴다. 안을 부를 때는 label을 따옴표로 묶어 그대로 쓰고(예: '가장 싸게' 안), "
+            "choice_key나 다른 이름(총비용 최소·배송 1회 등)으로 바꿔 부르지 않는다. "
             "total_krw와 delivery_count가 있으면 각각 원·회 단위를 붙인 아라비아 숫자로 빠짐없이 쓴다. "
             "다른 안의 수치를 섞거나 차액·비율을 새로 계산하지 않는다. headline은 짧은 안내로 쓰고 "
             "caveats는 숫자 없는 문장이나 빈 배열로 둔다. JSON만 출력한다: "
@@ -256,7 +266,18 @@ def _percentages(obj) -> set[str]:
     return _unit_numbers(obj.replace("퍼센트", "%"), "%") if isinstance(obj, str) else set()
 
 
+def _wrong_name(text: str, choices: dict, own_key: str | None = None) -> bool:
+    """예전 안 이름이나, 이 안이 아닌 다른 안의 이름을 따옴표로 붙여 부른 문장인지."""
+    if _OLD_NAMES.search(text):
+        return True
+    if own_key is None:
+        return False
+    others = {c.get("label") for key, c in choices.items() if key != own_key} - {choices[own_key].get("label"), None}
+    return any(name.strip() in others for name in _QUOTED.findall(text))
+
+
 def _safe_text(text: str, allowed: set[str]) -> bool:
+    text = _QUOTED.sub(lambda m: "" if m.group(1).strip() in _SCREEN_LABELS else m.group(0), text)
     numbers = _numbers(text)
     return ("INVALID_NUMBER" not in numbers and not _UNSAFE.search(text) and not _SCALED.search(text)
             and not _SPELLED.search(text) and numbers <= allowed)

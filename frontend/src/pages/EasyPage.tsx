@@ -554,7 +554,7 @@ export default function EasyPage() {
     if (out.kind === 'use-form') { say('agent', out.message); if (inputRef.current) openEdit(); return }
     if (out.kind === 'refused') { say('agent', [out.message, ...out.suggestions].join(' ')); return }
     if (out.kind === 'same') {
-      say('agent', out.message)
+      if (out.message) say('agent', out.message)
       if (out.run && inputRef.current && resumeRef.current) void calculate({ kind, input: inputRef.current, values: resumeRef.current.values })
       return
     }
@@ -573,7 +573,7 @@ export default function EasyPage() {
     const said = Object.keys(before).length
       ? changeSentence(before, after) || '말씀하신 대로 조건을 바꿨어요.'
       : `조건을 채웠어요. ${filled.map(([label, value]) => `${label} ${value}`).join(' · ')}`
-    say('agent', `${said}${/[.요]$/.test(said) ? '' : '.'} ${next}`)
+    if (!out.silent) say('agent', `${said}${/[.요]$/.test(said) ? '' : '.'} ${next}`)
     setEditing(false); setSnapshot(null)
     // "비교해 줘"처럼 계산까지 부탁한 말이면, 방금 바뀐 조건(아직 화면에 그려지기 전)으로 바로 계산한다.
     if (out.run) void calculate({ kind, input: session.current_input, values })

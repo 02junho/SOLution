@@ -27,6 +27,14 @@ final class ExplanationSummary {
 			"CURRENT", "현재 방식", "ALT_A", "서로 돕기", "ALT_C", "직원 추가");
 	static final int WAIT_THRESHOLD_MINUTES = 5;
 
+	/**
+	 * 매입 안 이름: 저장된 이름("총비용 최소", "배송 1회")은 계산용이라, 설명에는 쉬운 화면과 같은 이름으로 넘긴다.
+	 * 계산 결과(work_result) 자체는 바꾸지 않는다(예전 화면·저장한 결과에 영향 없게).
+	 */
+	static final Map<String, String> PURCHASE_LABELS = Map.of(
+			"purchase_1", "가장 싸게", "purchase_2", "한 곳에서 한 번에");
+	static final String BASELINE_LABEL = "단가만 보고 고르면(비교용)";
+
 	static Map<String, Object> purchase(Map<String, Object> stored) {
 		Map<Object, Map<String, Object>> byKey = new LinkedHashMap<>();
 		for (Map<String, Object> choice : maps(stored.get("choices"))) {
@@ -42,7 +50,7 @@ final class ExplanationSummary {
 			Map<String, Object> resolved = resolve(choice, byKey);
 			Map<String, Object> row = new LinkedHashMap<>();
 			row.put("choice_key", choice.get("choice_key"));
-			row.put("label", choice.get("label"));
+			row.put("label", PURCHASE_LABELS.getOrDefault(String.valueOf(choice.get("choice_key")), String.valueOf(choice.get("label"))));
 			row.put("total_krw", resolved.get("total_krw"));
 			row.put("delivery_count", resolved.get("delivery_count"));
 			row.put("warning_ids", resolved.getOrDefault("warning_ids", List.of()));
@@ -62,8 +70,8 @@ final class ExplanationSummary {
 		summary.put("choices", choices);
 		if (stored.get("baseline") instanceof Map<?, ?> baseline) {
 			Map<String, Object> row = new LinkedHashMap<>();
-			// 저장된 이름("단위단가순 담기")은 어려워서 화면 말투로 넘긴다.
-			row.put("label", "품목마다 가장 싼 견적만 고른 조합(비교용)");
+			// 저장된 이름("단위단가순 담기")은 어려워서 쉬운 화면과 같은 이름으로 넘긴다.
+			row.put("label", BASELINE_LABEL);
 			row.put("total_krw", baseline.get("total_krw"));
 			row.put("confirmable", baseline.get("confirmable"));
 			summary.put("baseline", row);

@@ -125,6 +125,7 @@ export function presentIssues(entries: Issue[]): Snapshot['issues'] {
     VAT_UNKNOWN: '부가세 여부를 확인해야 합니다.',
     ITEM_CONFIRMATION_REQUIRED: '품목을 확인해야 합니다.',
     ITEM_MATCHED_BY_RAG: '이름이 비슷한 품목으로 AI가 맞췄습니다. 맞는지 확인해 주세요.',
+    PACK_ASSUMED: '견적에 주문 단위가 없어 1개(또는 적힌 낱개 수만큼 묶음) 가격으로 봤습니다.',
     INVALID_OR_MISSING_PACK_COUNT: '묶음 수량을 확인해야 합니다.',
     INVENTORY_MISSING_OR_UNIT_MISMATCH: '재고 수량 또는 단위를 확인해야 합니다.',
     MISSING_RECIPE: '메뉴의 재료표를 등록해야 합니다.',
