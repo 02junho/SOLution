@@ -190,7 +190,7 @@ export function PurchaseView({ result, prepared, saved, savedFor = null, onSaved
       <WhyCard result={result} best={best} other={other ?? null} saved={Boolean(savedChoice)} picked={!isRecommended} maxDeliveries={maxDeliveries} />
 
       {savedChoice ? <p className="easy-done">{saved || '저장한 계획이에요'}</p> : (
-      <section className="easy-card" data-tour="save">
+      <section className="easy-card easy-purchase-save" data-tour="save">
         <SaveBox
           key={best.choice_key}
           saved={savedFor === best.choice_key ? saved : ''}
