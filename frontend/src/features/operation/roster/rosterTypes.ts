@@ -1,5 +1,6 @@
 import type { JsonObject } from '../../../types/workflow'
 import { OPTION_NAME } from '../easy/rosterNames'
+import { averageWait, waitText } from './rosterWait'
 
 /** ai-server /tools/simulation/daily-roster 응답(operation.daily_roster.v1). */
 export type RosterShift = {
@@ -203,16 +204,14 @@ export type RosterChatReply = {
   reply: string
 }
 
-/** AI에 보낼 결과 요약. 대기는 분(소수 한 자리)으로 반올림해 화면 표기와 같은 숫자만 쓰게 한다. */
-export function rosterDigest(data: RosterOptions): JsonObject {
-  const min = (sec: number | null | undefined) => (sec == null ? null : Math.round(sec / 6) / 10)
-  const avg = (xs: (number | null)[]) => {
-    const v = xs.filter((x): x is number => x != null)
-    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
-  }
+/** AI에도 화면과 같은 분·초 문자열을 전달한다. 인원 실험과 최종 근무표의 값은 구분한다. */
+export function rosterDigest(data: RosterOptions, recommendedKey: OptionKey = 'RECOMMENDED'): JsonObject {
   const days = Object.keys(data.days)
   return {
+    recommended_choice_key: recommendedKey,
     min_gain_sec: data.min_gain_sec,
+    wait_display_format: 'minutes_seconds',
+    wait_scope: days.length === 1 ? '선택 요일의 최종 근무표 대기' : '최종 근무표의 요일별 바쁜 시간 대기 평균',
     // 인건비가 어느 기간 것인지(요일 하나만 계산했으면 하루). AI 설명이 "주 인건비"라고 잘못 말하지 않게 데이터로 넘긴다.
     cost_period: days.length === 1 ? '하루' : '일주일',
     // AI가 자주 말하는 셈("사람을 더 두는 날이 6일", "추천보다 18만 원 적게")은 여기서 미리 세어 넘긴다.
@@ -223,7 +222,7 @@ export function rosterDigest(data: RosterOptions): JsonObject {
         d,
         {
           busy_windows: data.days[d].windows.map((w) => `${w.start_time}~${w.end_time}`),
-          peak_wait_min_by_extra: data.days[d].ladder.map((s) => ({ extra: s.extra, peak_wait_min: min(s.peak_wait_sec) })),
+          trial_wait_by_extra: data.days[d].ladder.map((s) => ({ extra: s.extra, wait_text: waitText(s.peak_wait_sec) })),
           picks: data.days[d].picks,
         },
       ]),
@@ -232,7 +231,8 @@ export function rosterDigest(data: RosterOptions): JsonObject {
       key: o.key,
       // 화면과 같은 이름으로 보낸다(AI 설명이 "아끼는 안" 같은 서버 이름을 쓰지 않게).
       title: OPTION_NAME[o.key] ?? o.title,
-      peak_wait_min_avg: min(avg(days.map((d) => o.peak_wait_sec[d] ?? null))),
+      peak_wait_text_avg: waitText(averageWait(days.map((d) => o.peak_wait_sec[d]))),
+      final_wait_by_day: Object.fromEntries(days.map((d) => [d, waitText(o.peak_wait_sec[d])])),
       cost_krw: o.plan_cost_krw,
       people_used: o.weekly.people_used,
       unfilled_hours: o.shortfall.unfilled_hours,
@@ -240,7 +240,7 @@ export function rosterDigest(data: RosterOptions): JsonObject {
       extra_by_day: o.extra_by_day,
       days_with_extra: Object.values(o.extra_by_day ?? {}).filter((n) => Number(n) > 0).length,
       // 추천안과의 인건비 차이(크기만). AI가 "180,600원 적게"처럼 말하므로 부호 없이 넘긴다(많고 적음은 cost_krw로 안다).
-      cost_gap_vs_recommended_krw: Math.abs(o.plan_cost_krw - (data.options.find((r) => r.key === 'RECOMMENDED')?.plan_cost_krw ?? o.plan_cost_krw)),
+      cost_gap_vs_recommended_krw: Math.abs(o.plan_cost_krw - (data.options.find((r) => r.key === recommendedKey)?.plan_cost_krw ?? o.plan_cost_krw)),
     })),
     // 주휴 비교를 안 했으면 AI에도 보내지 않는다(없는 숫자를 지어내지 않게).
     ...(data.holiday_compare

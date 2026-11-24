@@ -6,7 +6,7 @@ import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
 import DayTimeline from './DayTimeline'
 import RosterQueue from './RosterQueue'
-import { busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, headline, ladderBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won, worstPeak } from './easyRosterModel'
+import { averagePeak, busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, optionSummary, headline, finalWaitBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won, worstPeak } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -21,7 +21,6 @@ export default function EasyRosterResult({
   summary,
   chosen,
   onChoose,
-  explain,
   saved,
   readOnly,
   onSave,
@@ -34,8 +33,6 @@ export default function EasyRosterResult({
   summary: RosterSummary | null
   chosen: OptionKey
   onChoose: (key: OptionKey) => void
-  /** AI 설명(없으면 숨김). ai=false면 코드가 만든 요약 문장. */
-  explain: { text: string; ai: boolean } | null
   /** 저장했으면 안내 문장 */
   saved: string
   /** 저장한 계획 보기(고르기·저장·말로 고치기 없음) */
@@ -49,9 +46,8 @@ export default function EasyRosterResult({
   const days = shownDays(data)
   const period = periodOf(days) // 하루 근무표면 "주" 대신 "하루"
   const option = data.options.find((o) => o.key === chosen) ?? data.options[0]
-  const [ladderDay, setLadderDay] = useState<Weekday | null>(() => busiestDay(data, days))
-  const day = ladderDay && days.includes(ladderDay) ? ladderDay : busiestDay(data, days)
-  const bars = day ? ladderBars(data, day) : []
+  const [graphDay, setGraphDay] = useState<Weekday | null>(() => busiestDay(data, days))
+  const day = graphDay && days.includes(graphDay) ? graphDay : busiestDay(data, days)
   const windows = day ? mergedWindows(data.days[day].windows).map((w) => range(w.start, w.end)).join(', ') : '' // 이어진 바쁜 시간은 하나로
   // 하루 근무표에서만 바쁠 때 더 둔 사람(절약 안에 없는 근무)을 표시한다. 일주일 표는 요일 머리의 "바쁠 때 +N"으로 충분하다.
   const base = weekRows(option, days)
@@ -59,8 +55,10 @@ export default function EasyRosterResult({
   const added = new Set(changed?.added ?? [])
   const hasExtra = rows.some((r) => r.cells.some((c) => c?.extra))
   const holes = unfilledCells(option, days)
-  const peak = worstPeak(option, days)
-  const recommended = data.options.find((o) => o.key === 'RECOMMENDED') ?? option
+  const peak = averagePeak(option, days)
+  const waitLabel = days.length === 1 ? '바쁜 시간 대기' : '바쁜 시간 대기 (요일 평균)'
+  const recommended = data.options.find((o) => o.key === summary?.recommended_choice_key) ?? data.options.find((o) => o.key === 'RECOMMENDED') ?? option
+  const bars = day ? finalWaitBars(data, day, recommended.key) : []
   const rules = option.days[days[0]]?.rules as { short_shift_hours?: number; long_shift_hours?: number } | undefined
   const warnings = (summary?.warnings ?? []).filter((w) => w.requires_ack && (w.choice_keys === null || w.choice_keys.includes(option.key)))
   const notes = (summary?.warnings ?? []).filter((w) => !w.requires_ack && (w.choice_keys === null || w.choice_keys.includes(option.key)))
@@ -68,10 +66,10 @@ export default function EasyRosterResult({
   return (
     <>
       <section className="easy-verdict" data-tour="verdict">
-        <p className="easy-label">{readOnly ? '저장한 근무표' : option.key === 'RECOMMENDED' ? '추천' : '고른 근무표'}</p>
+        <p className="easy-label">{readOnly ? '저장한 근무표' : option.key === recommended.key ? '추천' : '고른 근무표'}</p>
         <h2>{headline(option, days)}</h2>
         <p>
-          바쁜 시간 가장 긴 대기 <b>{waitText(peak)}</b> · 직원 <b>{option.weekly.people_used}명</b>{option.shortfall.more_people_under_15h > 0 && <> + 새로 뽑을 직원 <b>{option.shortfall.more_people_under_15h}명</b></>} (모두 주 15시간 미만) · {period.per} 인건비{' '}
+          {waitLabel} <b>{waitText(peak)}</b> · 직원 <b>{option.weekly.people_used}명</b>{option.shortfall.more_people_under_15h > 0 && <> + 새로 뽑을 직원 <b>{option.shortfall.more_people_under_15h}명</b></>} (모두 주 15시간 미만) · {period.per} 인건비{' '}
           <b>{won(option.plan_cost_krw)}</b>
         </p>
         {!readOnly && (
@@ -79,43 +77,46 @@ export default function EasyRosterResult({
             {data.options.map((o) => (
               <button key={o.key} type="button" className={o.key === option.key ? 'on' : ''} aria-pressed={o.key === option.key} onClick={() => onChoose(o.key)}>
                 {OPTION_NAME[o.key]}
-                {o.key === 'RECOMMENDED' ? ' (추천)' : ''}
+                {o.key === recommended.key ? ' (추천)' : ''}
               </button>
             ))}
           </div>
         )}
-        {explain && <Explain label={explain.ai ? 'AI 설명' : '요약'} text={explain.text} />}
+        <Explain label="요약" text={optionSummary(data, option, days)} />
       </section>
 
-      {/* 막대 안내는 비교할 막대가 둘 이상일 때만, 요일 고르기와 줄 서는 모습은 막대 수와 상관없이 보여 준다 */}
-      {day && (bars.length > 1 || days.length > 1 || resultId != null) && (
+      {/* 최종 근무표의 요일별 값: 상단/비교 카드와 같은 지표. 내부 인원 탐색값은 표시하지 않는다. */}
+      {day && (bars.length > 0 || resultId != null) && (
         <section className="easy-card easy-noprint">
-          <h2>{bars.length > 1 ? '사람을 늘리면 대기가 얼마나 줄까요?' : '줄 서는 모습'}</h2>
-          {bars.length > 1 && (
+          <h2>{days.length > 1 ? '요일별 예상 대기시간' : '예상 대기시간 비교'}</h2>
           <p className="easy-muted">
-            {WEEKDAY_LABEL[day]}요일 바쁜 시간({windows})에 가장 오래 기다리는 손님 기준이에요. 더 늘려도 {Math.round(data.min_gain_sec)}초 넘게 줄지
-            않으면 거기서 멈추고 그 앞을 추천해요.
+            {WEEKDAY_LABEL[day]}요일 바쁜 시간{windows ? `(${windows})` : ''}의 예상 대기시간이에요. 최종 근무표대로 일할 때의 결과를 비교해요.
           </p>
+          {days.length > 1 && (
+            <Pick label="요일" value={days.indexOf(day)} options={days.map((_, i) => i)} format={(i) => WEEKDAY_LABEL[days[i]]} onPick={(i) => setGraphDay(days[i])} />
+          )}
+          {bars.length > 0 && (
+            <div className="er-ladder er-final-waits" role="img" aria-label={bars.map((b) => `${b.label} ${waitText(b.sec)}${b.recommended ? ' 추천 근무표' : ''}`).join(', ')}>
+              {bars.map((b) => (
+                <div key={b.key} className={`er-bar${b.recommended ? ' pick' : ''}`}>
+                  <div className="er-bar-plot">
+                    <div className="er-bar-fill" style={{ height: `${b.ratio * 100}%` }}>
+                      <b>{waitText(b.sec)}</b>
+                    </div>
+                  </div>
+                  <span>{b.label}{b.recommended ? (days.length > 1 ? ' (주간 추천)' : ' (추천)') : ''}</span>
+                </div>
+              ))}
+            </div>
           )}
           {days.length > 1 && (
-            <Pick label="요일" value={days.indexOf(day)} options={days.map((_, i) => i)} format={(i) => WEEKDAY_LABEL[days[i]]} onPick={(i) => setLadderDay(days[i])} />
+            <p className="easy-muted er-small">주간 비교 카드의 대기시간은 각 근무표의 요일별 측정값을 평균 낸 값이에요(반올림 전 기준).</p>
           )}
-          {bars.length > 1 && (
-          <div className="er-ladder" role="img" aria-label={bars.map((b) => `${b.label} ${waitText(b.sec)}`).join(', ')}>
-            {bars.map((b) => (
-              <div key={b.extra} className={`er-bar${b.pick === 'RECOMMENDED' ? ' pick' : ''}`}>
-                <b>{waitText(b.sec)}</b>
-                <div style={{ height: `${Math.max(6, b.ratio * 100)}%` }} />
-                <span>
-                  {b.label}
-                  {b.pick === 'RECOMMENDED' ? ' (추천)' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-          )}
+          <Info title="균형 근무표는 어떻게 만들어요?">
+            바쁜 시간에 한 명씩 더 배치했을 때 대기가 {data.min_gain_sec}초 이상 줄어드는 동안 인원을 늘려 근무조의 기준을 정해요. 실제 근무조와 휴게시간을 반영해 다시 계산한 결과가 위 그래프예요.
+          </Info>
           {resultId != null && (
-            <RosterQueue key={`${day}:${option.key}`} resultId={resultId} day={day} windows={data.days[day].windows} chosen={option.key} repetitions={repetitionsOf(data)} />
+            <RosterQueue key={`${resultId}:${day}:${option.key}`} resultId={resultId} day={day} windows={data.days[day].windows} chosen={option.key} repetitions={repetitionsOf(data)} />
           )}
         </section>
       )}
@@ -216,13 +217,18 @@ export default function EasyRosterResult({
         <summary>
           <h2>세 근무표 비교</h2>
         </summary>
+        <p className="easy-muted">
+          {days.length > 1 ? '최종 근무표대로 일할 때, 요일마다 바쁜 시간 중 가장 긴 예상 대기시간을 구해 평균 냈어요.' : '최종 근무표대로 일할 때, 선택한 요일의 바쁜 시간 중 가장 긴 예상 대기시간이에요.'}
+        </p>
+        <p className="easy-muted er-small">최종 추천은 예상 대기시간, 인건비, 필요한 직원 수와 목표 시간 검증 결과를 비교해 정해요.</p>
         <div className="er-compare">
           {data.options.map((o) => (
             <button key={o.key} type="button" className={`er-option${o.key === option.key ? ' on' : ''}`} aria-pressed={o.key === option.key} disabled={readOnly} onClick={() => onChoose(o.key)}>
-              {o.key === 'RECOMMENDED' && <span className="er-badge">추천</span>}
+              {o.key === recommended.key && <span className="er-badge">추천</span>}
               <b>{OPTION_NAME[o.key]}</b>
-              <span>가장 긴 대기</span>
-              <strong>{waitText(worstPeak(o, days))}</strong>
+              <span>{waitLabel}</span>
+              <strong>{waitText(averagePeak(o, days))}</strong>
+              {days.length > 1 && <span>요일 중 가장 긴 대기 {waitText(worstPeak(o, days))}</span>}
               <span>{period.per} 인건비</span>
               <strong>{won(o.plan_cost_krw)}</strong>
               <span>직원 {o.weekly.people_used}명{o.shortfall.more_people_under_15h > 0 ? ` · ${o.shortfall.more_people_under_15h}명 더 필요` : ''}</span>
@@ -242,7 +248,7 @@ export default function EasyRosterResult({
           <SaveBox
             key={option.key}
             lines={[
-              `${OPTION_NAME[option.key]} · 바쁜 시간 가장 긴 대기 ${waitText(peak)}`,
+              `${OPTION_NAME[option.key]} · ${waitLabel} ${waitText(peak)}`,
               `${period.per} 인건비 ${won(option.plan_cost_krw)} · 직원 ${option.weekly.people_used}명${option.shortfall.more_people_under_15h > 0 ? ` + 새로 뽑을 직원 ${option.shortfall.more_people_under_15h}명` : ''}(모두 주 15시간 미만)`,
               ...notes.map((n) => n.message),
             ]}

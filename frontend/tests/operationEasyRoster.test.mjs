@@ -5,6 +5,7 @@ import { createServer } from 'vite'
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom', logLevel: 'silent' })
 const model = await server.ssrLoadModule('/src/features/operation/easy/easyRosterModel.ts')
+const { rosterDigest, optionsFromStored } = await server.ssrLoadModule('/src/features/operation/roster/rosterTypes.ts')
 const chat = await server.ssrLoadModule('/src/features/operation/easy/easyRosterChat.ts')
 const restore = await server.ssrLoadModule('/src/features/operation/easy/easyRosterRestore.ts')
 const warm = await server.ssrLoadModule('/src/features/operation/easy/rosterWarm.ts')
@@ -49,10 +50,19 @@ const data = {
   options: [option('SAVE', 0), option('RECOMMENDED', 1), option('ROOMY', 2)],
 }
 
-test('대기 글자: 1분 안 / 반올림한 분 / 없음', () => {
-  assert.equal(model.waitText(40), '1분 안')
-  assert.equal(model.waitText(170), '약 3분')
+test('대기 글자: 분·초 / 초 반올림과 올림 / 없음', () => {
+  assert.equal(model.waitText(0), '0초')
+  assert.equal(model.waitText(40), '40초')
+  assert.equal(model.waitText(59.6), '1분')
+  assert.equal(model.waitText(170), '2분 50초')
+  assert.equal(model.waitText(179.6), '3분')
+  assert.equal(model.waitText(3.83 * 60), '3분 50초')
+  assert.equal(model.waitText(3.74 * 60), '3분 44초')
+  assert.equal(model.waitText(3.68 * 60), '3분 41초')
   assert.equal(model.waitText(null), '—')
+  assert.equal(model.waitText(undefined), '—')
+  assert.equal(model.waitText(NaN), '—')
+  assert.equal(model.waitText(-1), '—')
 })
 
 test('추천 한 줄: 새로 뽑을 직원 먼저, 모든 요일 같은 수면 "N명씩", 아니면 요일, 0이면 충분', () => {
@@ -122,7 +132,7 @@ test('세 안 이름은 한 곳에서: 저장한 계획 목록도 같은 이름'
   const names = await server.ssrLoadModule('/src/features/operation/easy/rosterNames.ts')
   const recent = await server.ssrLoadModule('/src/features/easy/recentFormat.ts')
   assert.equal(names.OPTION_NAME.SAVE, '인건비 절약 근무표')
-  assert.equal(recent.CHOICE.RECOMMENDED, '추천 근무표')
+  assert.equal(recent.CHOICE.RECOMMENDED, '균형 근무표')
   assert.equal(model.OPTION_NAME.ROOMY, recent.CHOICE.ROOMY)
 })
 
@@ -399,8 +409,166 @@ test('CodeRabbit 반영: 사장님 시작이 끝보다 늦어지는 변경은 �
   assert.equal(both.next.team.ownerStart, '16:00')
 })
 
-test('CodeRabbit 반영: 가장 긴 대기는 요일 평균이 아니라 가장 긴 요일', () => {
+test('주간 비교: 요일 평균과 가장 긴 요일의 값은 구분한다', () => {
   const o = { peak_wait_sec: { MON: 100, TUE: 300 } }
   assert.equal(model.worstPeak(o, ['MON', 'TUE']), 300)
   assert.equal(model.averagePeak(o, ['MON', 'TUE']), 200)
+})
+
+
+test('주간 비교: 카드의 요일 평균과 추천 대비 대기 차이가 같은 기준이다', () => {
+  const days = ['MON', 'TUE', 'SAT']
+  const rec = { key: 'RECOMMENDED', plan_cost_krw: 100000, peak_wait_sec: { MON: 100, TUE: 100, SAT: 224.4 } }
+  const save = { key: 'SAVE', plan_cost_krw: 90000, peak_wait_sec: { MON: 150, TUE: 143.6, SAT: 229.8 } }
+  assert.equal(model.waitText(model.averagePeak(rec, days)), '2분 21초')
+  assert.equal(model.waitText(model.averagePeak(save, days)), '2분 54초')
+  assert.equal(model.waitText(model.worstPeak(rec, days)), '3분 44초')
+  assert.equal(model.waitText(model.worstPeak(save, days)), '3분 50초')
+  assert.equal(model.versusText(save, rec, days), '추천보다 대기 +33초 · 인건비 −10,000원')
+  // 하루 근무표는 그날의 값만 쓴다.
+  assert.equal(model.averagePeak(save, ['SAT']), model.worstPeak(save, ['SAT']))
+  // 두 안의 측정 요일이 다르면 카드에 표시된 평균을 무리하게 비교하지 않는다.
+  const missing = { ...save, peak_wait_sec: { ...save.peak_wait_sec, MON: null } }
+  assert.equal(model.versusText(missing, rec, days), '추천보다 대기 비교 불가(측정 요일 다름) · 인건비 −10,000원')
+  assert.equal(model.averagePeak(missing, ['MON']), null)
+})
+
+
+test('주간 요약·AI에는 같은 최종 근무표 대기(초)를 집계해 분·초로 표시한다', () => {
+  const fixture = { ...data, options: [
+    { ...data.options[0], peak_wait_sec: { MON: 190, TUE: 210 }, plan_cost_krw: 1398360 },
+    { ...data.options[1], peak_wait_sec: { MON: 150, TUE: 184 }, plan_cost_krw: 1759560 },
+    { ...data.options[2], peak_wait_sec: { MON: 150, TUE: 174 }, plan_cost_krw: 2156880 },
+  ] }
+  const days = model.shownDays(fixture)
+  assert.equal(model.waitText(model.averagePeak(fixture.options[1], days)), '2분 47초')
+  assert.match(model.optionSummary(fixture, fixture.options[1], days), /3분 20초 → 2분 47초/)
+  assert.match(model.optionSummary(fixture, fixture.options[2], days), /여유 근무표:.*3분 20초 → 2분 42초/)
+  assert.match(model.versusText(fixture.options[0], fixture.options[1], days), /대기 \+33초/)
+  const digest = rosterDigest(fixture)
+  assert.equal(digest.options[1].peak_wait_text_avg, '2분 47초')
+  assert.equal(digest.options[1].final_wait_by_day.MON, '2분 30초')
+  assert.equal(digest.days.MON.trial_wait_by_extra[0].wait_text, '7분')
+  assert.equal(digest.options[1].peak_wait_min_avg, undefined)
+})
+
+test('하루 근무표와 변경된 결과는 현재 데이터만 쓰고 인원 추가 실험과 구분한다', () => {
+  const first = { ...data, days: { MON: data.days.MON }, options: [
+    { ...data.options[0], peak_wait_sec: { MON: 225.6 } },
+    { ...data.options[1], peak_wait_sec: { MON: 153.6 } },
+    { ...data.options[2], peak_wait_sec: { MON: 146.4 } },
+  ] }
+  const days = model.shownDays(first)
+  assert.match(model.optionSummary(first, first.options[1], days), /3분 46초 → 2분 34초, 하루 인건비/)
+  assert.doesNotMatch(model.optionSummary(first, first.options[1], days), /요일 평균/)
+  assert.equal(rosterDigest(first).options[1].peak_wait_text_avg, '2분 34초')
+  const next = { ...first, options: [first.options[0], { ...first.options[1], peak_wait_sec: { MON: 119.6 } }, first.options[2]] }
+  assert.match(model.optionSummary(next, next.options[1], days), /3분 46초 → 2분,/)
+  assert.equal(rosterDigest(next).options[1].peak_wait_text_avg, '2분')
+  assert.equal(model.ladderBars(next, 'MON')[1].sec, 170, '실험 값은 최종 근무표 값으로 덮어쓰지 않는다')
+})
+
+test('초 변환은 평균 집계 후 한 번만 반올림한다', () => {
+  const selected = { ...data.options[1], peak_wait_sec: { MON: 59.44, TUE: 59.46 } }
+  assert.equal(model.waitText(model.averagePeak(selected, ['MON', 'TUE'])), '59초')
+  assert.equal(model.waitText(model.averagePeak({ ...selected, peak_wait_sec: { MON: null, TUE: 59.6 } }, ['MON', 'TUE'])), '1분')
+})
+
+
+test('추천 대비 차이는 카드에 표시된 초의 차이와 정확히 일치한다', () => {
+  const rec = { ...data.options[1], peak_wait_sec: { MON: 100.49 } }
+  const save = { ...data.options[0], peak_wait_sec: { MON: 110.51 } }
+  assert.equal(model.versusText(save, rec, ['MON']), '추천보다 대기 +11초 · 인건비 같음')
+})
+
+
+test('재계산한 저장 응답에서 새 실험값과 최종값을 각각 읽고 막대 높이를 비례시킨다', () => {
+  const stored = (trial, final) => ({ summary: { model_version: 'operation.roster_options.v1' }, detail: {
+    min_gain_sec: 30, skipped_days: [], assumptions: [], days: { MON: { ...data.days.MON,
+      ladder: trial.map((sec, extra) => ({ extra, peak_wait_sec: sec })) } },
+    choices: data.options.map(({ key, ...o }, i) => ({ ...o, choice_key: key, peak_wait_sec: { MON: final[i] } })),
+  } })
+  const first = optionsFromStored(stored([213, 153, 146], [162, 151, 146]))
+  const next = optionsFromStored(stored([165, 132, 131], [170, 150, 131]))
+  assert.deepEqual(model.ladderBars(first, 'MON').map(b => b.sec), [213, 153, 146])
+  assert.deepEqual(model.ladderBars(next, 'MON').map(b => b.sec), [165, 132, 131])
+  assert.deepEqual(model.ladderBars(next, 'MON').map(b => b.ratio), [1, 132/165, 131/165])
+  assert.match(model.optionSummary(next, next.options[1], ['MON']), /2분 50초 → 2분 30초/)
+  assert.equal(model.ladderBars(first, 'MON')[1].ratio, 153/213)
+  assert.equal(model.ladderBars(next, 'MON')[1].pick, 'RECOMMENDED')
+})
+
+
+test('최종 추천이 절약안이면 AI도 절약안을 기준으로 비교한다', () => {
+  const fixture = { ...data, options: data.options.map((o, i) => ({ ...o, plan_cost_krw: 100000 + i * 10000 })) }
+  const digest = rosterDigest(fixture, 'SAVE')
+  assert.equal(digest.recommended_choice_key, 'SAVE')
+  assert.equal(digest.options[1].title, '균형 근무표')
+  assert.equal(digest.options[1].cost_gap_vs_recommended_krw, 10000)
+  assert.equal(digest.options[0].cost_gap_vs_recommended_krw, 0)
+})
+
+test('하루 그래프는 선택 요일의 실험값만 읽는다', () => {
+  const single = { ...data, days: { TUE: data.days.TUE } }
+  assert.deepEqual(model.ladderBars(single, 'MON'), [])
+  assert.equal(model.ladderBars(single, 'TUE')[0].sec, 300)
+  assert.equal(model.ladderBars(single, 'TUE')[0].pick, 'RECOMMENDED')
+})
+
+
+test('절약안과 균형안의 최종 지표가 같을 때 동일하다고 표시한다', () => {
+  const save = data.options[0]
+  const balance = { ...save, key: 'RECOMMENDED' }
+  assert.equal(model.versusText(balance, save, ['MON', 'TUE']), '추천안과 예상 대기·인건비·채용 필요 인원이 같아요')
+  assert.equal(model.versusText(save, save, ['MON', 'TUE']), null)
+})
+
+test('재계산 후 같은 요일 그래프도 새 실험값을 읽는다', () => {
+  const first = { ...data, days: { MON: data.days.MON } }
+  const next = { ...first, days: { MON: { ...first.days.MON, ladder: [{ extra: 0, peak_wait_sec: 150 }, { extra: 1, peak_wait_sec: 144 }], picks: { SAVE: 0, RECOMMENDED: 0, ROOMY: 1 } } } }
+  assert.equal(model.ladderBars(first, 'MON')[0].sec, 420)
+  assert.equal(model.ladderBars(next, 'MON')[0].sec, 150)
+  assert.equal(model.ladderBars(next, 'MON')[0].pick, 'RECOMMENDED')
+  assert.equal(model.ladderBars(next, 'MON')[1].sec, 144)
+})
+
+test('최종 그래프는 실험값이 아닌 선택 요일의 최종값을 사용한다', () => {
+  const final = { ...data, options: data.options.map((o, i) => ({ ...o, peak_wait_sec: { MON: [150,145,143][i], TUE: [186,144,140][i] } })) }
+  const bars = model.finalWaitBars(final, 'MON', 'SAVE')
+  assert.deepEqual(bars.map(b => b.sec), [150,145,143])
+  assert.deepEqual(bars.map(b => b.recommended), [true,false,false])
+  assert.deepEqual(bars.map(b => b.ratio), [1,145/150,143/150])
+  assert.deepEqual(model.finalWaitBars(final, 'TUE', 'SAVE').map(b => b.sec), [186,144,140])
+  assert.equal(model.busiestDay(final, ['MON','TUE']), 'TUE')
+  for (const o of final.options) {
+    const vals = model.shownDays(final).map(d => model.finalWaitBars(final,d,'SAVE').find(b => b.key === o.key).sec)
+    assert.equal(vals.reduce((a,b) => a+b,0)/vals.length, model.averagePeak(o,model.shownDays(final)))
+  }
+})
+
+test('하루 최종 그래프와 카드의 값은 동일하고 다른 요일은 읽지 않는다', () => {
+  const final = { ...data, days: { TUE: data.days.TUE }, options: data.options.map((o,i) => ({ ...o, peak_wait_sec: { MON: 420, TUE: [144,144,140][i] } })) }
+  assert.deepEqual(model.finalWaitBars(final,'MON','SAVE'), [])
+  assert.deepEqual(model.finalWaitBars(final,'TUE','SAVE').map(b => b.sec), [144,144,140])
+  assert.equal(model.busiestDay(final, model.shownDays(final)), 'TUE')
+  for (const o of final.options) assert.equal(model.finalWaitBars(final,'TUE','SAVE').find(b=>b.key===o.key).sec,model.averagePeak(o,['TUE']))
+})
+
+test('재계산한 결과는 실험값이 같아도 최종 그래프가 갱신된다', () => {
+  const first = { ...data, options: data.options.map((o,i) => ({ ...o, peak_wait_sec: { MON: [150,145,143][i] } })) }
+  const next = { ...first, options: first.options.map((o,i) => ({ ...o, peak_wait_sec: { MON: [180,130,125][i] } })) }
+  const before = JSON.stringify(first)
+  assert.deepEqual(model.finalWaitBars(first,'MON','SAVE').map(b => b.sec),[150,145,143])
+  assert.deepEqual(model.finalWaitBars(next,'MON','RECOMMENDED').map(b => b.sec),[180,130,125])
+  assert.deepEqual(model.finalWaitBars(next,'MON','RECOMMENDED').map(b => b.recommended),[false,true,false])
+  assert.equal(JSON.stringify(first),before)
+})
+
+test('측정 불가를 0초로 바꾸지 않고 0초는 유효값으로 유지한다', () => {
+  const final = { ...data, options: data.options.map((o,i) => ({ ...o, peak_wait_sec: { MON: [null,0,80][i] } })) }
+  const bars = model.finalWaitBars(final,'MON','ROOMY')
+  assert.deepEqual(bars.map(b=>b.sec),[null,0,80])
+  assert.deepEqual(bars.map(b=>b.ratio),[0,0,1])
+  assert.equal(model.waitText(bars[0].sec),'—')
+  assert.equal(model.waitText(bars[1].sec),'0초')
 })

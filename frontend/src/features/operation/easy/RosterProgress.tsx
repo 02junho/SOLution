@@ -47,13 +47,13 @@ export default function RosterProgress({ progress: real, days = [] }: { progress
               <b>{name}</b>
               <span>
                 ✓ {busy ? `바쁜 시간 ${busy} · ` : ''}
-                {day.extra ? `${day.extra}명 더` : '추가 없이'} · 가장 긴 대기 {waitText(day.peak_wait_sec)}
+                {day.extra ? `${day.extra}명 더` : '추가 없이'} · 인원 추가 실험 대기 {waitText(day.peak_wait_sec)}
               </span>
             </li>
           )
         })}
       </ul>
-      <small>요일을 다 계산하면 직원을 배정해 근무표를 보여 드려요.</small>
+      <small>요일을 다 계산하면 휴게시간 등을 반영한 근무표와 최종 대기시간을 보여 드려요.</small>
     </div>
   )
 }

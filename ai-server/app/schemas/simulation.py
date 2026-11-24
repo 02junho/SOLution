@@ -159,11 +159,26 @@ class WeekPlanRequest(BaseModel):
     request_key: str | None = Field(default=None, max_length=111)
 
 
+# 추천 근무표만 기본 20회. 기존 비교·하루 실험·week-plan의 기본값은 유지한다.
+ROSTER_OPTIONS_REPETITIONS = 20
+
+
+class RosterOptionsDayRequest(DailyRosterRequest):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [
+        {"scenario": {"daily_orders": 100}, "hourly_wage_krw": 10320, "repetitions": ROSTER_OPTIONS_REPETITIONS}
+    ]})
+    repetitions: int = Field(default=ROSTER_OPTIONS_REPETITIONS, ge=1, le=100)
+
+
+class RosterOptionsDay(WeekPlanDay):
+    roster: RosterOptionsDayRequest
+
+
 class RosterOptionsRequest(BaseModel):
     """추천 근무표 3안(roster_options): 요일별 하루 근무표 조건 + 직원 명단. 바쁜 시간에만 사람을 더해 비교한다."""
 
     model_config = ConfigDict(extra="forbid")
-    days: list[WeekPlanDay] = Field(min_length=1, max_length=7)
+    days: list[RosterOptionsDay] = Field(min_length=1, max_length=7)
     workers: list[dict] = Field(min_length=1, max_length=20)
     min_gain_sec: float | None = Field(default=None, ge=10, le=300)
     # 주휴 비교(추천안을 긴 근무조로 한 번 더). 빼면 한다. 쉬운 화면은 false.

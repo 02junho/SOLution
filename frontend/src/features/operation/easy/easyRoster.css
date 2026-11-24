@@ -23,13 +23,17 @@
 .er-explain b { margin-right: 4px; color: var(--blue-dark) !important; }
 
 /* 사람을 늘리면 대기가 얼마나 줄까 */
-.er-ladder { display: flex; align-items: flex-end; gap: 18px; height: 190px; margin-top: 14px; padding: 0 6px; border-bottom: 1px solid var(--line); }
-.er-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; position: relative; padding-bottom: 28px; }
-.er-bar div { width: min(64px, 70%); background: #c9d5f3; border-radius: 6px 6px 0 0; }
-.er-bar.pick div { background: var(--blue); }
-.er-bar b { font-size: 0.95em; }
-.er-bar span { position: absolute; bottom: 4px; font-size: 0.82em; color: var(--gray); white-space: nowrap; }
+.er-ladder { display: flex; align-items: flex-end; gap: 18px; margin-top: 14px; padding: 0 6px 4px; border-bottom: 1px solid var(--line); }
+.er-bar { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.er-bar-plot { width: 100%; height: 130px; margin-top: 1.7em; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.er-bar-fill { flex: none; position: relative; width: min(64px, 70%); background: #c9d5f3; border-radius: 6px 6px 0 0; }
+.er-bar.pick .er-bar-fill { background: var(--blue); }
+.er-bar b { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); font-size: 0.95em; white-space: nowrap; }
+.er-bar span { font-size: 0.82em; color: var(--gray); white-space: nowrap; }
 .er-bar.pick span { color: var(--blue-dark); font-weight: 700; }
+/* 글자가 두 줄이 되어도 최종 근무표 막대의 기준선은 동일하게 유지한다. */
+.er-final-waits { align-items: flex-start; }
+.er-final-waits .er-bar span { text-align: center; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
 
 /* 일주일 근무표 */
 /* 요일 칸은 같은 너비(글자 길이와 상관없이). 좁은 화면은 옆으로 밀어 보고 이름 칸은 왼쪽에 붙어 있다. */

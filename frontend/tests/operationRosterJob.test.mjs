@@ -38,3 +38,20 @@ test('끝날 때까지 상태를 확인하고, 실패하면 알린다', async ()
     globalThis.setTimeout = realTimeout
   }
 })
+
+
+test('이전 상태 조회 응답이 늦게 도착해도 새 계산 진행을 덮지 않는다', async () => {
+  const realFetch = globalThis.fetch
+  const stop = { stopped: false }
+  let release
+  globalThis.fetch = () => new Promise((resolve) => { release = resolve })
+  const ticks = [], progress = []
+  try {
+    const pending = job.waitRoster({ sessionId: 12, versionId: 34, key: 'old' }, (s) => ticks.push(s), stop, (p) => progress.push(p))
+    stop.stopped = true
+    release(new Response(JSON.stringify({ status: 'ok', data: { state: 'RUNNING', progress: { total: 7, done: 6 } } }), { headers: { 'Content-Type': 'application/json' } }))
+    assert.equal(await pending, null)
+    assert.deepEqual(ticks, [])
+    assert.deepEqual(progress, [])
+  } finally { globalThis.fetch = realFetch }
+})

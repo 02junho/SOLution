@@ -47,9 +47,10 @@ class RosterResultServiceTest {
 
 	private static Map<String, Object> options() {
 		return Map.of("model_version", "operation.roster_options.v1", "min_gain_sec", 30,
-				"options", List.of(option("SAVE", "아끼는 안", 9, 0, 1_274_520, 222),
-						option("RECOMMENDED", "추천안", 13, 0, 1_775_040, 156),
-						option("ROOMY", "여유 안", 13, 4, 2_352_960, 150)),
+				"recommended_choice_key", "RECOMMENDED",
+				"options", List.of(option("SAVE", "인건비 절약 근무표", 9, 0, 1_274_520, 222),
+						option("RECOMMENDED", "균형 근무표", 13, 0, 1_775_040, 156),
+						option("ROOMY", "여유 근무표", 13, 4, 2_352_960, 150)),
 				"holiday_compare", Map.of("plan_cost_krw", 1_717_248, "weekly", Map.of("people_used", 8)),
 				"days", Map.of("MON", Map.of("windows", List.of()), "TUE", Map.of("windows", List.of())), "skipped_days", List.of(), "assumptions", List.of("가정"));
 	}
@@ -68,7 +69,30 @@ class RosterResultServiceTest {
 		assertThat(warnings.get(0)).containsEntry("warning_id", "SIMULATED_CONDITIONS").containsEntry("requires_ack", true)
 				.containsEntry("choice_keys", null);
 		assertThat(warnings.get(1)).containsEntry("warning_id", "UNFILLED_SHIFTS").containsEntry("choice_keys", List.of("ROOMY"));
-		assertThat((String) summary.get("message")).isEqualTo("추천안: 바쁜 시간 대기 3.7분 → 2.6분, 주 인건비 1,775,040원, 직원 13명(모두 주 15시간 미만).");
+		assertThat((String) summary.get("message")).isEqualTo("추천안: 균형 근무표 · 바쁜 시간 대기 (요일 평균) 3분 42초 → 2분 36초, 주 인건비 1,775,040원, 직원 13명(모두 주 15시간 미만).");
+	}
+
+	@Test
+	void ai_server의_추천키를_재판정하지_않고_전달한다() {
+		var result = new java.util.HashMap<>(options());
+		result.put("recommended_choice_key", "SAVE");
+		var summary = RosterResultService.summary(result);
+		assertThat(summary).containsEntry("recommended_choice_key", "SAVE");
+		assertThat((String) summary.get("message")).contains("인건비 절약 근무표", "3분 42초", "1,274,520원");
+		result.put("recommended_choice_key", "ROOMY");
+		assertThat(RosterResultService.summary(result)).containsEntry("recommended_choice_key", "ROOMY");
+	}
+
+	@Test
+	void 잘못된_추천키를_임의로_대체하지_않는다() {
+		var result = new java.util.HashMap<>(options());
+		result.put("recommended_choice_key", "UNKNOWN");
+		assertThatThrownBy(() -> RosterResultService.summary(result)).isInstanceOf(IllegalArgumentException.class);
+		result.remove("recommended_choice_key");
+		assertThatThrownBy(() -> RosterResultService.summary(result)).isInstanceOf(IllegalArgumentException.class);
+		result.put("recommended_choice_key", "SAVE");
+		result.put("options", List.of(option("RECOMMENDED", "균형 근무표", 13, 0, 100, 156)));
+		assertThatThrownBy(() -> RosterResultService.summary(result)).isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
@@ -76,6 +100,14 @@ class RosterResultServiceTest {
 		Map<String, Object> one = new java.util.HashMap<>(options());
 		one.put("days", Map.of("MON", Map.of("windows", List.of())));
 		assertThat((String) RosterResultService.summary(one).get("message")).contains(", 하루 인건비 1,775,040원");
+	}
+
+	@Test
+	void 분초로_표시하고_분으로_올림되는_경계도_처리한다() {
+		var rec = Map.<String, Object>of("peak_wait_sec", 119.6, "weekly_cost_krw", 100000,
+				"people_used", 2, "more_people_under_15h", 0);
+		var save = Map.<String, Object>of("peak_wait_sec", 225.6);
+		assertThat(RosterResultService.message(rec, save, "하루")).contains("3분 46초 → 2분, 하루 인건비");
 	}
 
 	@Test
