@@ -166,3 +166,18 @@ def test_모델_답_모양이_다르면_쓸_수_없는_답으로_본다():
     out, _ = ask({"intent": "EDIT", "changes": [{"key": ["target_wait_min"], "value": 3}],
                   "worker_changes": [{"op": "remove", "alias": ["P1"]}]})
     assert out["source"] == "LLM" and out["changes"] == [] and out["worker_changes"] == []
+
+
+
+def test_새_화면_설명은_최종_근무표_분초_묶음만_허용한다():
+    result = {"wait_display_format": "minutes_seconds", "options": [
+        {"key": "SAVE", "peak_wait_text_avg": "3분 20초"},
+        {"key": "RECOMMENDED", "peak_wait_text_avg": "2분 47초", "final_wait_by_day": {"MON": "2분 20초"}},
+        {"key": "ROOMY", "peak_wait_text_avg": "2분 42초"},
+    ], "days": {"MON": {"trial_wait_by_extra": [{"extra": 1, "wait_text": "2분 34초"}]}}, "min_gain_sec": 30}
+    fallback = "코드 요약: 3분 20초 → 2분 47초"
+    def run(text):
+        return explain({"result": result, "fallback": fallback}, call=lambda s, u: json.dumps({"text": text}, ensure_ascii=False))
+    assert run("바쁜 시간 대기(요일 평균)가 3분 20초에서 2분 47초로 줄어요.")["source"] == "LLM"
+    for text in ("대기가 2.8분이에요.", "대기가 2분 20초예요.", "대기가 2분 34초예요.", "대기가 3분 47초예요.", "P90은 2분 47초예요."):
+        assert run(text)["source"] == "TEMPLATE"

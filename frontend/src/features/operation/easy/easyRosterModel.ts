@@ -1,5 +1,7 @@
 import { breaksOf, ownerShift } from '../roster/rosterRequest'
 import type { OptionKey, RosterOptions } from '../roster/rosterTypes'
+import { averageWait, validWait, waitText } from '../roster/rosterWait'
+import { OPTION_NAME } from './rosterNames'
 import { WEEKDAY_LABEL, WEEKDAYS } from '../workspace/storeFile'
 import type { Weekday } from '../workspace/storeFile'
 
@@ -11,29 +13,34 @@ type Option = RosterOptions['options'][number]
 
 export { OPTION_NAME } from './rosterNames'
 
-/** 대기(초) → 사장님이 읽기 쉬운 말. 1분 안은 "1분 안", 그 위는 반올림한 분. */
-export function waitText(sec: number | null | undefined): string {
-  if (sec == null) return '—'
-  if (sec < 60) return '1분 안'
-  return `약 ${Math.round(sec / 60)}분`
-}
+export { waitText } from '../roster/rosterWait'
 
 export const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
 
 /** 결과에 있는 요일만 월~일 순서로. */
 export const shownDays = (data: RosterOptions): Weekday[] => WEEKDAYS.filter((d) => d in data.days)
 
-/** 요일 평균 "바쁜 시간 가장 긴 대기". */
-/** 요일 가운데 가장 긴 대기(초). 화면의 "가장 긴 대기"는 평균이 아니라 이 값을 쓴다. */
+/** 요일별 바쁜 시간대 최대 P90 중 가장 큰 값(초). 주간 비교 카드의 보조 지표. */
 export function worstPeak(option: Option, days: Weekday[]): number | null {
-  const values = days.map((d) => option.peak_wait_sec[d]).filter((v): v is number => v != null)
+  const values = days.map((d) => option.peak_wait_sec[d]).filter(validWait)
   return values.length ? Math.max(...values) : null
 }
 
-/** 요일별 가장 긴 대기의 평균(초). 두 근무표를 견줄 때만 쓴다. */
+/** 요일별 바쁜 시간대 최대 P90의 평균(초). 상단·비교 카드·저장 요약의 공통 지표. */
 export function averagePeak(option: Option, days: Weekday[]): number | null {
-  const values = days.map((d) => option.peak_wait_sec[d]).filter((v): v is number => v != null)
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null
+  return averageWait(days.map((d) => option.peak_wait_sec[d]))
+}
+
+/** 현재 고른 안의 요약. 저장 당시의 문장(소수점 분) 대신 원본 결과로 다시 만든다. */
+export function optionSummary(data: RosterOptions, option: Option, days: Weekday[]): string {
+  const current = waitText(averagePeak(option, days))
+  const save = data.options.find((o) => o.key === 'SAVE')
+  const base = save ? waitText(averagePeak(save, days)) : '—'
+  const comparable = save && days.every((d) => validWait(save.peak_wait_sec[d]) === validWait(option.peak_wait_sec[d]))
+  const wait = comparable && base !== '—' && current !== '—' && base !== current ? `${base} → ${current}` : current
+  const label = days.length === 1 ? '바쁜 시간 대기' : '바쁜 시간 대기 (요일 평균)'
+  const hires = option.shortfall.more_people_under_15h
+  return `${OPTION_NAME[option.key]}: ${label} ${wait}, ${periodOf(days).per} 인건비 ${won(option.plan_cost_krw)}, 직원 ${option.weekly.people_used}명(모두 주 15시간 미만)${hires > 0 ? `, 직원 ${hires}명 더 필요` : ''}.`
 }
 
 /** 추천 한 줄. 요일마다 더한 사람 수가 같으면 "N명씩", 다르면 가장 많은 날 기준으로 말한다. */
@@ -61,13 +68,14 @@ function busyText(option: Option, days: Weekday[]): string {
   return `${busy.map((d) => WEEKDAY_LABEL[d]).join('·')}요일 바쁜 시간에 사람을 더 배치하면 돼요`
 }
 
-/** 대기가 가장 긴 요일(사람을 더하기 전 기준). "사람을 늘리면" 그래프의 기본 요일. */
+/** 최종 절약 근무표의 대기가 가장 긴 요일. 그래프와 비교 카드가 같은 값을 사용한다. */
 export function busiestDay(data: RosterOptions, days: Weekday[]): Weekday | null {
+  const save = data.options.find((o) => o.key === 'SAVE')
   let best: Weekday | null = null
   let worst = -1
   for (const d of days) {
-    const first = data.days[d]?.ladder[0]?.peak_wait_sec
-    if (first != null && first > worst) {
+    const first = save?.peak_wait_sec[d]
+    if (validWait(first) && first > worst) {
       worst = first
       best = d
     }
@@ -81,7 +89,7 @@ export type LadderBar = { extra: number; label: string; sec: number | null; pick
 export function ladderBars(data: RosterOptions, day: Weekday): LadderBar[] {
   const info = data.days[day]
   if (!info) return []
-  const top = Math.max(1, ...info.ladder.map((s) => s.peak_wait_sec ?? 0))
+  const top = Math.max(1, ...info.ladder.map((s) => s.peak_wait_sec).filter(validWait))
   const pickOf = (k: number): OptionKey | null =>
     info.picks.RECOMMENDED === k ? 'RECOMMENDED' : info.picks.ROOMY === k ? 'ROOMY' : info.picks.SAVE === k ? 'SAVE' : null
   return info.ladder.map((s) => ({
@@ -89,8 +97,29 @@ export function ladderBars(data: RosterOptions, day: Weekday): LadderBar[] {
     label: s.extra === 0 ? '꼭 필요한 인원' : `+${s.extra}명`,
     sec: s.peak_wait_sec,
     pick: pickOf(s.extra),
-    ratio: s.peak_wait_sec == null ? 0 : s.peak_wait_sec / top,
+    ratio: validWait(s.peak_wait_sec) ? s.peak_wait_sec / top : 0,
   }))
+}
+
+export type FinalWaitBar = { key: OptionKey; label: string; sec: number | null; recommended: boolean; ratio: number }
+
+/** 선택한 요일의 최종 근무표 대기. 비교 카드(averagePeak)와 같은 원본 값을 읽는다.
+ *  인원 탐색용 ladder는 근무조/휴게/보강 전이라 이 그래프의 값으로 사용하지 않는다. */
+export function finalWaitBars(data: RosterOptions, day: Weekday, recommended: OptionKey): FinalWaitBar[] {
+  if (!data.days[day]) return []
+  const options = data.options
+  const top = Math.max(1, ...options.map((o) => o.peak_wait_sec[day]).filter(validWait))
+  return options.map((o) => {
+    const raw = o.peak_wait_sec[day]
+    const sec = validWait(raw) ? raw : null
+    return {
+      key: o.key,
+      label: OPTION_NAME[o.key].replace(/ 근무표$/, ''),
+      sec,
+      recommended: o.key === recommended,
+      ratio: sec === null ? 0 : sec / top,
+    }
+  })
 }
 
 /** extra: 인건비 절약 근무표에는 없고 이 안에서 더 둔 근무(바쁠 때 더 배치한 사람). */
@@ -167,14 +196,22 @@ export function clock(hhmm: string): string {
 /** 세 근무표 비교 카드: 추천 근무표와 견준 한 줄("추천보다 대기 +40초 · 인건비 −320,000원"). 추천 자신이면 null. */
 export function versusText(option: Option, recommended: Option, days: Weekday[]): string | null {
   if (option.key === recommended.key) return null
-  // 두 안 모두 값이 있는 요일끼리만 견준다(한쪽만 계산된 요일이 섞이면 차이가 틀어진다).
-  const both = days.filter((d) => option.peak_wait_sec[d] != null && recommended.peak_wait_sec[d] != null)
-  const a = averagePeak(option, both)
-  const b = averagePeak(recommended, both)
-  const sec = a != null && b != null ? Math.round(a - b) : null
-  // 몇 초 차이는 사장님이 느끼기 어려워 "거의 같아요"로(화면의 대기도 분 단위로 반올림해 보인다)
-  const wait = sec == null ? null : Math.abs(sec) < SAME_WAIT_SEC ? '대기는 거의 같아요' : `대기 ${sec > 0 ? '+' : '−'}${Math.abs(sec)}초`
+  // 카드에 표시된 평균과 같은 요일 기준으로 비교한다. 측정된 요일이 다르면 대기 차이를 표시하지 않는다.
+  const sameDays = days.every((d) => validWait(option.peak_wait_sec[d]) === validWait(recommended.peak_wait_sec[d]))
+  const a = averagePeak(option, days)
+  const b = averagePeak(recommended, days)
+  const sec = sameDays && a != null && b != null ? Math.round(a) - Math.round(b) : null
+  // 표시한 두 대기시간(초)의 차이로 계산해 화면 숫자와 맞춘다. 10초 미만은 기존대로 안내한다.
+  const wait = !sameDays ? '대기 비교 불가(측정 요일 다름)' : sec == null ? null : Math.abs(sec) < SAME_WAIT_SEC ? '대기는 거의 같아요' : `대기 ${sec > 0 ? '+' : '−'}${Math.abs(sec)}초`
   const diff = option.plan_cost_krw - recommended.plan_cost_krw
+  if (sameDays && a != null && b != null && a === b && diff === 0 &&
+      days.every((d) => option.peak_wait_sec[d] === recommended.peak_wait_sec[d]) &&
+      option.weekly != null && recommended.weekly != null && option.shortfall != null && recommended.shortfall != null &&
+      option.weekly.people_used === recommended.weekly.people_used &&
+      option.shortfall.more_people_under_15h === recommended.shortfall.more_people_under_15h &&
+      option.shortfall.unfilled_hours === recommended.shortfall.unfilled_hours) {
+    return '추천안과 예상 대기·인건비·채용 필요 인원이 같아요'
+  }
   const cost = diff === 0 ? '인건비 같음' : `인건비 ${diff > 0 ? '+' : '−'}${won(Math.abs(diff))}`
   return `추천보다 ${[wait, cost].filter(Boolean).join(' · ')}`
 }

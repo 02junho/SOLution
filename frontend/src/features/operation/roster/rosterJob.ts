@@ -25,6 +25,7 @@ export async function waitRoster(
   for (;;) {
     if (signal?.stopped) return null
     const response = await rosterResultStatus(p.sessionId, p.versionId, p.key)
+    if (signal?.stopped) return null // 늦게 도착한 이전 계산의 진행 정보는 새 화면에 넣지 않는다.
     if (response.status !== 'ok' || !response.data) throw new Error(response.message ?? '계산 상태를 확인하지 못했어요.')
     const job = response.data
     if (job.state === 'DONE') return job

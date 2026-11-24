@@ -12,7 +12,7 @@ export type RosterStage = 'pick' | 'confirm' | null
 export const ROSTER_RESULT_STEPS: TourStep[] = [
   {
     key: 'verdict', target: 'verdict', waitsForAction: false, place: 'side',
-    title: '맨 위가 추천이에요',
+    title: '처음에는 최종 추천 근무표를 보여 드려요',
     body: '새로 뽑을 직원이 몇 명인지와 인건비만 보셔도 돼요.',
   },
   {
@@ -23,7 +23,7 @@ export const ROSTER_RESULT_STEPS: TourStep[] = [
   {
     key: 'compare', target: 'compare', waitsForAction: false, place: 'side',
     title: '세 근무표를 비교해 골라요',
-    body: '인건비를 아끼려면 "인건비 절약", 손님이 덜 기다리게 하려면 "여유"를 누르세요. 위 근무표가 바로 바뀌어요. 조건을 바꾸고 싶으면 아래 칸에 말로 적으세요. 다시 계산할지 먼저 물어봐요.',
+    body: '인건비 절약·균형·여유 근무표의 대기시간과 인건비를 비교해요. 최종 추천 표시가 붙은 안부터 보셔도 돼요. 위 근무표가 바로 바뀌어요. 조건을 바꾸고 싶으면 아래 칸에 말로 적으세요. 다시 계산할지 먼저 물어봐요.',
   },
   {
     key: 'save', target: 'save', waitsForAction: false, place: 'side',

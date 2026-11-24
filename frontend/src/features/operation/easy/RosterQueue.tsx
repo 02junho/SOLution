@@ -39,7 +39,7 @@ export default function RosterQueue({
 }) {
   const pair: OptionKey[] = chosen === 'SAVE' ? ['SAVE', 'RECOMMENDED'] : ['SAVE', chosen]
   const [open, setOpen] = useState(true) // 처음부터 펼쳐 두고, 접을 수 있게
-  const [choice, setChoice] = useState<OptionKey>(pair[1])
+  const [choice, setChoice] = useState<OptionKey>(chosen)
   const [traces, setTraces] = useState<Record<string, OperationTrace | string>>({})
   const key = `${day}:${choice}`
   const loaded = traces[key]

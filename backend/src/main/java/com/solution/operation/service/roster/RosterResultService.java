@@ -353,6 +353,10 @@ public class RosterResultService {
 	static Map<String, Object> summary(Map<String, Object> options) {
 		List<Map<String, Object>> choices = new ArrayList<>();
 		List<String> short15 = new ArrayList<>();
+		Object recommendedKey = options.get("recommended_choice_key");
+		if (!(recommendedKey instanceof String) || !List.of("SAVE", "RECOMMENDED", "ROOMY").contains(recommendedKey)) {
+			throw new IllegalArgumentException("ai-server returned an invalid recommended_choice_key");
+		}
 		Map<String, Object> recommended = null;
 		Map<String, Object> save = null;
 		for (Object item : (List<Object>) options.get("options")) {
@@ -373,7 +377,7 @@ public class RosterResultService {
 			if (((Number) shortfall.get("more_people_under_15h")).intValue() > 0) {
 				short15.add(key);
 			}
-			if ("RECOMMENDED".equals(key)) {
+			if (recommendedKey.equals(key)) {
 				recommended = choice;
 			}
 			if ("SAVE".equals(key)) {
@@ -392,7 +396,10 @@ public class RosterResultService {
 		summary.put("result_kind", RESULT_KIND);
 		summary.put("model_version", options.get("model_version"));
 		summary.put("complete", true);
-		summary.put("recommended_choice_key", "RECOMMENDED");
+		if (recommended == null) {
+			throw new IllegalArgumentException("ai-server recommendation does not match an option");
+		}
+		summary.put("recommended_choice_key", recommendedKey);
 		summary.put("choices", choices);
 		summary.put("warnings", warnings);
 		// 주휴 비교를 안 했으면(쉬운 화면) 요약에도 넣지 않는다.
@@ -419,13 +426,16 @@ public class RosterResultService {
 	/** period: 인건비 기간 낱말("주" 또는 하루 근무표면 "하루"). */
 	static String message(Map<String, Object> recommended, Map<String, Object> save, String period) {
 		StringBuilder text = new StringBuilder("추천안: ");
+		if (recommended.get("title") instanceof String title) text.append(title).append(" · ");
 		Object wait = recommended.get("peak_wait_sec");
 		Object baseWait = save.get("peak_wait_sec");
-		text.append("바쁜 시간 대기 ");
-		if (baseWait instanceof Number base && wait instanceof Number now && base.doubleValue() != now.doubleValue()) {
-			text.append(minutes(base)).append(" → ").append(minutes(now));
+		text.append("바쁜 시간 대기");
+		if (!"하루".equals(period)) text.append(" (요일 평균)");
+		text.append(" ");
+		if (baseWait instanceof Number base && wait instanceof Number now && !waitText(base).equals(waitText(now))) {
+			text.append(waitText(base)).append(" → ").append(waitText(now));
 		} else {
-			text.append(wait instanceof Number now ? minutes(now) : "—");
+			text.append(wait instanceof Number now ? waitText(now) : "—");
 		}
 		text.append(", ").append(period).append(" 인건비 ").append(won(recommended.get("weekly_cost_krw")));
 		text.append(", 직원 ").append(recommended.get("people_used")).append("명(모두 주 15시간 미만)");
@@ -435,8 +445,12 @@ public class RosterResultService {
 		return text.append('.').toString();
 	}
 
-	private static String minutes(Number sec) {
-		return String.format("%.1f분", sec.doubleValue() / 60);
+	private static String waitText(Number sec) {
+		double value = sec.doubleValue();
+		if (!Double.isFinite(value) || value < 0) return "—";
+		long total = Math.round(value);
+		long minutes = total / 60, seconds = total % 60;
+		return minutes > 0 ? minutes + "분" + (seconds > 0 ? " " + seconds + "초" : "") : seconds + "초";
 	}
 
 	private static String won(Object value) {
@@ -445,8 +459,8 @@ public class RosterResultService {
 
 	private static Double average(Map<String, Object> byDay) {
 		List<Double> values = byDay.values().stream().filter(Number.class::isInstance)
-				.map(v -> ((Number) v).doubleValue()).toList();
-		return values.isEmpty() ? null : Math.round(values.stream().mapToDouble(Double::doubleValue).average().orElseThrow() * 10) / 10.0;
+				.map(v -> ((Number) v).doubleValue()).filter(v -> Double.isFinite(v) && v >= 0).toList();
+		return values.isEmpty() ? null : values.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
 	}
 
 	private static Map<String, Object> warning(String id, boolean ack, List<String> keys, String message) {

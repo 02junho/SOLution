@@ -21,7 +21,7 @@ import type { RosterStage } from './rosterTour'
 import { applyReply, chatFields, chatState, chatWorkers, editableText, mergeChanges, pushHistory, toAliases, toNames } from './easyRosterChat'
 import type { ChatTurn } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
-import { clock, noteSentences, OPTION_NAME, won } from './easyRosterModel'
+import { clock, noteSentences, optionSummary, OPTION_NAME, shownDays, won } from './easyRosterModel'
 import { equipmentOf, patchForm, restoreConditions, restoredDayBodies, restoredFacts } from './easyRosterRestore'
 import type { RestoredFacts, StoredRequest } from './easyRosterRestore'
 import { warmConditions } from './rosterWarm'
@@ -51,6 +51,9 @@ const WAIT_CHOICES = TARGET_WAIT_MINUTES.filter((m) => m === 3 || m === 5 || m =
 // 시급 빠른 선택: 올해 최저시급 + 쉬운 화면 다른 업무와 같은 두 값(직접 바꾸려면 말로 고치기)
 const WAGE_STEPS = [11000, 12000]
 // 미리 계산: 조건이 마지막으로 바뀐 뒤 기다리는 시간, 다른 미리 계산이 돌 때 다시 묻는 간격과 횟수(한 건에 약 1분 반)
+// 발표용 안정화: 결과 화면의 다른 목표값 선행 계산은 실제 재계산과 CPU 경합할 수 있어 잠시 끈다.
+// 조건 확인 선행 계산과 서버 요일 캐시는 유지한다. 필요하면 true로 복원.
+const WARM_ALTERNATIVE_WAITS = false
 const WARM_DELAY_MS = 3000
 const WARM_RETRY_MS = 10000
 const WARM_RETRIES = 9
@@ -99,7 +102,6 @@ export default function EasyRoster({
   const [stored, setStored] = useState<{ resultId: number; versionId: number; summary: RosterSummary } | null>(null)
   const [chosen, setChosen] = useState<OptionKey>('RECOMMENDED')
   const [saved, setSaved] = useState('')
-  const [explain, setExplain] = useState<{ text: string; ai: boolean } | null>(null)
   // AI 설명: 맨 위 상자는 코드 요약으로 두고, AI 설명은 사장님이 보고 있는 채팅 칸에 띄운다(다시 계산해도 그 자리에서 보임).
   const [aiNote, setAiNote] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -108,6 +110,20 @@ export default function EasyRoster({
   const [progress, setProgress] = useState<RosterProgressData | null>(null) // 계산 중 끝난 요일
   const [runDays, setRunDays] = useState<string[]>([]) // 이번 계산에 보낸 요일(진행 정보가 오기 전 목록용)
   const stopRef = useRef<{ stopped: boolean } | null>(null)
+  // 최초 계산과 말로 다시 계산하는 경우에만 스크롤한다. 저장 결과 열기·요일/근무표 선택은 그대로 둔다.
+  const scrollForRun = useRef(false)
+  useEffect(() => {
+    if (!scrollForRun.current || (phase !== 'running' && phase !== 'result')) {
+      if (phase !== 'running' && phase !== 'result') scrollForRun.current = false
+      return
+    }
+    // 부모의 단계별 스크롤과 DOM 교체가 끝난 다음 프레임에 맨 위로 이동한다.
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      if (phase === 'result') scrollForRun.current = false
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [phase])
   const fileRef = useRef<HTMLInputElement>(null)
   // 새로 시작하면 먼저 데이터를 고른다(한 화면에 하나만 묻기). 이어서 열거나 다시 계산할 때는 건너뛴다.
   const [pickData, setPickData] = useState(!opened?.resultId)
@@ -335,18 +351,19 @@ export default function EasyRoster({
     setOptions(next)
     setStored({ resultId: data.result_id, versionId: data.input_version_id, summary: data.summary })
     setChosen(data.summary.recommended_choice_key ?? 'RECOMMENDED')
-    void explainResult(next, data.summary)
+    void explainResult(next, data.summary.recommended_choice_key)
   }
 
   /** 설명 요청 번호. 새 결과가 뜨면 늘어나, 앞 결과의 늦은 설명은 화면·대화 기록에 넣지 않는다. */
   const explainSeq = useRef(0)
-  async function explainResult(data: RosterOptions, summary: RosterSummary) {
-    const fallback = summary.message
+  async function explainResult(data: RosterOptions, recommendedKey: OptionKey = 'RECOMMENDED') {
+    const recommended = data.options.find((o) => o.key === recommendedKey) ?? data.options[0]
+    if (!recommended) return
+    const fallback = optionSummary(data, recommended, shownDays(data))
     const seq = ++explainSeq.current
-    setExplain({ text: fallback, ai: false })
     setAiNote(null)
     try {
-      const response = await rosterExplain({ result: rosterDigest(data), fallback })
+      const response = await rosterExplain({ result: rosterDigest(data, recommended.key), fallback })
       if (seq !== explainSeq.current) return
       if (response.status === 'ok' && response.data?.source === 'LLM') {
         const text = response.data.text
@@ -392,7 +409,7 @@ export default function EasyRoster({
       ? null
       : phase === 'confirm' && !editing && !pickData
         ? 'confirm'
-        : phase === 'result' && options && !legacy
+        : WARM_ALTERNATIVE_WAITS && phase === 'result' && options && !legacy
           ? 'result'
           : null
   const warmBodies = useMemo(() => {
@@ -443,6 +460,7 @@ export default function EasyRoster({
 
   async function run(c: RosterConditions | null = cond) {
     if (!c || stops.length || (!restored && (!imp || !plan))) return
+    if (stopRef.current && !stopRef.current.stopped) return
     const before = options
     const people = { isOwnerWorking: c.owner, hourlyWage: Number(c.wage) }
     const form = !restored && imp && plan ? formFromPlan(imp, plan, people, equipment(c)) : null
@@ -453,6 +471,9 @@ export default function EasyRoster({
     setSeconds(0)
     setProgress(null)
     setChatReply(null)
+    ++explainSeq.current
+    setAiNote(null)
+    scrollForRun.current = true
     onPhase('running')
     try {
       // 보낼 요일이 없으면 업무에 조건 버전을 남기기 전에 멈춘다(빈 버전이 쌓이지 않게).
@@ -494,13 +515,15 @@ export default function EasyRoster({
       // 말로 바꿔 다시 계산했는데 세 근무표의 인건비·대기가 그대로면 그렇다고 알려 준다(바꾼 게 반영 안 된 걸로 보이지 않게).
       const change = nextChange.current
       const same = change && before && sameOutcome(before, optionsFromStored(detail.data))
-      setLastChange(change && same ? { ...change, text: `${change.text} · 결과는 이전과 같아요(이 조건은 이번 근무표를 바꾸지 않았어요)` } : change) // 말로 바꿔 다시 계산한 게 아니면 지운다
+      setLastChange(change && same ? { ...change, text: `${change.text} · 세 안의 예상 대기시간과 인건비는 이전과 같아요` } : change) // 말로 바꿔 다시 계산한 게 아니면 지운다
       nextChange.current = null
       onPhase('result')
     } catch (cause) {
       if (stop.stopped) return
       setError(errorText(cause, '계산을 마치지 못했어요.'))
       onPhase('error')
+    } finally {
+      stop.stopped = true
     }
   }
 
@@ -583,7 +606,7 @@ export default function EasyRoster({
         fields: chatFields(open, close, dataDays),
         state: chatState(cond, { open, close, busy: peakNow ? `${peakNow.start}~${peakNow.end}` : null, dailyOrders: dailyNow }),
         workers: chatWorkers(cond.team.people),
-        ...(options ? { result: rosterDigest(options) } : {}),
+        ...(options ? { result: rosterDigest(options, stored?.summary.recommended_choice_key) } : {}),
       })
       if (response.status !== 'ok' || !response.data) throw new Error(response.message ?? '말을 처리하지 못했어요.')
       const reply = response.data
@@ -670,7 +693,7 @@ export default function EasyRoster({
       )}
       {phase === 'result' && aiNote && (
         <div className="er-reply er-ai-note" role="status">
-          <b>AI 설명</b>
+          <b>AI 설명 · {OPTION_NAME[stored?.summary.recommended_choice_key ?? 'RECOMMENDED']} (추천) 기준</b>
           <ul>
             {noteSentences(aiNote).map((line) => (
               <li key={line}>{line}</li>
@@ -738,12 +761,12 @@ export default function EasyRoster({
     if (!options) return null
     return (
       <EasyRosterResult
+        key={stored?.resultId ?? 'result'}
         resultId={stored?.resultId ?? null}
         data={options}
         summary={stored?.summary ?? null}
         chosen={chosen}
         onChoose={setChosen}
-        explain={explain}
         saved={saved}
         readOnly={readOnly}
         onSave={save}

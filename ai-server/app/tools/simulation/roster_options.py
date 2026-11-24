@@ -20,13 +20,18 @@
 from __future__ import annotations
 
 import copy
+import logging
+import time
 import multiprocessing
 import os
 import threading
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date
 
+from app.schemas.simulation import ROSTER_OPTIONS_REPETITIONS
+
 from . import day_cache, weekly_roster
+from .roster_recommendation import recommended_choice
 from .daily_roster import _build, _cost, _count_rows, _prepare, _rules
 from .parallel import worker_count
 from .day_window import day, from_scenario, using
@@ -83,7 +88,8 @@ def progress(key: str) -> dict | None:
 
 
 # 추천 근무표의 하루 반복 수(손님을 몇 번 새로 뽑아 돌릴지). 1번(세 안 비교)의 기본 30번과 따로 둔다.
-ROSTER_REPETITIONS = 20
+ROSTER_REPETITIONS = ROSTER_OPTIONS_REPETITIONS
+log = logging.getLogger("uvicorn.error")
 from .simulation_common import summarize
 
 MAX_EXTRA = 3
@@ -94,9 +100,9 @@ UNDER_15H_MAX_HOURS = 14.5
 SHORT_RULES = weekly_roster.UNDER_15H_SHIFTS
 LONG_RULES: dict = {}
 OPTIONS = (
-    ("SAVE", "아끼는 안"),
-    ("RECOMMENDED", "추천안"),
-    ("ROOMY", "여유 안"),
+    ("SAVE", "인건비 절약 근무표"),
+    ("RECOMMENDED", "균형 근무표"),
+    ("ROOMY", "여유 근무표"),
 )
 
 
@@ -339,11 +345,14 @@ def _run_days(jobs, background=False, on_day=None):
     - 기억에는 {"wage": 계산할 때 시급, "day": 결과}를 둔다. 실패한 요일은 기억하지 않는다.
     """
     tell = on_day or (lambda name, result, err: None)  # 요일 하나가 준비될 때마다(기억·계산·이어받기 모두)
+    started = time.perf_counter()
+    cache_hits = 0
     results, mine, waiting = {}, {}, {}
     for job in jobs:
         k = _job_key(job)
         hit = day_cache.get(k)
         if hit is not None:
+            cache_hits += 1
             results[job[0]] = _fit(job, hit)
             tell(*results[job[0]])  # 시급을 맞춘 결과(맞추다 실패하면 그 오류)를 그대로 알린다
             continue
@@ -355,6 +364,7 @@ def _run_days(jobs, background=False, on_day=None):
             # 기억을 본 뒤 표시하기 전 사이에 다른 요청이 끝냈을 수 있다.
             late = day_cache.get(k)
             if late is not None:
+                cache_hits += 1
                 day_cache.release(k, future, value=late)
                 results[job[0]] = _fit(job, late)
                 tell(*results[job[0]])
@@ -409,6 +419,9 @@ def _run_days(jobs, background=False, on_day=None):
         for job in group:
             results[job[0]] = _fit(job, stored)
             tell(*results[job[0]])
+    log.info("roster days background=%s days=%d cache_hits=%d new_unique=%d joined_unique=%d repetitions=%s elapsed=%.2fs",
+             background, len(jobs), cache_hits, len(mine), len(waiting),
+             sorted({j[1]["repetitions"] for j in jobs}), time.perf_counter() - started)
     return [results[job[0]] for job in jobs]
 
 
@@ -451,6 +464,7 @@ def plan(body: dict, engine: str = "simpy") -> dict:
     holiday_on = body.get("compare_holiday_pay", True)
     if type(holiday_on) is not bool:
         raise ValueError("compare_holiday_pay는 true/false예요.")
+    started = time.perf_counter()
     seen, jobs = set(), []
     for d in days:
         name = d.get("day") if isinstance(d, dict) else None
@@ -463,7 +477,7 @@ def plan(body: dict, engine: str = "simpy") -> dict:
         roster.setdefault("business_date", date.today().isoformat())
         jobs.append((name, roster, engine, min_gain, holiday_on))
     workers = weekly_roster._workers(body.get("workers"))
-    # 미리 계산(쉬운 화면이 결과·조건을 읽는 동안 보내는 것): 낮은 우선순위 프로세스 하나로 돈다. 결과는 같다.
+    # 미리 계산: 낮은 우선순위 프로세스로 돈다. 결과는 같다.
     background = body.get("background", False)
     if type(background) is not bool:
         raise ValueError("background는 true/false예요.")
@@ -477,6 +491,7 @@ def plan(body: dict, engine: str = "simpy") -> dict:
         _run_days(jobs, background, on_day=lambda name, result, err: _progress_day(entry, name, result, err)),
         key=lambda r: weekly_roster.DAYS.index(r[0]),
     )
+    days_finished_at = time.perf_counter()
     skipped = [{"day": n, "reason": err} for n, _, err in finished if err]
     done = {n: r for n, r, err in finished if not err}
 
@@ -502,15 +517,22 @@ def plan(body: dict, engine: str = "simpy") -> dict:
             }
         )
     # 반복 횟수는 요청마다 다를 수 있어 결과에서 읽는다(설명 문장·화면이 같은 숫자를 쓰게).
-    reps = next((v["repetitions"] for o in options for v in o["days"].values()), 30)
+    reps = next((v["repetitions"] for o in options for v in o["days"].values()), ROSTER_REPETITIONS)
     holiday_compare = None
     if holiday_on:
         holiday_views = {n: r["holiday_roster"] for n, r in done.items()}
         holiday = _assign(holiday_views, workers, "WITH_HOLIDAY_PAY")
         holiday_cost = sum(v["cost"]["cash_cost_krw"] for v in holiday_views.values()) + holiday["holiday_pay_krw"]
         holiday_compare = {"key": "RECOMMENDED", "days": holiday_views, "weekly": holiday, "plan_cost_krw": holiday_cost}
+    assignment_finished_at = time.perf_counter()
+    recommended_key = recommended_choice(options, skipped)
+    finished_at = time.perf_counter()
+    log.info("roster total background=%s days=%.2fs assignment=%.2fs total=%.2fs repetitions=%d recommendation=%.6fs recommended_choice_key=%s",
+             background, days_finished_at - started, assignment_finished_at - days_finished_at,
+             finished_at - started, reps, finished_at - assignment_finished_at, recommended_key)
     return {
         "model_version": "operation.roster_options.v1",
+        "recommended_choice_key": recommended_key,
         "min_gain_sec": min_gain,
         "repetitions": reps,
         "skipped_days": skipped,
@@ -526,13 +548,14 @@ def plan(body: dict, engine: str = "simpy") -> dict:
             "요일마다 그 요일 평균 손님으로 시간대별 꼭 필요한 인원(대기 기준을 지키는 가장 적은 인원)을 찾았어요.",
             f"바쁜 시간은 최대 2구간이에요. 첫 구간은 주문이 가장 몰린 때, 둘째 구간은 시간당 주문이 하루 평균의 "
             f"{PEAK2_MIN_RATIO:g}배 이상이고 첫 구간과 겹치지 않는 때예요.",
-            f"바쁜 시간에만 사람을 더해 {reps}번씩 돌렸어요. 한 명 더할 때 바쁜 시간 대기가 {min_gain:g}초 넘게 줄면 추천안에 넣었어요.",
+            f"바쁜 시간에만 사람을 더해 {reps}번씩 돌렸어요. 한 명 더할 때 바쁜 시간 대기가 {min_gain:g}초 이상 줄면 균형안에 넣었어요.",
             f"바쁜 시간 대기는 그 구간 시간대 중 가장 긴 대기예요(주문 후 받기, 10명 중 9명이 받는 시간, {reps}번 평균).",
             f"세 안은 {SHORT_RULES['short_shift_hours']:g}~{SHORT_RULES['long_shift_hours']:g}시간 근무조(휴게 포함)로 덮고 휴게를 넣어 다시 확인한 뒤, 모두 주 15시간 미만이 되게 명단에 배정했어요.",
-            "추천안은 긴 근무조(최대 8시간)로 주휴를 주는 경우와도 비교했어요." if holiday_on else None,
+            "균형안은 긴 근무조(최대 8시간)로 주휴를 주는 경우와도 비교했어요." if holiday_on else None,
             f"명단으로 못 채운 자리는 새로 뽑을 직원(하루 한 근무, 주 {UNDER_15H_MAX_HOURS:g}시간 이하)에 나눠 넣고, 그 사람 수를 더 필요한 인원으로 셌어요.",
             "안마다 주간 인건비는 근무표 전체 유급시간 × 시급이에요(못 채운 자리도 누군가 일한다고 봄)."
             + (" 주휴 비교는 배정된 사람의 주휴수당을 더했어요." if holiday_on else ""),
+            "최종 추천은 세 안의 대기시간·인건비·채용 필요 인원과 목표시간 검증 등을 비교해 정했어요.",
             "계획 근무표이며 실제 근무 기록이 아니에요. 보험·가산수당은 빼고 계산했어요.",
         ] if a],
     }
