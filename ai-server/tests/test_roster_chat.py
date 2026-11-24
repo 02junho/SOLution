@@ -95,7 +95,8 @@ def test_입력_검사():
 
 def test_결과_설명은_결과에_없는_숫자가_있으면_코드_문장을_쓴다():
     ok = explain({"result": RESULT, "fallback": "추천안: 코드 문장"}, call=lambda s, u: '{"text": "추천안은 대기가 2.6분이에요."}')
-    assert ok["source"] == "LLM" and "2.6분" in ok["text"]
+    # 예전 결과에는 추천 키와 안별 분·초 값이 없으므로 검증할 수 없다.
+    assert ok["source"] == "TEMPLATE" and ok["text"] == "추천안: 코드 문장"
     bad = explain({"result": RESULT, "fallback": "추천안: 코드 문장"}, call=lambda s, u: '{"text": "대기가 반드시 0.5분 줄어요."}')
     assert bad == {"model_version": "operation.roster_explain.v1", "source": "TEMPLATE", "text": "추천안: 코드 문장"}
     none = explain({"result": RESULT, "fallback": "추천안: 코드 문장"}, call=lambda s, u: None)
@@ -169,15 +170,114 @@ def test_모델_답_모양이_다르면_쓸_수_없는_답으로_본다():
 
 
 
-def test_새_화면_설명은_최종_근무표_분초_묶음만_허용한다():
-    result = {"wait_display_format": "minutes_seconds", "options": [
-        {"key": "SAVE", "peak_wait_text_avg": "3분 20초"},
-        {"key": "RECOMMENDED", "peak_wait_text_avg": "2분 47초", "final_wait_by_day": {"MON": "2분 20초"}},
-        {"key": "ROOMY", "peak_wait_text_avg": "2분 42초"},
-    ], "days": {"MON": {"trial_wait_by_extra": [{"extra": 1, "wait_text": "2분 34초"}]}}, "min_gain_sec": 30}
-    fallback = "코드 요약: 3분 20초 → 2분 47초"
-    def run(text):
-        return explain({"result": result, "fallback": fallback}, call=lambda s, u: json.dumps({"text": text}, ensure_ascii=False))
-    assert run("바쁜 시간 대기(요일 평균)가 3분 20초에서 2분 47초로 줄어요.")["source"] == "LLM"
-    for text in ("대기가 2.8분이에요.", "대기가 2분 20초예요.", "대기가 2분 34초예요.", "대기가 3분 47초예요.", "P90은 2분 47초예요."):
-        assert run(text)["source"] == "TEMPLATE"
+EXPLAIN_RESULT = {"wait_display_format": "minutes_seconds", "recommended_choice_key": "RECOMMENDED",
+                  "day_count": 7, "cost_period": "일주일", "options": [
+    {"key": "SAVE", "peak_wait_text_avg": "3분 20초", "cost_krw": 1491240},
+    {"key": "RECOMMENDED", "peak_wait_text_avg": "2분 47초", "cost_krw": 1723440,
+     "final_wait_by_day": {"MON": "2분 20초"}},
+    {"key": "ROOMY", "peak_wait_text_avg": "2분 42초", "cost_krw": 2120760},
+], "days": {"MON": {"trial_wait_by_extra": [{"extra": 1, "wait_text": "2분 34초"}]}}, "min_gain_sec": 30}
+FALLBACK = "코드 요약: 3분 20초 → 2분 47초"
+REC = "균형 근무표를 추천해요."
+REC_WAIT = "균형 근무표의 바쁜 시간 대기 (요일 평균)는 2분 47초예요."
+SAVE_WAIT = "인건비 절약 근무표의 바쁜 시간 대기 (요일 평균)는 3분 20초예요."
+
+
+def _explain_text(text, result=EXPLAIN_RESULT):
+    return explain({"result": result, "fallback": FALLBACK},
+                   call=lambda s, u: json.dumps({"text": text}, ensure_ascii=False))
+
+
+def _assert_template(out):
+    assert out == {"model_version": "operation.roster_explain.v1", "source": "TEMPLATE", "text": FALLBACK}
+
+
+@pytest.mark.parametrize("text", [
+    REC + " " + REC_WAIT,
+    REC + " " + REC_WAIT + " " + SAVE_WAIT,
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 2분 47초이고, 일주일 인건비는 1,723,440원이에요.",
+])
+def test_안별_올바른_대기시간과_추천_설명은_허용한다(text):
+    assert _explain_text(text) == {"model_version": "operation.roster_explain.v1", "source": "LLM", "text": text}
+
+
+@pytest.mark.parametrize("text", [
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 3분 20초예요.",  # 다른 안의 값
+    REC + " " + REC_WAIT + " 인건비 절약 근무표의 바쁜 시간 대기 (요일 평균)는 2분 47초예요.",
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 2분 20초예요.",  # 하루 값
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 2분 34초예요.",  # 실험 값
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 2.8분이에요.",
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 3분 47초예요.",
+    REC + " P90은 2분 47초예요.",
+    REC + " 대기는 2분 47초예요.",  # 안 이름이 없음
+    REC + " 균형 근무표의 바쁜 시간 대기 (요일 평균)는 2분 47초이고, 일주일 인건비는 1,491,240원이에요.",
+    "인건비 절약 근무표를 추천해요. " + REC_WAIT,
+    "여유 근무표를 추천해요. " + REC_WAIT,
+    REC_WAIT,
+    REC + " " + REC_WAIT + " 하지만 여유 근무표를 선택하세요.",
+    "균형 근무표를 추천하지 않아요. " + REC_WAIT,
+    REC + " " + SAVE_WAIT,  # 추천안의 대기시간이 없음
+    REC + " " + REC_WAIT + " " + REC_WAIT,
+    REC + " " + REC_WAIT.rstrip("."),
+])
+def test_설명과_계산결과의_귀속이_틀리거나_불명확하면_코드요약을_쓴다(text):
+    _assert_template(_explain_text(text))
+
+
+@pytest.mark.parametrize("key,name,wait", [
+    ("SAVE", "인건비 절약 근무표", "3분 20초"),
+    ("RECOMMENDED", "균형 근무표", "2분 47초"),
+    ("ROOMY", "여유 근무표", "2분 42초"),
+])
+def test_실제_추천키에_따라_설명이_바뀐다(key, name, wait):
+    result = {**EXPLAIN_RESULT, "recommended_choice_key": key}
+    text = f"{name}를 추천해요. {name}의 바쁜 시간 대기 (요일 평균)는 {wait}예요."
+    assert _explain_text(text, result)["source"] == "LLM"
+    other = "SAVE" if key != "SAVE" else "RECOMMENDED"
+    _assert_template(_explain_text(text, {**result, "recommended_choice_key": other}))
+
+
+@pytest.mark.parametrize("key", [None, "UNKNOWN", [], ""])
+def test_추천키를_확인할_수_없으면_호출없이_코드요약을_쓴다(key):
+    result = {**EXPLAIN_RESULT, "recommended_choice_key": key}
+    def unexpected_call(*args):
+        pytest.fail("확인할 수 없는 결과로 LLM을 호출함")
+    _assert_template(explain({"result": result, "fallback": FALLBACK}, call=unexpected_call))
+
+
+@pytest.mark.parametrize("wait,ending", [("0초", "예요."), ("45초", "예요."), ("3분", "이에요.")])
+def test_하루_결과와_분초_경계_표현(wait, ending):
+    result = {"recommended_choice_key": "SAVE", "wait_display_format": "minutes_seconds", "day_count": 1,
+              "cost_period": "하루", "options": [{"key": "SAVE", "peak_wait_text_avg": wait, "cost_krw": 232200}]}
+    text = f"인건비 절약 근무표를 추천해요. 인건비 절약 근무표의 바쁜 시간 대기는 {wait}{ending}"
+    assert _explain_text(text, result)["source"] == "LLM"
+
+
+def test_동률이어도_추천키와_근무표_이름은_바꿀_수_없다():
+    result = {**EXPLAIN_RESULT, "recommended_choice_key": "SAVE", "options": [
+        {"key": "SAVE", "peak_wait_text_avg": "2분 47초"},
+        {"key": "RECOMMENDED", "peak_wait_text_avg": "2분 47초"},
+    ]}
+    text = "인건비 절약 근무표를 추천해요. 인건비 절약 근무표의 바쁜 시간 대기 (요일 평균)는 2분 47초예요."
+    assert _explain_text(text, result)["source"] == "LLM"
+    _assert_template(_explain_text(REC + " " + REC_WAIT, result))
+
+
+@pytest.mark.parametrize("options", [None, [], [None], [{"key": "SAVE", "peak_wait_text_avg": "—"}],
+    [{"key": "RECOMMENDED", "peak_wait_text_avg": "—"}],
+    [{"key": "RECOMMENDED", "peak_wait_text_avg": "2분 47초"}, {"key": "RECOMMENDED", "peak_wait_text_avg": "3분"}]])
+def test_불완전하거나_중복된_옵션은_코드요약을_쓴다(options):
+    _assert_template(_explain_text(REC + " " + REC_WAIT, {**EXPLAIN_RESULT, "options": options}))
+
+
+def test_실제로_전달한_후보_문장으로_응답하면_허용하고_호출은_한번만_한다():
+    calls = []
+    def call(system, user):
+        payload = json.loads(user)
+        calls.append(payload)
+        text = payload["required_recommendation"] + " " + payload["recommended_wait_sentences"][0]
+        return json.dumps({"text": text}, ensure_ascii=False)
+    out = explain({"result": EXPLAIN_RESULT, "fallback": FALLBACK}, call=call)
+    assert out["source"] == "LLM" and len(calls) == 1
+    assert SAVE_WAIT in calls[0]["allowed_sentences"]
+    assert all("2분 34초" not in sentence for sentence in calls[0]["allowed_sentences"])
