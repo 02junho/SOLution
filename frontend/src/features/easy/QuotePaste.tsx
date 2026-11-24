@@ -16,6 +16,18 @@ const size = (amount: unknown, unit: string | null) => {
   if (unit === 'ml' && value >= 1000) return `${value / 1000}L`
   return `${value.toLocaleString('ko-KR')}${unit}`
 }
+type Row = Batch['normalization']['items'][number]
+const has = (row: Row, code: string) => row.issues.some((issue) => issue.code === code)
+// 계산에서 빠진 줄: 무엇을 더 적으면 되는지 한 가지만 알려 준다(가장 먼저 걸린 것).
+const blockedReason = (row: Row) => {
+  if (!row.item_id) return '어떤 품목인지 몰라요. 품목 이름을 바꿔 적어 주세요'
+  if (has(row, 'INVALID_OR_MISSING_PACK_COUNT')) return '한 박스·묶음에 몇 개 들었는지 같이 적어 주세요'
+  if (has(row, 'MISSING_ORDER_UNIT')) return '1봉·1박스처럼 주문 단위를 같이 적어 주세요'
+  if (has(row, 'INVALID_OR_MISSING_UNIT_QUANTITY')) return '1kg·1L처럼 용량을 같이 적어 주세요'
+  if (has(row, 'INVALID_OR_MISSING_PRICE') || has(row, 'MISSING_PRICE_BASIS')) return '가격을 같이 적어 주세요'
+  if (has(row, 'UNIT_MISMATCH')) return '단위가 품목과 맞지 않아요(예: 우유는 L·ml로)'
+  return '확인이 필요해요'
+}
 
 export default function QuotePaste({ storeId, onDone, onClose }: { storeId: number; onDone: (sessionId: number) => void; onClose: () => void }) {
   // 견적 정리용 임시 가게와 준비 번호. 이 화면을 열 때마다 새로 만든다(다른 사람 견적과 섞이지 않게).
@@ -117,14 +129,17 @@ export default function QuotePaste({ storeId, onDone, onClose }: { storeId: numb
               <ul>
                 {rows.filter((row) => (row.supplier_name ?? '거래처 모름') === name).map((row) => {
                   const blocked = !row.item_id || row.issues.some((issue) => issue.blocks_comparison)
-                  const guessed = !blocked && row.issues.some((issue) => issue.code === 'ITEM_MATCHED_BY_RAG')
+                  const guessed = !blocked && has(row, 'ITEM_MATCHED_BY_RAG')
+                  const assumed = !blocked && has(row, 'PACK_ASSUMED')
+                  const packNote = row.units_per_pack != null && row.units_per_pack > 1 ? `${row.units_per_pack}개 묶음 가격으로 봤어요` : '1개 가격으로 봤어요'
                   return (
                     <li key={row.line_id} className={blocked ? 'blocked' : undefined}>
                       <span>{itemName(row.item_id) ?? row.raw_item_name}</span>
                       <span>{size(row.normalized_quantity_per_pack, row.normalized_unit)} · {money(row.pack_price)}</span>
-                      {blocked ? <em>확인 필요 · 계산에서 빼요</em>
+                      {blocked ? <em>계산에서 빼요 · {blockedReason(row)}</em>
                         : guessed ? <em className="easy-guessed">견적엔 “{row.raw_item_name}” · 비슷한 이름이라 {itemName(row.item_id)}(으)로 맞췄어요</em>
                         : String(row.vat_status).toUpperCase() === 'UNKNOWN' ? <em>부가세 표기 없음</em> : null}
+                      {assumed && <em className="easy-guessed">견적에 주문 단위가 없어 {packNote}</em>}
                     </li>
                   )
                 })}

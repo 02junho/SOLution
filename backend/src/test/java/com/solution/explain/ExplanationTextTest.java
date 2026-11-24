@@ -23,6 +23,8 @@ class ExplanationTextTest {
 	void 템플릿의_이가와_합니다체를_해요체로_바꾼다() {
 		assertThat(ExplanationText.text("총비용 최소이(가) 113,280원으로 가장 쌉니다(다음 안보다 14,220원 적음).", false))
 				.isEqualTo("총비용 최소가 113,280원으로 가장 싸요. 다음 안보다 14,220원 적어요.");
+		assertThat(ExplanationText.text("“가장 싸게” 안이 113,280원으로 가장 쌉니다(다음 안보다 14,220원 적음).", false))
+				.isEqualTo("“가장 싸게” 안이 113,280원으로 가장 싸요. 다음 안보다 14,220원 적어요.");
 		assertThat(ExplanationText.text("1안이(가) 1000원", false)).isEqualTo("1안이 1,000원");
 		assertThat(ExplanationText.text("가장 싼 두 안의 총액이 113,520원으로 같습니다.", false))
 				.isEqualTo("가장 싼 두 안의 총액이 113,520원으로 같아요.");

@@ -8,6 +8,9 @@ test('조건이 바뀐 응답은 새 입력 버전으로, 같은 버전이면 �
   const same = outcome({ status: 'ok', data: { detail_status: 'NO_CHANGE', input_version_id: 11, version_no: 2 }, message: '장보기 계획을 세워 볼게요.' }, 11)
   assert.equal(same.kind, 'same')
   assert.equal(same.message, '장보기 계획을 세워 볼게요.')
+  // 업무 시작만 한 말(silent)은 말풍선을 만들지 않게 빈 문구로 둔다("조건은 그대로예요"도 붙이지 않는다).
+  const silent = outcome({ status: 'ok', data: { detail_status: 'NO_CHANGE', silent: true, input_version_id: 11, version_no: 2 }, message: null }, 11)
+  assert.deepEqual(silent, { kind: 'same', message: '', run: false })
 })
 
 test('운영 계산 시작 표시(run_operation)를 놓치지 않는다', () => {

@@ -157,9 +157,13 @@ def run(req: InterpretRequest, interpreter: Interpreter) -> ApiResponse[dict]:
     if not draft.changes and draft.intent != "smalltalk":
         return _question(req, Unresolved(question_key="content", text=draft.reply or "무엇을 바꿀지 알려 주세요."))
     if candidate == original:
-        return ApiResponse(status=ResponseStatus.OK,
-                           data={"detail_status": "NO_CHANGE", "interpretation": {"intent": draft.intent, "changes": []}},
-                           message=draft.reply or "입력은 바꾸지 않았어요.")
+        # 업무 시작만 하는 말(smalltalk, 답 없음)은 화면이 이미 시작 안내를 보였으므로 말풍선을 더 만들지 않는다(silent).
+        silent = draft.intent == "smalltalk" and not draft.reply.strip()
+        data = {"detail_status": "NO_CHANGE", "interpretation": {"intent": draft.intent, "changes": []}}
+        if silent:
+            data["silent"] = True
+        return ApiResponse(status=ResponseStatus.OK, data=data,
+                           message=None if silent else draft.reply or "입력은 바꾸지 않았어요.")
     return ApiResponse(status=ResponseStatus.OK, data={
         "detail_status": "INTERPRETED",
         "interpretation": {"intent": "change_input", "changes": [c.model_dump() for c in draft.changes],

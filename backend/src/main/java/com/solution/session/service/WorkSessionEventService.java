@@ -202,8 +202,10 @@ public class WorkSessionEventService {
 				long userMessageId = idGenerator.next();
 				long messageId = idGenerator.next();
 				data.put("message_id", messageId);
+				// silent: 업무 시작만 하는 말이라 AI가 따로 할 말이 없다(화면이 이미 시작 안내를 보였다). 대화 기록에도 빈 답으로 남겨 말풍선이 안 생긴다.
+				boolean silent = Boolean.TRUE.equals(data.get("silent"));
 				ApiResponse<Map<String, Object>> response = new ApiResponse<>(ResponseStatus.OK, data,
-						agent.message() == null ? "입력은 바꾸지 않았어요." : maskPii(agent.message()));
+						silent ? null : agent.message() == null ? "입력은 바꾸지 않았어요." : maskPii(agent.message()));
 				saveMessages(ctx, ctx.currentVersion(), key, fingerprint, request.eventType(), userContent, userMessageId, messageId, response);
 				repository.updateSessionProgress(ctx.sessionId(), ctx.currentVersion(), ctx.step());
 				return response;
@@ -299,7 +301,9 @@ public class WorkSessionEventService {
 		}
 		OffsetDateTime now = OffsetDateTime.now();
 		repository.insertMessage(userMessageId, ctx.sessionId(), version, "user", userContent, null, now);
-		repository.insertMessage(messageId, ctx.sessionId(), version, "assistant", response.message(), writeJson(metadata), now);
+		// 답이 없는 경우(silent)도 기록은 남긴다. content 칸은 비울 수 없어 빈 글자로 둔다(화면은 빈 답을 말풍선으로 만들지 않는다).
+		repository.insertMessage(messageId, ctx.sessionId(), version, "assistant",
+				response.message() == null ? "" : response.message(), writeJson(metadata), now);
 		// 질문만 오간 이벤트도 최근 업무 정렬에 반영한다.
 		if (response.status() != ResponseStatus.OK) {
 			repository.updateSessionProgress(ctx.sessionId(), ctx.currentVersion(), ctx.step());

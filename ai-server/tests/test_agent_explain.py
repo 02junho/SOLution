@@ -422,3 +422,17 @@ def test_키가_없으면_모델_호출을_성공으로_기록하지_않는다(m
     model = explain_service.LlmExplainer()
     assert model.explain(ExplainRequest(**REQ))["source"] == "template"
     assert model.last_call_status == "not_configured"
+
+
+def test_화면_안_이름은_숫자_검사에_걸리지_않는다():
+    # "한 곳에서 한 번에"는 화면의 안 이름이라 "한 번"이 있어도 지어낸 숫자가 아니다. 그 밖의 "한 번"은 계속 막는다.
+    allowed = {"127500"}
+    assert explain_service._safe_text("'한 곳에서 한 번에' 안은 127,500원이에요.", allowed)
+    assert not explain_service._safe_text("배송을 한 번만 받아요.", allowed)
+
+
+def test_템플릿_첫줄은_안_이름을_따옴표로_묶는다():
+    summary = {**SUMMARY, "choices": [{**SUMMARY["choices"][0], "label": "가장 싸게"},
+                                      {**SUMMARY["choices"][1], "label": "한 곳에서 한 번에"}]}
+    template = explain_service.build_template(ExplainRequest(**{**REQ, "result_summary": summary}))
+    assert template["explanation"]["headline"] == "“가장 싸게” 안이 120,400원으로 가장 쌉니다(다음 안보다 17,600원 적음)."

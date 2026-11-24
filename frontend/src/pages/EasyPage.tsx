@@ -554,7 +554,7 @@ export default function EasyPage() {
     if (out.kind === 'use-form') { say('agent', out.message); if (inputRef.current) openEdit(); return }
     if (out.kind === 'refused') { say('agent', [out.message, ...out.suggestions].join(' ')); return }
     if (out.kind === 'same') {
-      say('agent', out.message)
+      if (out.message) say('agent', out.message)
       if (out.run && inputRef.current && resumeRef.current) void calculate({ kind, input: inputRef.current, values: resumeRef.current.values })
       return
     }

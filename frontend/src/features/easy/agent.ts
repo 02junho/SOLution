@@ -45,6 +45,8 @@ export function outcome(
   if (versionId !== null && versionNo !== null && versionId !== previousVersionId) {
     return { kind: 'changed', versionId, versionNo, message, run }
   }
+  // silent: 업무 시작만 하는 말("장보기 계획 세워 줘")이라 화면의 시작 안내 말고는 더 할 말이 없다.
+  if (data.silent === true) return { kind: 'same', message: '', run }
   return { kind: 'same', message: message || '조건은 그대로예요.', run }
 }
 
