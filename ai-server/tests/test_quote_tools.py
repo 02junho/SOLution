@@ -133,9 +133,12 @@ class ToolsTest(unittest.TestCase):
                               "quantity_per_unit": 1, "quantity_unit": "L", "order_unit": "박스", "price": 29000},
                              {"source_text": "Sunset 원두 1kg 22,000원", "raw_item_name": "원두",
                               "supplier_name": "A", "quantity_per_unit": 1, "quantity_unit": "kg", "price": 22000}]}
-        boxed, sunset = self.client.post("/tools/quote/normalize", json=payload).json()["items"]
-        self.assertFalse(boxed["comparable"])
-        self.assertNotIn("PACK_ASSUMED", [i["code"] for i in boxed["issues"]])
+        payload["items"].append({"source_text": "우유 1L 29,000원", "raw_item_name": "우유", "supplier_name": "A",
+                                 "quantity_per_unit": 1, "quantity_unit": "L", "order_unit": "boxes", "price": 29000})
+        boxed, sunset, plural = self.client.post("/tools/quote/normalize", json=payload).json()["items"]
+        for row in (boxed, plural):
+            self.assertFalse(row["comparable"])
+            self.assertNotIn("PACK_ASSUMED", [i["code"] for i in row["issues"]])
         self.assertTrue(sunset["comparable"])
         self.assertEqual((sunset["units_per_pack"], sunset["order_unit"]), (1, "개"))
 
