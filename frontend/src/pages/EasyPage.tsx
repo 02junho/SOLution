@@ -6,6 +6,7 @@
 // 행동형 버튼 문구, 확정 전 요약 확인).
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
+import logo from '../assets/logo.png'
 import { loadOperationResult, runOperation } from '../api/operationApi'
 import { workflowApi, WorkflowError } from '../api/workflowApi'
 import { Modal } from '../components/common/Ui'
@@ -746,8 +747,7 @@ export default function EasyPage() {
       {/* 기존 업무 화면과 같은 머리(로고 · 메뉴). 메뉴는 쉬운 화면에서 자주 찾을 일만 둔다. */}
       <header className="app-header easy-header">
         <a className="brand" {...link({ kind: 'home' })}>
-          <span className="brand-symbol">S<span>✦</span></span>
-          <span>SOL<span className="brand-light">루션</span><small>사장님 업무 도우미</small></span>
+          <img className="brand-logo" src={logo} alt="신한 SOL루션" />
         </a>
         <nav aria-label="주 메뉴">
           {nav.map((item) => (

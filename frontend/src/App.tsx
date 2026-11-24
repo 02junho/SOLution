@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import logo from './assets/logo.png'
 import GuideCards from './features/guide/GuideCards'
 import { guideAutoOpen, markGuideSeen } from './features/guide/guideSlides'
 import OperationResultsPage from './features/operation/OperationResultsPage'
@@ -120,13 +121,7 @@ function WorkflowApp() {
 
       <header className="app-header">
         <a className="brand" href="#/work">
-          <span className="brand-symbol">
-            S<span>✦</span>
-          </span>
-          <span>
-            SOL<span className="brand-light">루션</span>
-            <small>사장님 업무 도우미</small>
-          </span>
+          <img className="brand-logo" src={logo} alt="신한 SOL루션" />
         </a>
 
         <nav aria-label="주 메뉴">

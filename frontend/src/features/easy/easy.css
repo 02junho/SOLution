@@ -310,7 +310,7 @@
 /* 제목은 형광펜으로 칠한 것처럼 */
 .easy-starter-title { padding: 0 6px; border-radius: 3px; background: var(--hl); font-size: 1.35em; font-weight: 800; color: var(--ink); letter-spacing: -0.04em; line-height: 1.35; }
 .easy-starter-desc { color: var(--ink-2); font-size: 0.95em; }
-.easy-starter-say { margin-top: 4px; color: var(--gray-2); font-size: 0.88em; }
+.easy-starter-say { margin-top: 4px; color: var(--gray); font-size: 1em; }
 .easy-starter-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
   padding-top: 12px; border-top: 1px solid var(--hl-line); }
 .easy-starter-result { color: var(--ink); font-weight: 700; font-size: 0.9em; }
