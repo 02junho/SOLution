@@ -1,0 +1,57 @@
+# 실행: 저장소 루트에서 cp .env.example .env 후 값을 채우고 docker compose up --build
+# 화면(frontend)은 compose에 넣지 않고 frontend 폴더에서 npm run dev로 띄웁니다. (배포는 docker-compose.prod.yml)
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env에 POSTGRES_PASSWORD를 채워 주세요}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ai-server:
+    build: ./ai-server
+    env_file: .env
+    environment:
+      DB_HOST: db
+      POSTGRES_PORT: 5432
+      # 임베딩 모델(KURE-v1, 2GB 넘음)을 볼륨에 둔다. 재시작·배포 때 Hugging Face에서 다시 받지 않는다.
+      HF_HOME: /models/huggingface
+    volumes:
+      - model-cache:/models
+    ports:
+      - "${AI_SERVER_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 테이블은 backend가 뜰 때 Flyway로 만듭니다.
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DB_HOST: db
+      POSTGRES_PORT: 5432
+      AI_SERVER_URL: http://ai-server:8000
+      # 견적 도구(quote.tools-url)도 같은 FastAPI. 비우면 컨테이너 안에서 localhost:8000(자기 자신)을 불러 견적 API가 실패한다.
+      QUOTE_TOOLS_URL: http://ai-server:8000
+      BACKEND_PORT: 8080
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      ai-server:
+        condition: service_started
+
+volumes:
+  db-data:
+  model-cache:

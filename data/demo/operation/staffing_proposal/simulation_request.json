@@ -1,0 +1,127 @@
+{
+  "scenario": {
+    "daily_orders": 200,
+    "share_method": "p50",
+    "takeout_ratio": 0.4
+  },
+  "repetitions": 30,
+  "random_seed": 42,
+  "execution_mode": "continuous_day",
+  "session_id": 520001,
+  "input_version_id": 530001,
+  "result_id": 7001,
+  "request_key": "staffing-review:simulation",
+  "staffing_schema_version": "operation.staffing.employees.v1-proposal",
+  "choices": [
+    {
+      "choice_key": "CURRENT",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "10:00",
+            "end_time": "19:00"
+          }
+        ],
+        "peak_staff_count": 2,
+        "total_staff_hours": 21
+      }
+    },
+    {
+      "choice_key": "ALT_A",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "11:00"
+          },
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [
+              "MAKE"
+            ],
+            "start_time": "11:00",
+            "end_time": "14:00"
+          },
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "14:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "10:00",
+            "end_time": "11:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "start_time": "11:00",
+            "end_time": "14:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "14:00",
+            "end_time": "19:00"
+          }
+        ],
+        "peak_staff_count": 2,
+        "total_staff_hours": 21
+      }
+    },
+    {
+      "choice_key": "ALT_C",
+      "staffing": {
+        "employees": [
+          {
+            "staff_id": "A",
+            "primary_role": "ORDER",
+            "can_support": [],
+            "start_time": "07:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "B",
+            "primary_role": "MAKE",
+            "can_support": [],
+            "start_time": "10:00",
+            "end_time": "19:00"
+          },
+          {
+            "staff_id": "C",
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ],
+            "start_time": "11:00",
+            "end_time": "14:00"
+          }
+        ],
+        "peak_staff_count": 3,
+        "total_staff_hours": 24
+      }
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+{"store_id":"quote-test-rag","document_type":"item_alias","dictionary_version":1,"item_id":"milk","content":"서울우유, 일반 흰우유, 카페용 일반 우유","source_ref":"demo-dictionary:v1:milk"}
+{"document_type":"assumption","content":"이번 주 판매 계획은 매장 운영자가 직접 입력한다.","source_ref":"demo-assumptions:sales-plan"}

@@ -1,0 +1,170 @@
+{
+  "status": "ok",
+  "data": {
+    "session_id": 520001,
+    "input_version_id": 530001,
+    "rule_policy_version": "labor.kr.2026.v1",
+    "is_observation": false,
+    "plans": [
+      {
+        "choice_key": "CURRENT",
+        "schedule": [
+          {
+            "start_time": "07:00",
+            "end_time": "19:00",
+            "worker_key": "A",
+            "task_code": "ORDER",
+            "breaks": [],
+            "primary_role": "ORDER",
+            "can_support": []
+          },
+          {
+            "start_time": "10:00",
+            "end_time": "19:00",
+            "worker_key": "B",
+            "task_code": "MAKE",
+            "breaks": [
+              {
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "is_paid": false
+              }
+            ],
+            "primary_role": "MAKE",
+            "can_support": []
+          }
+        ],
+        "violations": []
+      },
+      {
+        "choice_key": "ALT_A",
+        "schedule": [
+          {
+            "start_time": "07:00",
+            "end_time": "11:00",
+            "worker_key": "A",
+            "task_code": "ORDER",
+            "breaks": [],
+            "primary_role": "ORDER",
+            "can_support": []
+          },
+          {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "worker_key": "A",
+            "task_code": "ORDER",
+            "breaks": [],
+            "primary_role": "ORDER",
+            "can_support": [
+              "MAKE"
+            ]
+          },
+          {
+            "start_time": "14:00",
+            "end_time": "19:00",
+            "worker_key": "A",
+            "task_code": "ORDER",
+            "breaks": [],
+            "primary_role": "ORDER",
+            "can_support": []
+          },
+          {
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "worker_key": "B",
+            "task_code": "MAKE",
+            "breaks": [],
+            "primary_role": "MAKE",
+            "can_support": []
+          },
+          {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "worker_key": "B",
+            "task_code": "MAKE",
+            "breaks": [],
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ]
+          },
+          {
+            "start_time": "14:00",
+            "end_time": "19:00",
+            "worker_key": "B",
+            "task_code": "MAKE",
+            "breaks": [
+              {
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "is_paid": false
+              }
+            ],
+            "primary_role": "MAKE",
+            "can_support": []
+          }
+        ],
+        "violations": []
+      },
+      {
+        "choice_key": "ALT_C",
+        "schedule": [
+          {
+            "start_time": "07:00",
+            "end_time": "19:00",
+            "worker_key": "A",
+            "task_code": "ORDER",
+            "breaks": [],
+            "primary_role": "ORDER",
+            "can_support": []
+          },
+          {
+            "start_time": "10:00",
+            "end_time": "19:00",
+            "worker_key": "B",
+            "task_code": "MAKE",
+            "breaks": [
+              {
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "is_paid": false
+              }
+            ],
+            "primary_role": "MAKE",
+            "can_support": []
+          },
+          {
+            "start_time": "11:00",
+            "end_time": "14:00",
+            "worker_key": "C",
+            "task_code": "MAKE",
+            "breaks": [],
+            "primary_role": "MAKE",
+            "can_support": [
+              "ORDER"
+            ]
+          }
+        ],
+        "violations": []
+      }
+    ],
+    "worker_context": {
+      "A": {
+        "is_owner": true
+      },
+      "B": {
+        "is_owner": false
+      },
+      "C": {
+        "is_owner": false
+      }
+    },
+    "warnings": [],
+    "assumptions": [
+      "계획 배치표이며 실제 근무 기록이 아닙니다.",
+      "휴게는 배치표에만 반영했고 시뮬레이션에는 반영하지 않았습니다.",
+      "하루 연속 근무의 휴게·연소자 일일 시간만 검사합니다. 가산수당·연차 등은 별도 확인 대상입니다."
+    ]
+  },
+  "message": null
+}

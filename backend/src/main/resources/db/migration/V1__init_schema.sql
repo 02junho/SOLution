@@ -1,0 +1,170 @@
+-- SOLution 초기 스키마 (노션 "ERD" 확정본 11.11 기준, 8개 테이블·FK 9개)
+-- 이 파일은 한 번 적용되면 고치지 않습니다. 바꿀 것이 있으면 V2__설명.sql 처럼 새 파일을 추가하세요.
+-- PK는 서버가 생성한다 (ERD 기준, 자동증가 없음).
+-- 쓰기 담당: Spring = store, work_session, work_version, work_result, work_confirmation, session_message
+--            FastAPI = execution_log, rag_chunk
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 1. 매장·기초 설정
+CREATE TABLE store (
+    store_id          BIGINT PRIMARY KEY,
+    owner_key         VARCHAR(100) NOT NULL,
+    store_name        VARCHAR(100) NOT NULL,
+    district_code     VARCHAR(50),
+    open_time         TIME         NOT NULL,
+    close_time        TIME         NOT NULL,
+    settings_version  INTEGER      NOT NULL DEFAULT 1 CHECK (settings_version >= 1),
+    profile_json      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CHECK (open_time < close_time)
+);
+
+-- 2. 업무 세션
+CREATE TABLE work_session (
+    session_id       BIGINT PRIMARY KEY,
+    store_id         BIGINT       NOT NULL REFERENCES store (store_id),
+    feature_type     VARCHAR(20)  NOT NULL CHECK (feature_type IN ('purchase', 'operation')),
+    input_method     VARCHAR(20)  NOT NULL CHECK (input_method IN ('agent', 'form')),
+    title            VARCHAR(200) NOT NULL,
+    current_version  INTEGER      NOT NULL DEFAULT 0 CHECK (current_version >= 0),
+    step             VARCHAR(20)  NOT NULL DEFAULT 'input'
+                     CHECK (step IN ('input', 'review', 'running', 'result', 'saved')),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- 3. 버전별 입력
+CREATE TABLE work_version (
+    input_version_id    BIGINT PRIMARY KEY,
+    session_id          BIGINT       NOT NULL REFERENCES work_session (session_id),
+    version_no          INTEGER      NOT NULL CHECK (version_no >= 1),
+    schema_version      VARCHAR(30)  NOT NULL,
+    raw_request         TEXT,
+    input_json          JSONB        NOT NULL,
+    input_confirmed_by  VARCHAR(100),
+    input_confirmed_at  TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_version_session_no UNIQUE (session_id, version_no),           -- UQ①
+    -- UQ③: 결과·로그가 같은 업무의 입력을 가리키는지 복합 FK로 검사할 때 쓰는 부모 키
+    CONSTRAINT uq_version_id_session UNIQUE (input_version_id, session_id),
+    CHECK ((input_confirmed_by IS NULL) = (input_confirmed_at IS NULL))
+);
+
+-- 4. 계산·비교 결과 (확정은 5번 work_confirmation에만 저장)
+CREATE TABLE work_result (
+    result_id         BIGINT PRIMARY KEY,
+    input_version_id  BIGINT       NOT NULL,
+    -- session_id는 조회용 복제값이면서 복합 FK의 일부. 나머지 3개는 조회용 복제값(FK 없음, 서버가 일치 여부를 검사).
+    session_id        BIGINT       NOT NULL,
+    store_id          BIGINT       NOT NULL,
+    version_no        INTEGER      NOT NULL,
+    feature_type      VARCHAR(20)  NOT NULL CHECK (feature_type IN ('purchase', 'operation')),
+    request_key       VARCHAR(100) NOT NULL,
+    response_status   VARCHAR(20)  NOT NULL
+                      CHECK (response_status IN ('ok', 'needs_input', 'infeasible', 'error')),
+    detail_status     VARCHAR(50),
+    summary_json      JSONB        NOT NULL,
+    detail_json       JSONB,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- request_key 재전송(같은 계산 요청) 식별은 서버에서 처리한다 (ERD 기준, UQ 없음).
+    -- UQ②: work_confirmation이 (결과, 입력 버전) 쌍을 복합 FK로 참조할 때 쓰는 부모 키
+    CONSTRAINT uq_result_id_version UNIQUE (result_id, input_version_id),
+    -- 같은 업무의 입력 버전으로 계산한 결과인지 DB가 검사한다.
+    CONSTRAINT fk_result_version FOREIGN KEY (input_version_id, session_id)
+        REFERENCES work_version (input_version_id, session_id)
+);
+
+-- 5. 최종 확정 저장 (사장님이 결과 안의 대안 하나를 확정한 기록)
+-- 최신 입력 버전인지, 입력 확인·ok 결과인지, 선택안이 결과 안에 있는지, 경고를 확인했는지는 서버가 검사한다.
+CREATE TABLE work_confirmation (
+    confirmation_id             BIGINT PRIMARY KEY,
+    result_id                   BIGINT       NOT NULL,
+    input_version_id            BIGINT       NOT NULL,
+    -- 아래 4개는 조회용 복제값. 서버가 실제 입력 버전·업무에서 채운다.
+    session_id                  BIGINT       NOT NULL,
+    store_id                    BIGINT       NOT NULL,
+    version_no                  INTEGER      NOT NULL,
+    feature_type                VARCHAR(20)  NOT NULL CHECK (feature_type IN ('purchase', 'operation')),
+    selected_choice_key         VARCHAR(50)  NOT NULL,
+    confirmed_by                VARCHAR(100) NOT NULL,
+    confirmed_at                TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    confirm_request_key         VARCHAR(100) NOT NULL,
+    -- 사용자·결과·입력 버전·선택안·경고 ID를 정규화한 JSON의 SHA-256 값. 서버가 만든다.
+    request_fingerprint         VARCHAR(64)  NOT NULL,
+    acknowledged_warnings_json  JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    selected_snapshot_json      JSONB        NOT NULL,
+    -- 결과 하나당, 입력 버전 하나당 확정은 하나만
+    CONSTRAINT uq_confirmation_result UNIQUE (result_id),
+    CONSTRAINT uq_confirmation_version UNIQUE (input_version_id),
+    -- 같은 확정 요청을 다시 보내도 한 번만 저장
+    CONSTRAINT uq_confirmation_request UNIQUE (confirm_request_key),
+    -- 결과와 입력 버전이 실제로 맞는 쌍인지 검사
+    CONSTRAINT fk_confirmation_result_version FOREIGN KEY (result_id, input_version_id)
+        REFERENCES work_result (result_id, input_version_id),
+    CONSTRAINT fk_confirmation_input_version FOREIGN KEY (input_version_id)
+        REFERENCES work_version (input_version_id)
+);
+
+-- 6. 대화 이력
+CREATE TABLE session_message (
+    message_id     BIGINT PRIMARY KEY,
+    session_id     BIGINT      NOT NULL REFERENCES work_session (session_id),
+    version_no     INTEGER,
+    role           VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'tool', 'system')),
+    content        TEXT        NOT NULL,
+    metadata_json  JSONB,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7. 도구·LLM·재생 로그 (FastAPI가 씀). 토큰·비용은 기록하지 않는다.
+CREATE TABLE execution_log (
+    log_id            BIGINT PRIMARY KEY,
+    session_id        BIGINT       NOT NULL REFERENCES work_session (session_id),
+    -- 입력 버전이 만들어지기 전의 최초 LLM 호출은 NULL. 값이 있으면 같은 업무의 입력인지 복합 FK로 검사한다.
+    input_version_id  BIGINT,
+    log_type          VARCHAR(30)  NOT NULL CHECK (log_type IN ('tool', 'llm', 'simulation_trace')),
+    request_key       VARCHAR(150) NOT NULL,
+    result_id         BIGINT,  -- work_result 논리 참조, FK 없음
+    name              VARCHAR(100) NOT NULL,
+    status            VARCHAR(30)  NOT NULL
+                      CHECK (status IN ('running', 'success', 'failed', 'refused', 'incomplete')),
+    latency_ms        BIGINT CHECK (latency_ms >= 0),
+    payload_json      JSONB,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- request_key 재전송 식별은 서버에서 처리한다 (ERD 기준, UQ 없음).
+    CONSTRAINT fk_log_version FOREIGN KEY (input_version_id, session_id)
+        REFERENCES work_version (input_version_id, session_id)
+);
+
+-- 8. RAG 검색 조각 (FastAPI가 씀)
+-- 임베딩 모델: KURE-v1 (nlpai-lab/KURE-v1, 11.11 회의 결정, 1024차원). BGE-M3로 바꿔도 같은 1024차원이다.
+CREATE TABLE rag_chunk (
+    chunk_id         BIGINT PRIMARY KEY,
+    store_id         BIGINT       REFERENCES store (store_id),
+    source_type      VARCHAR(30)  NOT NULL
+                     CHECK (source_type IN ('item_alias', 'labor_rule', 'assumption', 'data_source')),
+    source_ref       VARCHAR(200) NOT NULL,
+    source_version   VARCHAR(50)  NOT NULL,
+    chunk_no         INTEGER      NOT NULL CHECK (chunk_no >= 0),
+    content          TEXT         NOT NULL,
+    metadata_json    JSONB,
+    embedding        vector(1024) NOT NULL,
+    embedding_model  VARCHAR(100) NOT NULL,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_rag_chunk_source UNIQUE (source_type, source_ref, source_version, chunk_no, embedding_model)
+);
+
+-- 조회용 인덱스 (ERD의 키·연결과 별개인 성능용)
+CREATE INDEX ix_store_owner ON store (owner_key, store_id);
+CREATE INDEX ix_session_store_feature ON work_session (store_id, feature_type, updated_at DESC, session_id DESC);
+CREATE INDEX ix_result_version ON work_result (input_version_id, created_at DESC, result_id DESC);
+CREATE INDEX ix_result_session ON work_result (session_id, created_at DESC, result_id DESC);
+CREATE INDEX ix_message_session ON session_message (session_id, message_id);
+CREATE INDEX ix_log_version_type ON execution_log (input_version_id, log_type, log_id);
+CREATE INDEX ix_log_result_trace ON execution_log (result_id, log_id) WHERE log_type = 'simulation_trace';
+CREATE INDEX ix_log_session ON execution_log (session_id, log_id);
+CREATE INDEX ix_rag_source ON rag_chunk (store_id, source_type);
+-- 코사인 거리 검색: ORDER BY embedding <=> 질의벡터
+CREATE INDEX ix_rag_embedding ON rag_chunk USING hnsw (embedding vector_cosine_ops);

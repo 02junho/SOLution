@@ -1,0 +1,12 @@
+menu_id,item_id,quantity,unit,source
+iced_americano,beans,18,g,ÆÀ Àç·áÇ¥
+iced_americano,ice_cup,1,°³,ÆÀ Àç·áÇ¥
+iced_americano,lid,1,°³,ÆÀ Àç·áÇ¥
+iced_latte,beans,18,g,ÆÀ Àç·áÇ¥
+iced_latte,milk,200,ml,ÆÀ Àç·áÇ¥
+iced_latte,ice_cup,1,°³,ÆÀ Àç·áÇ¥
+iced_latte,lid,1,°³,ÆÀ Àç·áÇ¥
+hot_latte,beans,18,g,ÆÀ Àç·áÇ¥
+hot_latte,milk,220,ml,ÆÀ Àç·áÇ¥
+hot_latte,hot_cup,1,°³,ÆÀ Àç·áÇ¥
+hot_latte,lid,1,°³,ÆÀ Àç·áÇ¥

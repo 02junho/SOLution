@@ -1,0 +1,82 @@
+{
+  "note": "ai-server/app/tools/simulation/menu_catalog.json에서 화면에 필요한 칸만 옮긴 사본. 엔진 메뉴가 바뀌면 같이 바꾼다.",
+  "selected_menu_ids": [
+    "iced_americano",
+    "iced_green_tea_latte",
+    "iced_cafe_latte",
+    "hot_cafe_latte",
+    "blueberry_yogurt_smoothie"
+  ],
+  "menus": [
+    {
+      "menu_id": "iced_americano",
+      "menu_name": "아이스 아메리카노",
+      "sales_weight": 0.48,
+      "manufacture_sec": 60,
+      "manufacture_stddev_sec": 15
+    },
+    {
+      "menu_id": "iced_green_tea_latte",
+      "menu_name": "아이스 녹차라떼",
+      "sales_weight": 0.12,
+      "manufacture_sec": 75,
+      "manufacture_stddev_sec": 20
+    },
+    {
+      "menu_id": "iced_cafe_latte",
+      "menu_name": "아이스 카페라떼",
+      "sales_weight": 0.23,
+      "manufacture_sec": 70,
+      "manufacture_stddev_sec": 20
+    },
+    {
+      "menu_id": "hot_cafe_latte",
+      "menu_name": "핫 카페라떼",
+      "sales_weight": 0.07,
+      "manufacture_sec": 95,
+      "manufacture_stddev_sec": 25
+    },
+    {
+      "menu_id": "blueberry_yogurt_smoothie",
+      "menu_name": "블루베리 요거트 스무디",
+      "sales_weight": 0.1,
+      "manufacture_sec": 120,
+      "manufacture_stddev_sec": 30
+    },
+    {
+      "menu_id": "hot_americano",
+      "menu_name": "핫 아메리카노",
+      "sales_weight": 0,
+      "manufacture_sec": 55,
+      "manufacture_stddev_sec": 15
+    },
+    {
+      "menu_id": "iced_vanilla_latte",
+      "menu_name": "아이스 바닐라라떼",
+      "sales_weight": 0,
+      "manufacture_sec": 95,
+      "manufacture_stddev_sec": 25
+    },
+    {
+      "menu_id": "iced_milk_tea",
+      "menu_name": "아이스 밀크티",
+      "sales_weight": 0,
+      "manufacture_sec": 70,
+      "manufacture_stddev_sec": 20
+    },
+    {
+      "menu_id": "iced_lemon_ade",
+      "menu_name": "아이스 레몬에이드",
+      "sales_weight": 0,
+      "manufacture_sec": 60,
+      "manufacture_stddev_sec": 15
+    },
+    {
+      "menu_id": "iced_choco_latte",
+      "menu_name": "아이스 초코라떼",
+      "sales_weight": 0,
+      "manufacture_sec": 85,
+      "manufacture_stddev_sec": 20
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+# 배포용 (서버 1대). 서버에서는 빌드하지 않고 GHCR 이미지를 받아 띄운다.
+# 이미지 게시와 서버 갱신은 dev 병합 때 ci.yml(이미지 게시 → 서버 배포)이 자동으로 한다. README "7. 배포용 구성" 참고.
+# 이미지 태그는 IMAGE_TAG(배포가 서버 .env에 그 커밋 SHA로 적음)를 따르고, 없으면 latest를 쓴다.
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+# 밖에는 화면(nginx) 80번만 연다. DB(5432)·Spring(8080)·FastAPI(8000)는 컨테이너끼리만 쓴다.
+# .env는 서버에만 둔다 (.env.example 참고, 저장소·노션·단톡방에 올리지 않기).
+#
+# 로컬에서 같은 구성을 확인할 때는 이미지를 먼저 이 이름으로 빌드한다.
+#   docker build -t ghcr.io/02junho/solution-backend:latest ./backend
+#   docker build -t ghcr.io/02junho/solution-ai-server:latest ./ai-server
+#   docker build -t ghcr.io/02junho/solution-frontend:latest ./frontend
+#   docker compose -f docker-compose.prod.yml up -d  → http://localhost
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env에 POSTGRES_PASSWORD를 채워 주세요}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  ai-server:
+    image: ghcr.io/02junho/solution-ai-server:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      DB_HOST: db
+      POSTGRES_PORT: 5432
+      # 임베딩 모델(KURE-v1, 2GB 넘음)을 볼륨에 둔다. 재시작·배포 때 Hugging Face에서 다시 받지 않는다.
+      HF_HOME: /models/huggingface
+    volumes:
+      - model-cache:/models
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 테이블은 backend가 뜰 때 Flyway로 만든다.
+  backend:
+    image: ghcr.io/02junho/solution-backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      DB_HOST: db
+      POSTGRES_PORT: 5432
+      AI_SERVER_URL: http://ai-server:8000
+      QUOTE_TOOLS_URL: http://ai-server:8000
+      BACKEND_PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+      ai-server:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/02junho/solution-frontend:${IMAGE_TAG:-latest}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  model-cache:

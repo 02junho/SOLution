@@ -1,0 +1,178 @@
+{
+  "session_id": 520001,
+  "input_version_id": 530001,
+  "business_date": "2026-11-16",
+  "workers": [
+    {
+      "worker_key": "A",
+      "is_owner": true,
+      "is_minor": false,
+      "hourly_wage_krw": null
+    },
+    {
+      "worker_key": "B",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    },
+    {
+      "worker_key": "C",
+      "is_owner": false,
+      "is_minor": false,
+      "hourly_wage_krw": 10320
+    }
+  ],
+  "wage_year": 2026,
+  "assumptions_version": "demo.staffing-review.v1",
+  "cost_options": {
+    "include_weekly_holiday": false,
+    "include_employer_insurance": false
+  },
+  "monthly_projection": {
+    "weeks_per_month": 4.345,
+    "worker_days_per_week": {
+      "B": 5,
+      "C": 5
+    }
+  },
+  "plans": [
+    {
+      "choice_key": "CURRENT",
+      "shifts": [
+        {
+          "start_time": "07:00",
+          "end_time": "19:00",
+          "worker_key": "A",
+          "task_code": "ORDER",
+          "breaks": [],
+          "primary_role": "ORDER",
+          "can_support": []
+        },
+        {
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "worker_key": "B",
+          "task_code": "MAKE",
+          "breaks": [
+            {
+              "start_time": "14:00",
+              "end_time": "15:00",
+              "is_paid": false
+            }
+          ],
+          "primary_role": "MAKE",
+          "can_support": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_A",
+      "shifts": [
+        {
+          "start_time": "07:00",
+          "end_time": "11:00",
+          "worker_key": "A",
+          "task_code": "ORDER",
+          "breaks": [],
+          "primary_role": "ORDER",
+          "can_support": []
+        },
+        {
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "worker_key": "A",
+          "task_code": "ORDER",
+          "breaks": [],
+          "primary_role": "ORDER",
+          "can_support": [
+            "MAKE"
+          ]
+        },
+        {
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "worker_key": "A",
+          "task_code": "ORDER",
+          "breaks": [],
+          "primary_role": "ORDER",
+          "can_support": []
+        },
+        {
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "worker_key": "B",
+          "task_code": "MAKE",
+          "breaks": [],
+          "primary_role": "MAKE",
+          "can_support": []
+        },
+        {
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "worker_key": "B",
+          "task_code": "MAKE",
+          "breaks": [],
+          "primary_role": "MAKE",
+          "can_support": [
+            "ORDER"
+          ]
+        },
+        {
+          "start_time": "14:00",
+          "end_time": "19:00",
+          "worker_key": "B",
+          "task_code": "MAKE",
+          "breaks": [
+            {
+              "start_time": "14:00",
+              "end_time": "15:00",
+              "is_paid": false
+            }
+          ],
+          "primary_role": "MAKE",
+          "can_support": []
+        }
+      ]
+    },
+    {
+      "choice_key": "ALT_C",
+      "shifts": [
+        {
+          "start_time": "07:00",
+          "end_time": "19:00",
+          "worker_key": "A",
+          "task_code": "ORDER",
+          "breaks": [],
+          "primary_role": "ORDER",
+          "can_support": []
+        },
+        {
+          "start_time": "10:00",
+          "end_time": "19:00",
+          "worker_key": "B",
+          "task_code": "MAKE",
+          "breaks": [
+            {
+              "start_time": "14:00",
+              "end_time": "15:00",
+              "is_paid": false
+            }
+          ],
+          "primary_role": "MAKE",
+          "can_support": []
+        },
+        {
+          "start_time": "11:00",
+          "end_time": "14:00",
+          "worker_key": "C",
+          "task_code": "MAKE",
+          "breaks": [],
+          "primary_role": "MAKE",
+          "can_support": [
+            "ORDER"
+          ]
+        }
+      ]
+    }
+  ]
+}

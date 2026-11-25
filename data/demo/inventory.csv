@@ -1,0 +1,6 @@
+item_id,usable_inventory,safety_stock,storage_capacity,unit,source
+beans,1000,500,5000,g,가정
+milk,2000,2000,24000,ml,가정
+ice_cup,50,50,1000,ea,가정
+hot_cup,30,30,500,ea,가정
+lid,100,50,1000,ea,가정
