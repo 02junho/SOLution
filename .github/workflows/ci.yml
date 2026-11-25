@@ -1,6 +1,6 @@
 # PR·push마다 각 서버의 테스트·빌드와, docker compose로 셋을 함께 띄운 연결 확인을 한다.
-# dev에 push(병합)되고 위 검사가 모두 통과하면 이미지 세 개를 GHCR에 올리고 서버(EC2)를 새 이미지로 갱신한다.
-# 배포 브랜치는 아래 publish·deploy 작업의 if에 있다. 발표 전에 main으로 옮길 때는 그 두 줄만 바꾼다.
+# main에 push(병합)되고 위 검사가 모두 통과하면 이미지 세 개를 GHCR에 올리고 서버(EC2)를 새 이미지로 갱신한다.
+# 배포 브랜치는 아래 publish·deploy 작업의 if에 있다. 발표를 앞두고 dev에서 main으로 옮겼다.
 name: CI
 
 on:
@@ -137,12 +137,12 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  # ── 배포 (dev에 push됐을 때만) ──────────────────────────────────────────
+  # ── 배포 (main에 push됐을 때만) ──────────────────────────────────────────
   # 이미지 세 개를 GHCR(ghcr.io/02junho/solution-*)에 :latest와 커밋 SHA로 올린다.
   publish:
     name: 이미지 게시
     needs: [backend, ai-server, frontend, compose]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -170,12 +170,12 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.app }},mode=max
 
   # 서버에 SSH로 들어가 저장소와 이미지를 이 실행이 검사한 커밋(github.sha)으로 맞추고 다시 띄운 뒤, 밖에서 연결을 확인한다.
-  # 같은 커밋으로 맞추므로 검사 도중 dev에 다른 병합이 와도 설정·이미지가 섞이지 않고, 옛 실행을 다시 돌리면 그 버전으로 되돌아간다.
+  # 같은 커밋으로 맞추므로 검사 도중 main에 다른 병합이 와도 설정·이미지가 섞이지 않고, 옛 실행을 다시 돌리면 그 버전으로 되돌아간다.
   # 필요한 Secret: EC2_HOST, EC2_USER, EC2_SSH_KEY, EC2_KNOWN_HOSTS(서버 호스트 공개키). 서버 .env는 서버에만 있다.
   deploy:
     name: 서버 배포
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
