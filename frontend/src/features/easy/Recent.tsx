@@ -5,6 +5,7 @@ import { workflowApi } from '../../api/workflowApi'
 import type { Confirmation, SessionSummary } from '../../types/workflow'
 import { CHOICE, STEP, cleanTitle, featureTag, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
+import { usePlanSummaries } from './usePlanSummaries'
 
 type Fetch<T> = () => Promise<{ items: T[] }>
 const fetchSessions: Fetch<SessionSummary> = () => workflowApi.sessions(undefined, null)
@@ -37,6 +38,7 @@ export default function Recent() {
   const { items: sessions, failed: sessionsFailed, retry: retrySessions } = useRecent(fetchSessions)
   const { items: plans, failed: plansFailed, retry: retryPlans } = useRecent(fetchPlans)
   const summaries = useInputSummaries(sessions ?? [])
+  const planSummaries = usePlanSummaries(plans ?? [])
 
   return (
     <div className="easy-recent">
@@ -77,7 +79,7 @@ export default function Recent() {
                     <a href={`#/plans/${p.confirmation_id}`}>
                       <span className={`easy-tag ${p.feature_type}`}>{featureTag(p.feature_type, { choiceKey: p.selected_choice_key })}</span>
                       <b>{CHOICE[p.selected_choice_key] ?? p.selected_choice_key}</b>
-                      <small>{when(p.confirmed_at)}에 저장</small>
+                      <small>{planSummaries[p.confirmation_id] ? `${planSummaries[p.confirmation_id]} · ` : ''}{when(p.confirmed_at)}에 저장</small>
                     </a>
                   </li>
                 ))}

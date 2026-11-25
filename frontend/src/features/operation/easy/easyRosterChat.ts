@@ -54,6 +54,27 @@ export function chatFields(open: string, close: string, dataDays: Weekday[]): Ch
  */
 const aliasOf = (p: Person) => `P${p.id}`
 
+/** 직원 번호는 유지하고 표시 이름만 A~Z, AA…로 붙인다(저장한 명단의 이름과 중복되지 않게). */
+function employeeName(id: number): string {
+  let letters = ''
+  for (let n = id; n > 0; n = Math.floor((n - 1) / 26)) {
+    letters = String.fromCharCode(65 + (n - 1) % 26) + letters
+  }
+  return `직원 ${letters}`
+}
+
+/** 서버의 '직원 추가' 문구에 실제 부여한 별칭을 넣는다. 대화 기록에는 이름 대신 별칭만 남긴다. */
+export function replyWithAddedAliases(text: string, added: Person[]): string {
+  let i = 0
+  const shown = text.replace(/(^바꿨어요 — | \/ )직원 추가(?=\(|\.| \/ |$)/g, (whole, prefix: string) => {
+    const person = added[i++]
+    return person ? `${prefix}${aliasOf(person)} 추가` : whole
+  })
+  // RUN 등 서버가 추가 조건을 따로 설명하지 않는 답장에도 실제 추가된 사람을 알려 준다.
+  const remaining = added.slice(i).map((p) => `${aliasOf(p)} 추가(가능 요일 ${p.days.map((d) => WEEKDAY_LABEL[d]).join('·') || '없음'} · 가능 시간 ${p.start}~${p.end})`)
+  return remaining.length ? [shown, ...remaining].filter(Boolean).join(' / ') : shown
+}
+
 /**
  * 사장님이 쓴 말 속 직원 이름 → 별칭(P1…). AI에는 이름을 보내지 않는다("직원 G가 토요일에 못 나온대" → "P7이 …").
  * 긴 이름부터 바꿔 "직원 A"가 "직원 AB" 안에서 먼저 바뀌지 않게 한다.
@@ -66,7 +87,7 @@ export function toAliases(text: string, people: Person[]): string {
 
 /** AI 답장 속 별칭(P1…) → 화면에 보이는 직원 이름. 명단에 없는 번호는 그대로 둔다. */
 export function toNames(text: string, people: Person[]): string {
-  return text.replace(/\bP(\d{1,2})\b/g, (whole, n: string) => people.find((p) => p.id === Number(n))?.name || whole)
+  return text.replace(/\bP(\d+)\b/g, (whole, n: string) => people.find((p) => p.id === Number(n))?.name || whole)
 }
 
 /** 바로 앞 대화(별칭으로 바꾼 말). "그럼 그렇게 해 줘"처럼 앞 말을 가리킬 때 AI가 본다. 최근 4줄까지. */
@@ -143,6 +164,9 @@ export function applyReply(
   }
   let people = [...next.team.people]
   const byAlias = new Map(people.map((p) => [aliasOf(p), p.id]))
+  // 같은 응답에서 앞 직원을 빼더라도 번호와 이름을 다시 쓰지 않는다.
+  let nextId = Math.max(defaults.nextId ?? 1, ...people.map((p) => p.id + 1))
+  const usedNames = new Set(people.map((p) => p.name.trim()))
   for (const change of reply.worker_changes) {
     const f = (change.fields ?? {}) as Partial<{ days: Person['days']; start: string; end: string; max_hours: number; minor: boolean }>
     const patch: Partial<Person> = {
@@ -153,8 +177,12 @@ export function applyReply(
       ...(f.minor != null ? { minor: f.minor } : {}),
     }
     if (change.op === 'add' && people.length < MAX_TEAM) {
-      const id = Math.max(defaults.nextId ?? 1, ...people.map((p) => p.id + 1))
-      people.push({ id, name: `추가 직원 ${id}`, wage: next.wage, minor: false, days: [], start: defaults.open, end: defaults.close, maxHours: '14', ...patch })
+      const id = nextId++
+      let nameIndex = id
+      while (usedNames.has(employeeName(nameIndex))) nameIndex++
+      const name = employeeName(nameIndex)
+      usedNames.add(name)
+      people.push({ id, name, wage: next.wage, minor: false, days: [], start: defaults.open, end: defaults.close, maxHours: '14', ...patch })
     } else if (change.op === 'remove') {
       const id = byAlias.get(change.alias)
       // 마지막 한 명은 빼지 않는다. 실제로 뺀 게 없으면 바뀐 줄로도 표시하지 않는다.

@@ -6,7 +6,7 @@ import type { Weekday } from '../workspace/storeFile'
 import Info from './Info'
 import DayTimeline from './DayTimeline'
 import RosterQueue from './RosterQueue'
-import { averagePeak, busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, optionSummary, headline, finalWaitBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won, worstPeak } from './easyRosterModel'
+import { addedAssignmentText, averagePeak, busiestDay, capacityText, markExtraShifts, mergedWindows, periodOf, optionSummary, headline, finalWaitBars, OPTION_NAME, rangeText, repetitionsOf, shiftParts, shownDays, unfilledCells, versusText, waitText, weekRows, won, worstPeak } from './easyRosterModel'
 
 /*
  * 쉬운 화면 추천 근무표 결과. 결론(추천 한 줄) → 왜 이 인원인지(사람을 늘리면 대기가 얼마나 줄까) → 일주일 근무표 →
@@ -124,7 +124,12 @@ export default function EasyRosterResult({
       <section className="easy-card easy-print er-print" data-tour="detail">
         <h2>{OPTION_NAME[option.key]} · {period.title}</h2>
         <p className="easy-print-only easy-print-sign er-sign">확인 ____________</p>
-        {changed && <p className="er-changed easy-noprint">바꾼 조건으로 다시 계산했어요: {changed.text}</p>}
+        {changed?.text && <p className="er-changed easy-noprint">바꾼 조건으로 다시 계산했어요: {changed.text}</p>}
+        {added.size > 0 && (
+          <p className="er-changed easy-noprint">
+            추가된 직원: {addedAssignmentText(rows, days, [...added]).map((text) => text.replace(/^직원 ([A-Z]+): /, '$1 · ')).join(' / ')}
+          </p>
+        )}
         {days.length === 1 && <DayTimeline rows={rows} added={added} per={period.per} holes={holes?.[0]} busy={mergedWindows(data.days[days[0]]?.windows ?? [])} />}
         <div className={`er-week-wrap${days.length === 1 ? ' er-week-day' : ''}`}>
           <table className="er-week">
@@ -144,7 +149,7 @@ export default function EasyRosterResult({
                 <tr key={r.key} className={r.owner ? 'owner' : r.hire ? 'hire' : ''}>
                   <th scope="row">
                     {r.name}
-                    {added.has(r.name) && <small className="er-added-tag">말로 추가</small>}
+                    {added.has(r.name) && <small className="er-added-tag">추가된 직원</small>}
                     {r.hours != null && <small>{period.per} {r.hours}시간</small>}
                     {r.pay != null && <small className="er-pay">{won(r.pay)}</small>}
                   </th>

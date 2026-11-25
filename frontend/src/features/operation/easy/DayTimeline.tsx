@@ -43,7 +43,7 @@ export default function DayTimeline({ rows, per, holes, busy = [], added }: { ro
           <div key={r.key} className={`er-day-row${r.owner ? ' owner' : r.hire ? ' hire' : ''}`}>
             <span className="er-day-name">
               <b>{r.name}</b>
-              {added?.has(r.name) && <small className="er-added-tag">말로 추가</small>}
+              {added?.has(r.name) && <small className="er-added-tag">추가된 직원</small>}
               {r.hours != null && <small>{per} {r.hours}시간</small>}
               {r.pay != null && <small className="er-pay">{won(r.pay)}</small>}
             </span>

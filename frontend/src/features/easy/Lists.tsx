@@ -5,6 +5,7 @@ import { workflowApi } from '../../api/workflowApi'
 import type { Confirmation, SessionSummary } from '../../types/workflow'
 import { CHOICE, STEP, cleanTitle, featureTag, when } from './recentFormat'
 import { useInputSummaries } from './useInputSummaries'
+import { usePlanSummaries } from './usePlanSummaries'
 import { forgetSaves } from './saveKey'
 import { ROSTER_MODE } from '../operation/easy/rosterSwitch'
 
@@ -137,6 +138,7 @@ export function SessionList() {
 export function PlanList() {
   const { list, busy, more, remove, failed, retry } = useCursorList(fetchPlans)
   const items = (list?.items ?? []).filter((p) => EASY_FEATURES.has(p.feature_type))
+  const planSummaries = usePlanSummaries(items)
   return (
     <Shell
       title="저장한 계획"
@@ -153,7 +155,7 @@ export function PlanList() {
                   <a href={`#/plans/${p.confirmation_id}`}>
                     <span className={`easy-tag ${p.feature_type}`}>{featureTag(p.feature_type, { choiceKey: p.selected_choice_key })}</span>
                     <b>{CHOICE[p.selected_choice_key] ?? p.selected_choice_key}</b>
-                    <small>{when(p.confirmed_at)}에 저장{p.is_current_version ? '' : ' · 이후 조건이 바뀜'}</small>
+                    <small>{planSummaries[p.confirmation_id] ? `${planSummaries[p.confirmation_id]} · ` : ''}{when(p.confirmed_at)}에 저장{p.is_current_version ? '' : ' · 이후 조건이 바뀜'}</small>
                     <span className="easy-list-go" aria-hidden>›</span>
                   </a>
                   <DeleteRow

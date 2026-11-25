@@ -182,10 +182,44 @@ test('말로 고치기: 직원은 별칭으로 더하기·빼기·고치기', ()
     reply: '',
   }
   const { next, rows } = chat.applyReply(cond, reply, { open: '07:00', close: '19:00' })
-  assert.deepEqual(next.team.people.map((p) => p.name), ['직원 A', '추가 직원 2'])
+  assert.deepEqual(next.team.people.map((p) => p.name), ['직원 A', '직원 C'])
   assert.equal(next.team.people[0].maxHours, '10')
   assert.deepEqual(next.team.people[1].days, ['SAT'])
   assert.deepEqual(rows, ['team'])
+})
+
+test('말로 추가: A~H 다음 이름, 여러 명 추가, 답장 별칭 및 이름 복원', () => {
+  const people = Array.from({ length: 8 }, (_, i) => ({ ...team.people[0], id: i + 1, name: `직원 ${String.fromCharCode(65 + i)}` }))
+  const initial = { ...cond, team: { ...team, people } }
+  const reply = { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [
+    { op: 'add', alias: 'NEW', fields: { days: ['SAT'], start: '09:00', end: '13:00' } },
+    { op: 'add', alias: 'NEW', fields: { days: ['SUN'] } },
+  ], reply: '바꿨어요 — 직원 추가(가능 요일 토 · 시작 09:00 · 끝 13:00) / 직원 추가(가능 요일 일).' }
+  const { next } = chat.applyReply(initial, reply, { open: '07:00', close: '19:00' })
+  const added = next.team.people.slice(8)
+  assert.deepEqual(added.map((p) => [p.id, p.name]), [[9, '직원 I'], [10, '직원 J']])
+  const aliased = chat.replyWithAddedAliases(reply.reply, added)
+  assert.equal(aliased, '바꿨어요 — P9 추가(가능 요일 토 · 시작 09:00 · 끝 13:00) / P10 추가(가능 요일 일).')
+  assert.match(chat.toNames(aliased, next.team.people), /직원 I 추가.*직원 J 추가/)
+  assert.equal(chat.toAliases('직원 I가 일요일에 가능해', next.team.people), 'P9가 일요일에 가능해')
+  assert.match(chat.replyWithAddedAliases('지금 조건으로 계산할게요.', added), /P9 추가.*P10 추가/)
+})
+
+test('말로 추가: 복원된 명단 이름 중복 방지 및 Z 다음 이름', () => {
+  const initial = { ...cond, team: { ...team, people: [{ ...team.people[0], name: '직원 C' }, team.people[1]] } }
+  const reply = { source: 'LLM', intent: 'EDIT', changes: [], worker_changes: [{ op: 'add', alias: 'NEW', fields: {} }], reply: '' }
+  const { next } = chat.applyReply(initial, reply, { open: '07:00', close: '19:00' })
+  assert.equal(next.team.people.at(-1).name, '직원 D')
+  const later = chat.applyReply(initial, reply, { open: '07:00', close: '19:00', nextId: 27 })
+  assert.equal(later.next.team.people.at(-1).name, '직원 AA')
+})
+
+test('말로 추가: 선택한 근무표의 실제 배정과 미배정을 표시', () => {
+  const rows = model.weekRows(option('SAVE', 0), ['MON', 'TUE'])
+  assert.deepEqual(model.addedAssignmentText(rows, ['MON', 'TUE'], ['직원 A', '직원 C']), [
+    '직원 A: 월 11:00~14:00 · 화 11:00~14:00', '직원 C: 이번 근무표에는 배정되지 않았어요.',
+  ])
+  assert.deepEqual(model.addedAssignmentText(rows, ['MON', 'TUE'], []), [])
 })
 
 test('말로 고치기: 마지막 직원 빼기·시작이 끝보다 늦어지는 고치기는 반영도, 바뀐 줄 표시도 안 한다', () => {

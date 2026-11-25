@@ -174,6 +174,15 @@ export function weekRows(option: Option, days: Weekday[]): WeekRow[] {
   return rows
 }
 
+/** 말로 추가한 명단과 현재 선택한 안의 실제 배정을 구분한다(미배정 직원도 안내). */
+export function addedAssignmentText(rows: WeekRow[], days: Weekday[], added: string[]): string[] {
+  return added.map((name) => {
+    const row = rows.find((r) => !r.owner && !r.hire && r.name === name)
+    const assignments = row?.cells.flatMap((cell, i) => cell ? [`${WEEKDAY_LABEL[days[i]]} ${shiftText(cell.start, cell.end)}`] : []) ?? []
+    return assignments.length ? `${name}: ${assignments.join(' · ')}` : `${name}: 이번 근무표에는 배정되지 않았어요.`
+  })
+}
+
 /** 못 채운 자리(요일 칸마다 "시작~끝"). 새 알바 줄(new_hires)로 보여 주면 null. 예전에 저장한 결과에만 나온다. */
 export function unfilledCells(option: Option, days: Weekday[]): string[] | null {
   if (!option.weekly.unfilled.length || option.new_hires) return null

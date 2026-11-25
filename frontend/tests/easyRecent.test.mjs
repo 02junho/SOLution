@@ -22,3 +22,13 @@ test('업무 조건을 한 줄로 요약해 같은 제목을 구분한다', asyn
   assert.equal(inputSummary('operation', { other: 1 }), '자세한 화면에서 만든 조건')
   assert.equal(inputSummary('operation', null), '')
 })
+
+test('저장한 근무표는 저장 당시 요일별 주문 평균과 기본 목표 대기를 표시한다', async () => {
+  const { rosterPlanSummary } = await import('../src/features/easy/recentFormat.ts')
+  const form = (daily_orders, is_owner_working) => ({ operation_form: { daily_orders, is_owner_working, hourly_wage_krw: 10320 } })
+  assert.equal(rosterPlanSummary({ days: [form(100, false), form(184, true)] }), '일평균 주문 142건 · 사장님 같이 일함 · 목표 대기 5분 · 시급 10,320원')
+  assert.equal(rosterPlanSummary({ days: [{ operation_form: { daily_orders: 276, is_owner_working: false, target_wait_sec: 420, hourly_wage_krw: 12000 } }] }), '주문 276건 · 직원만 · 목표 대기 7분 · 시급 12,000원')
+  assert.equal(rosterPlanSummary(null), '')
+  assert.equal(rosterPlanSummary({ days: [{}] }), '')
+  assert.equal(rosterPlanSummary({ days: [] }), '')
+})

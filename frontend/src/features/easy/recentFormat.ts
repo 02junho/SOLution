@@ -60,3 +60,29 @@ export function inputSummary(feature: string, input: Record<string, unknown> | n
   }
   return ''
 }
+
+/** 저장한 근무표의 불변 계산 요청을 요약한다. 현재 업무 조건은 사용하지 않는다. */
+export function rosterPlanSummary(request: unknown): string {
+  const obj = (v: unknown): Record<string, unknown> | null =>
+    v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
+  const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : null
+  const days = obj(request)?.days
+  if (!Array.isArray(days) || !days.length) return ''
+  const forms = days.map((day) => obj(obj(day)?.operation_form))
+  if (forms.some((f) => f === null)) return ''
+  const orders = forms.map((f) => num(f?.daily_orders))
+  const owner = forms.map((f) => f?.is_owner_working)
+  // equipmentBody omits the default target (300 sec); stored requests preserve that omission.
+  const waits = forms.map((f) => f?.target_wait_sec == null ? 300 : num(f.target_wait_sec))
+  const wages = forms.map((f) => num(f?.hourly_wage_krw))
+  const parts: string[] = []
+  if (orders.every((v): v is number => v !== null)) {
+    const avg = Math.round(orders.reduce((sum, n) => sum + n, 0) / orders.length)
+    parts.push(`${days.length > 1 ? '일평균 주문' : '주문'} ${avg}건`)
+  }
+  if (owner.includes(true)) parts.push('사장님 같이 일함')
+  else if (owner.every((v) => v === false)) parts.push('직원만')
+  if (waits.every((v): v is number => v !== null) && waits.every((v) => v === waits[0])) parts.push(`목표 대기 ${waits[0] / 60}분`)
+  if (wages.every((v): v is number => v !== null) && wages.every((v) => v === wages[0])) parts.push(`시급 ${wages[0].toLocaleString('ko-KR')}원`)
+  return parts.join(' · ')
+}

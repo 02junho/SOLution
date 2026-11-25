@@ -18,7 +18,7 @@ import { analyzeTable, MENU_TYPES, planFrom, readTable, WEEKDAY_LABEL, WEEKDAYS 
 import type { StoreImport, Weekday } from '../workspace/storeFile'
 import EasyRosterResult from './EasyRosterResult'
 import type { RosterStage } from './rosterTour'
-import { applyReply, chatFields, chatState, chatWorkers, editableText, mergeChanges, pushHistory, toAliases, toNames } from './easyRosterChat'
+import { applyReply, chatFields, chatState, chatWorkers, editableText, mergeChanges, pushHistory, replyWithAddedAliases, toAliases, toNames } from './easyRosterChat'
 import type { ChatTurn } from './easyRosterChat'
 import type { RosterConditions } from './easyRosterChat'
 import { clock, noteSentences, optionSummary, OPTION_NAME, shownDays, won } from './easyRosterModel'
@@ -92,6 +92,8 @@ export default function EasyRoster({
   const condNow = useRef<RosterConditions | null>(null)
   /** 지금까지 쓴 가장 큰 직원 번호. 뺀 직원 번호를 새 직원에게 다시 주지 않게(앞 대화의 별칭이 다른 사람을 가리키지 않게). */
   const maxPersonId = useRef(0)
+  // 현재 화면에서 말로 명단에 추가한 직원. 계산 요청의 명단과 대조해 결과에 표시한다.
+  const chatAddedIds = useRef(new Set<number>())
   useEffect(() => {
     condNow.current = cond
     maxPersonId.current = Math.max(maxPersonId.current, ...(cond?.team.people.map((p) => p.id) ?? []))
@@ -192,6 +194,7 @@ export default function EasyRoster({
       const next = await parse()
       if (seq !== readSeq.current) return false
       setRestored(null)
+      chatAddedIds.current.clear()
       const first = planFrom(next)
       const days = WEEKDAYS.filter((w) => first.weekdayDays[w])
       const wage = String(cond?.wage ?? wageFloor())
@@ -462,6 +465,7 @@ export default function EasyRoster({
     if (!c || stops.length || (!restored && (!imp || !plan))) return
     if (stopRef.current && !stopRef.current.stopped) return
     const before = options
+    const addedForRun = c.team.people.filter((p) => chatAddedIds.current.has(p.id)).map((p) => p.name)
     const people = { isOwnerWorking: c.owner, hourlyWage: Number(c.wage) }
     const form = !restored && imp && plan ? formFromPlan(imp, plan, people, equipment(c)) : null
     const stop = { stopped: false }
@@ -488,12 +492,8 @@ export default function EasyRoster({
         const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', `[쉬운 화면] 추천 근무표${from ? ` · ${from}` : ''}`)
         sessionId = created.session_id
         if (!mounted.current) return // 만드는 사이 화면을 떠났으면 부모 상태를 바꾸지 않는다
-        // 이 계산을 멈췄으면 부모 상태만 건드리지 않는다(새 계산의 업무를 덮지 않게).
-        // 조건 저장·계산 시작은 그대로 이어서 만든 업무가 빈 채로 남지 않게 한다. 화면 갱신은 아래 stop.stopped 검사가 막는다.
-        if (!stop.stopped) {
-          setSession(sessionId)
-          onSession(sessionId)
-        }
+        setSession(sessionId)
+        onSession(sessionId)
       }
       // 조건은 업무에 새 버전으로 남긴다(다시 계산하면 같은 업무 안에서 버전이 쌓인다).
       const context = await workflowApi.context(sessionId)
@@ -519,7 +519,8 @@ export default function EasyRoster({
       // 말로 바꿔 다시 계산했는데 세 근무표의 인건비·대기가 그대로면 그렇다고 알려 준다(바꾼 게 반영 안 된 걸로 보이지 않게).
       const change = nextChange.current
       const same = change && before && sameOutcome(before, optionsFromStored(detail.data))
-      setLastChange(change && same ? { ...change, text: `${change.text} · 세 안의 예상 대기시간과 인건비는 이전과 같아요` } : change) // 말로 바꿔 다시 계산한 게 아니면 지운다
+      const text = change ? `${change.text}${same ? ' · 세 안의 예상 대기시간과 인건비는 이전과 같아요' : ''}` : ''
+      setLastChange(text || addedForRun.length ? { text, added: addedForRun } : null)
       nextChange.current = null
       onPhase('result')
     } catch (cause) {
@@ -621,10 +622,14 @@ export default function EasyRoster({
       }
       const applied = applyReply(cond, reply, { open, close, nextId: maxPersonId.current + 1 })
       setChatText('')
-      chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: reply.reply })
+      const previousIds = new Set(cond.team.people.map((p) => p.id))
+      const addedPeople = applied.next.team.people.filter((p) => !previousIds.has(p.id))
+      for (const person of addedPeople) chatAddedIds.current.add(person.id)
+      const aliasedReply = replyWithAddedAliases(reply.reply, addedPeople)
+      chatHistory.current = pushHistory(chatHistory.current, { role: 'owner', text: aliased }, { role: 'assistant', text: aliasedReply })
       // 사장님 시간처럼 합쳐 보니 앞뒤가 안 맞아 되돌린 변경이 있으면 그 이유를 보여 준다.
       // 다른 변경은 반영됐으면(부분 반영) 답장과 이유를 같이, 모두 되돌렸으면 이유만.
-      const answer = toNames(reply.reply, cond.team.people)
+      const answer = toNames(aliasedReply, [...cond.team.people, ...addedPeople])
       const shown = applied.rejected ? (applied.changed ? `${answer} 단, ${applied.rejected}` : applied.rejected) : answer
       setChatReply({ text: shown, ok: applied.changed })
       // 이번 말로 바꾼 것까지 합친 "모아 둔 변경"(바로 아래 setPending은 다음 렌더에야 보이므로 여기서 같이 계산해 둔다).
