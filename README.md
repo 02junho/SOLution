@@ -57,8 +57,8 @@
 | 서버 | Spring Boot 4 (Java 21), Flyway |
 | AI·계산 | FastAPI (Python 3.13), LangChain, Claude Sonnet 5.5, PuLP(구매 최적화), SimPy(근무표 시뮬레이션) |
 | 검색 | KURE-v1 임베딩, pgvector |
-| DB | PostgreSQL 16 |
-| 실행·배포 | Docker Compose, GitHub Actions, AWS EC2 |
+| DB | PostgreSQL 16 (배포: AWS RDS, 프라이빗 서브넷) |
+| 실행·배포 | Docker Compose, GitHub Actions, AWS EC2 · RDS |
 
 ## 폴더 구조
 
