@@ -561,6 +561,10 @@ def _build(ctx, rules):
         repairs.append({"slot": slot, "added": key, "reason": "휴게까지 넣고 다시 돌렸을 때 기준을 못 지켜 짧은 조를 더함"})
         shifts = [{**s, "breaks": []} for s in shifts]  # 사람이 늘었으니 휴게를 다시 넣는다
 
+    # Only roster-options supplies this hook; standalone daily planning is unchanged.
+    refine = ctx.get("break_refine")
+    if refine is not None:
+        shifts = refine(shifts, ctx, need_total)
     rows = _shift_rows(shifts)
     records = run(rows)
     slots = d.slots

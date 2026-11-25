@@ -30,7 +30,7 @@ from datetime import date
 
 from app.schemas.simulation import ROSTER_OPTIONS_REPETITIONS
 
-from . import day_cache, weekly_roster
+from . import day_cache, weekly_roster, roster_break_refinement
 from .roster_recommendation import recommended_choice
 from .daily_roster import _build, _cost, _count_rows, _prepare, _rules
 from .parallel import worker_count
@@ -220,6 +220,9 @@ def day_options(body: dict, engine: str = "simpy", min_gain: float = MIN_GAIN_SE
     with using(from_scenario(spec)):
         ctx = _prepare(body, engine)
         windows = busy_windows(ctx["scn"])
+        ctx["break_refine"] = lambda shifts, context, need: roster_break_refinement.refine(
+            shifts, context, need, windows
+        )
         ladder = _ladder(ctx, windows, min_gain)
         picks = _pick(ladder, min_gain)
         short = _rules({**body, "roster_rules": {**(body.get("roster_rules") or {}), **SHORT_RULES}}, ctx["minor"])
@@ -259,7 +262,7 @@ def _job_key(job):
     _, roster_body, engine, min_gain, holiday = job
     sim_body = {k: v for k, v in roster_body.items() if k != "hourly_wage_krw"}
     # 근무조 규칙도 키에 넣는다(규칙을 바꾼 뒤 예전 규칙으로 계산한 기억을 꺼내지 않게).
-    return day_cache.key("roster_options.day.v3", sim_body, engine, min_gain, holiday, SHORT_RULES, LONG_RULES)
+    return day_cache.key("roster_options.break_refinement.v3", sim_body, engine, min_gain, holiday, SHORT_RULES, LONG_RULES)
 
 
 def _wage(job):

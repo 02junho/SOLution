@@ -1,0 +1,53 @@
+{
+  "scenario": {
+    "orders_by_slot": {
+      "07:00-08:00": 5,
+      "08:00-09:00": 22,
+      "09:00-10:00": 22,
+      "10:00-11:00": 21,
+      "11:00-12:00": 12,
+      "12:00-13:00": 25,
+      "13:00-14:00": 17,
+      "14:00-15:00": 10,
+      "15:00-16:00": 7,
+      "16:00-17:00": 6,
+      "17:00-18:00": 4,
+      "18:00-19:00": 3,
+      "19:00-20:00": 3
+    },
+    "peak_start_time": "08:00",
+    "peak_end_time": "11:00"
+  },
+  "hourly_wage_krw": 10320,
+  "business_date": "2026-11-24",
+  "owner": {
+    "is_working": false
+  },
+  "selected_menu_ids": [
+    "blueberry_yogurt_smoothie",
+    "hot_americano",
+    "hot_cafe_latte",
+    "iced_americano",
+    "iced_cafe_latte",
+    "iced_green_tea_latte",
+    "iced_lemon_ade",
+    "iced_milk_tea",
+    "iced_vanilla_latte"
+  ],
+  "menu_weights": {
+    "blueberry_yogurt_smoothie": 0.08917197452229299,
+    "hot_americano": 0.06369426751592357,
+    "hot_cafe_latte": 0.03821656050955414,
+    "iced_americano": 0.445859872611465,
+    "iced_cafe_latte": 0.1592356687898089,
+    "iced_green_tea_latte": 0.044585987261146494,
+    "iced_lemon_ade": 0.01910828025477707,
+    "iced_milk_tea": 0.025477707006369428,
+    "iced_vanilla_latte": 0.11464968152866242
+  },
+  "quality_targets": {
+    "max_p90_post_order_receipt_sec": 300
+  },
+  "random_seed": 42,
+  "repetitions": 20
+}
