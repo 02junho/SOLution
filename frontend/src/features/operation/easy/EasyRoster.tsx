@@ -488,8 +488,12 @@ export default function EasyRoster({
         const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', `[쉬운 화면] 추천 근무표${from ? ` · ${from}` : ''}`)
         sessionId = created.session_id
         if (!mounted.current) return // 만드는 사이 화면을 떠났으면 부모 상태를 바꾸지 않는다
-        setSession(sessionId)
-        onSession(sessionId)
+        // 이 계산을 멈췄으면 부모 상태만 건드리지 않는다(새 계산의 업무를 덮지 않게).
+        // 조건 저장·계산 시작은 그대로 이어서 만든 업무가 빈 채로 남지 않게 한다. 화면 갱신은 아래 stop.stopped 검사가 막는다.
+        if (!stop.stopped) {
+          setSession(sessionId)
+          onSession(sessionId)
+        }
       }
       // 조건은 업무에 새 버전으로 남긴다(다시 계산하면 같은 업무 안에서 버전이 쌓인다).
       const context = await workflowApi.context(sessionId)

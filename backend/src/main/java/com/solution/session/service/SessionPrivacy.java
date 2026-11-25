@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 /** events와 확정 스냅샷이 공유하는 개인정보 가림 규칙. 숫자 값은 그대로 보존한다. */
 final class SessionPrivacy {
 
-	private static final Pattern PHONE = Pattern.compile("(?<!\\d)(?:01[016-9]|02|0[3-6][1-5])[-\\s]?\\d{3,4}[-\\s]?\\d{4}(?!\\d)");
+	private static final Pattern PHONE = Pattern.compile("(?<!\\d)(?:\\+82[-\\s]?0?(?:1[016-9]|2|[3-6][1-5])|01[016-9]|02|0[3-6][1-5])[-\\s]?\\d{3,4}[-\\s]?\\d{4}(?!\\d)");
 	private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]+");
 	private static final Pattern NAMED_PERSON = Pattern.compile("((?:담당자|성함|이름)\\s*[:：=]?\\s*)[가-힣]{2,4}");
 
@@ -25,8 +25,9 @@ final class SessionPrivacy {
 	}
 
 	static String maskPii(String text) {
-		return NAMED_PERSON.matcher(EMAIL.matcher(PHONE.matcher(text).replaceAll("[전화번호]"))
-				.replaceAll("[이메일]")).replaceAll("$1[이름]");
+		// 이메일을 먼저 가린다. 전화번호 모양의 앞부분(+821012345678@...)을 먼저 바꾸면 도메인이 남는다.
+		return NAMED_PERSON.matcher(PHONE.matcher(EMAIL.matcher(text).replaceAll("[이메일]"))
+				.replaceAll("[전화번호]")).replaceAll("$1[이름]");
 	}
 
 	static Object maskSnapshot(Object value) {
