@@ -487,7 +487,8 @@ export default function EasyRoster({
         const from = source ? source.label.replace(/\s*\(.*\)$/, '').replace(/^내 판매 내역$/, source.label.match(/\((.*)\)$/)?.[1] ?? '내 판매 내역') : ''
         const created = await workflowApi.create(Number(import.meta.env.VITE_STORE_ID ?? 1), 'operation', 'form', `[쉬운 화면] 추천 근무표${from ? ` · ${from}` : ''}`)
         sessionId = created.session_id
-        if (!mounted.current) return // 만드는 사이 화면을 떠났으면 부모 상태를 바꾸지 않는다
+        // 만드는 사이 화면을 떠났거나 이 계산을 멈췄으면 부모 상태를 바꾸지 않는다(새 계산의 업무를 덮지 않게).
+        if (!mounted.current || stop.stopped) return
         setSession(sessionId)
         onSession(sessionId)
       }

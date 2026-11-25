@@ -175,6 +175,25 @@ class PurchaseServiceTest {
 	}
 
 	@Test
+	void 계산하는_사이_새_버전이_생기면_저장하지_않고_400() {
+		// 시작할 때는 최신이었는데, 계산하는 사이 다른 화면에서 조건을 바꿔 버전 2가 생겼다.
+		// 처음 읽기·계산 시작 확인은 버전 1, 저장 직전 확인에서는 현재 버전이 2다.
+		given(repository.findSessionVersion(100, 1001)).willReturn(
+				Optional.of(source("purchase", OWNER, 1, 1, CONFIRMED)),
+				Optional.of(source("purchase", OWNER, 1, 1, CONFIRMED)),
+				Optional.of(source("purchase", OWNER, 2, 1, CONFIRMED)));
+		given(repository.findByRequestKey(1001, "key-1")).willReturn(Optional.empty());
+		givenTool(ApiResponse.ok(okData()));
+
+		assertThatThrownBy(() -> service.run(100, 1001, "key-1"))
+				.isInstanceOf(ApiException.class)
+				.hasFieldOrPropertyWithValue("detailCode", "STALE_VERSION");
+		verify(repository, never()).insertResult(anyLong(), any(), anyString(), anyString(), any(), any(), any(),
+				any());
+		verify(repository, never()).markSessionResult(anyLong());
+	}
+
+	@Test
 	void 정보_부족은_저장하고_질문과_빠진_칸을_그대로_돌려준다() {
 		givenSource(source("purchase", OWNER, 1, 1, CONFIRMED));
 		given(repository.findByRequestKey(1001, "key-1")).willReturn(Optional.empty());
