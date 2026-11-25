@@ -138,13 +138,15 @@ public class PurchaseService {
 				requestKeyLock.lock("purchase", source.inputVersionId(), requestKey);
 				repository.lockSession(sessionId);
 				run.requireActive();
-				repository.findSessionVersion(sessionId, inputVersionId)
+				var current = repository.findSessionVersion(sessionId, inputVersionId)
 						.filter(row -> currentOwner.key().equals(row.ownerKey()))
 						.orElseThrow(() -> ApiException.notFound(CODE_SESSION_NOT_FOUND, SESSION_NOT_FOUND));
 				var stored = repository.findByRequestKey(source.inputVersionId(), requestKey);
 				if (stored.isPresent()) {
 					return stored.get();
 				}
+				// 계산하는 사이 조건이 바뀌어 새 버전이 생겼으면 옛 버전 결과로 업무 단계를 덮지 않는다.
+				if (!Objects.equals(current.versionNo(), current.currentVersion())) throw ApiException.badRequest(CODE_STALE_VERSION, NOT_LATEST);
 				repository.insertResult(resultId, source, requestKey, tool.status().getValue(), detailStatus,
 						summaryJson, detailJson, createdAt);
 				if (ok) {

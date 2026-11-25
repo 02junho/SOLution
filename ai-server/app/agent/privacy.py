@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-_PHONE = re.compile(r"(?<!\d)(?:01[016-9]|02|0[3-6][1-5])[-\s]?\d{3,4}[-\s]?\d{4}(?!\d)")
+_PHONE = re.compile(r"(?<!\d)(?:\+82[-\s]?0?(?:1[016-9]|2|[3-6][1-5])|01[016-9]|02|0[3-6][1-5])[-\s]?\d{3,4}[-\s]?\d{4}(?!\d)")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PERSON = re.compile(r"((?:담당자|성함|이름)\s*[:：=]?\s*)[가-힣]{2,4}")
 _PRIVATE_FIELDS = {"phone", "phone_number", "email", "person_name", "contact_name", "customer_name",
@@ -12,7 +12,7 @@ _PRIVATE_FIELDS = {"phone", "phone_number", "email", "person_name", "contact_nam
 
 def sanitize(value: Any) -> Any:
     if isinstance(value, str):
-        return _PERSON.sub(r"\1[이름]", _EMAIL.sub("[이메일]", _PHONE.sub("[전화번호]", value)))
+        return _PERSON.sub(r"\1[이름]", _PHONE.sub("[전화번호]", _EMAIL.sub("[이메일]", value)))
     if isinstance(value, dict):
         result = {}
         for key, item in value.items():

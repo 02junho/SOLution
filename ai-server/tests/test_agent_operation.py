@@ -92,7 +92,9 @@ def _say(current, content):
     return _req(current_input=current, content=content)
 
 
-def test_대화로_처음_입력하면_말한_값만_저장하고_기본값은_알려_준다():
+def test_대화로_처음_입력하면_말한_값만_저장하고_기본값은_알려_준다(monkeypatch):
+    # 해가 바뀌면 최저시급 기준이 달라지므로 날짜를 고정한다(2026년 최저시급 10,320원).
+    monkeypatch.setattr(operation_fields, "today", lambda: date(2026, 11, 18))
     response = run(
         _req(current_input=None, content="하루 200건, 사장님도 일하고 시급 11000원"),
         Fake(
