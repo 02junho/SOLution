@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
@@ -84,7 +85,8 @@ def test_RAG_준비가_실패해도_서버는_뜨고_다시_시도한다(monkeyp
     monkeypatch.setattr(main, "initialize_quote_rag", broken_rag)
     monkeypatch.setattr(main, "RAG_RETRY_SECONDS", 0.01)
     monkeypatch.setattr(main, "RAG_RETRY_LIMIT", 2)
-    monkeypatch.setattr(main.get_settings(), "rag_auto_index", True)
+    # get_settings()를 직접 부르면 lru_cache가 이 테스트의 환경으로 채워져 다른 테스트에 남는다.
+    monkeypatch.setattr(main, "get_settings", lambda: SimpleNamespace(rag_auto_index=True))
 
     with TestClient(main.app) as client:  # with 블록이어야 lifespan(시작·종료)이 실행된다
         assert client.get("/health").json()["data"] == {"ai_server": "ok", "database": "ok"}
@@ -104,7 +106,8 @@ def test_RAG_준비가_성공하면_다시_시도하지_않는다(monkeypatch):
     monkeypatch.setattr(main, "initialize_quote_rag", lambda: calls.__setitem__("rag", calls["rag"] + 1))
     monkeypatch.setattr(main, "embedding", lambda _: calls.__setitem__("embed", calls["embed"] + 1))
     monkeypatch.setattr(main, "RAG_RETRY_SECONDS", 0.01)
-    monkeypatch.setattr(main.get_settings(), "rag_auto_index", True)
+    # get_settings()를 직접 부르면 lru_cache가 이 테스트의 환경으로 채워져 다른 테스트에 남는다.
+    monkeypatch.setattr(main, "get_settings", lambda: SimpleNamespace(rag_auto_index=True))
 
     with TestClient(main.app):
         time.sleep(0.05)

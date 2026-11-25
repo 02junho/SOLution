@@ -12,7 +12,7 @@ _PRIVATE_FIELDS = {"phone", "phone_number", "email", "person_name", "contact_nam
 
 def sanitize(value: Any) -> Any:
     if isinstance(value, str):
-        return _PERSON.sub(r"\1[이름]", _EMAIL.sub("[이메일]", _PHONE.sub("[전화번호]", value)))
+        return _PERSON.sub(r"\1[이름]", _PHONE.sub("[전화번호]", _EMAIL.sub("[이메일]", value)))
     if isinstance(value, dict):
         result = {}
         for key, item in value.items():
