@@ -1,6 +1,5 @@
 # PR·push마다 각 서버의 테스트·빌드와, docker compose로 셋을 함께 띄운 연결 확인을 한다.
-# main에 push(병합)되고 위 검사가 모두 통과하면 이미지 세 개를 GHCR에 올리고 서버(EC2)를 새 이미지로 갱신한다.
-# 배포 브랜치는 아래 publish·deploy 작업의 if에 있다. 발표를 앞두고 dev에서 main으로 옮겼다.
+# 발표(2026-11-27)가 끝나 배포 서버(EC2·RDS)를 없애면서 이미지 게시·서버 배포 작업도 뺐다. 지금은 검사만 돈다.
 name: CI
 
 on:
@@ -11,7 +10,7 @@ on:
   workflow_dispatch:
 
 # 같은 PR에 새 커밋이 오면 이전 실행은 취소한다.
-# push(배포가 붙는 실행)는 취소하지 않는다. 배포 도중 끊기면 서버가 반쯤 바뀐 채로 남는다.
+# push 실행은 취소하지 않고 끝까지 돌려, 병합마다 검사 결과를 남긴다.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -136,113 +135,3 @@ jobs:
       - name: 정리
         if: always()
         run: docker compose down -v
-
-  # ── 배포 (main에 push됐을 때만) ──────────────────────────────────────────
-  # 이미지 세 개를 GHCR(ghcr.io/02junho/solution-*)에 :latest와 커밋 SHA로 올린다.
-  publish:
-    name: 이미지 게시
-    needs: [backend, ai-server, frontend, compose]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        app: [backend, ai-server, frontend]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./${{ matrix.app }}
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/02junho/solution-${{ matrix.app }}:latest
-            ghcr.io/02junho/solution-${{ matrix.app }}:${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,scope=${{ matrix.app }},mode=max
-
-  # 서버에 SSH로 들어가 저장소와 이미지를 이 실행이 검사한 커밋(github.sha)으로 맞추고 다시 띄운 뒤, 밖에서 연결을 확인한다.
-  # 같은 커밋으로 맞추므로 검사 도중 main에 다른 병합이 와도 설정·이미지가 섞이지 않고, 옛 실행을 다시 돌리면 그 버전으로 되돌아간다.
-  # 필요한 Secret: EC2_HOST, EC2_USER, EC2_SSH_KEY, EC2_KNOWN_HOSTS(서버 호스트 공개키). 서버 .env는 서버에만 있다.
-  deploy:
-    name: 서버 배포
-    needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-    # 배포는 한 번에 하나만. 앞 배포가 끝날 때까지 기다린다.
-    concurrency:
-      group: deploy
-      cancel-in-progress: false
-    steps:
-      # 서버 호스트 키를 EC2_KNOWN_HOSTS로 검증한다(StrictHostKeyChecking=yes). 다른 서버가 응답하면 접속하지 않아 토큰이 넘어가지 않는다.
-      - name: SSH 준비
-        env:
-          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      # GHCR 패키지는 비공개라 서버가 받을 때만 잠깐 로그인하고 바로 로그아웃한다(토큰은 표준 입력으로 넘기고, 작업이 끝나면 만료).
-      # IMAGE_TAG는 서버 .env에 적어 두어, 나중에 손으로 down·up 해도 같은 버전으로 뜬다. 새로 덧붙일 때는 앞에 줄바꿈을 넣어 마지막 줄 값에 붙지 않게 한다.
-      - name: 서버 갱신
-        env:
-          HOST: ${{ secrets.EC2_HOST }}
-          SSH_USER: ${{ secrets.EC2_USER }}
-          BRANCH: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          srv() { ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 "$SSH_USER@$HOST" "$@"; }
-          srv "set -e; cd ~/SOLution
-            git fetch -q origin '$BRANCH'
-            git checkout -q '$BRANCH'
-            git reset -q --hard '$SHA'
-            if grep -q '^IMAGE_TAG=' .env; then sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$SHA|' .env; else printf '\nIMAGE_TAG=%s\n' '$SHA' >> .env; fi
-            echo \"서버 저장소: \$(git rev-parse --short HEAD), IMAGE_TAG=\$(grep '^IMAGE_TAG=' .env | cut -d= -f2 | cut -c1-7)\""
-          printf '%s\n' "$GHCR_TOKEN" | srv "docker login ghcr.io -u '$GHCR_USER' --password-stdin > /dev/null && cd ~/SOLution
-            docker compose -f docker-compose.prod.yml pull; rc=\$?
-            docker logout ghcr.io > /dev/null; exit \$rc"
-          srv "set -e; cd ~/SOLution
-            docker compose -f docker-compose.prod.yml up -d
-            docker image prune -af > /dev/null
-            docker compose -f docker-compose.prod.yml ps --format '{{.Service}} {{.Image}} {{.Status}}'"
-
-      - name: SSH 키 지우기
-        if: always()
-        run: rm -f ~/.ssh/deploy_key
-
-      # Spring → DB, Spring → FastAPI → DB가 모두 ok가 될 때까지 최대 4분 기다린다.
-      - name: 연결 확인 (http://서버/api/v1/system/health)
-        env:
-          HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          for i in $(seq 1 48); do
-            body=$(curl -fsS -m 5 "http://$HOST/api/v1/system/health" || true)
-            if [ -n "$body" ] && echo "$body" | jq -e '
-                .status == "ok"
-                and .data.database == "ok"
-                and .data.ai_server.ai_server == "ok"
-                and .data.ai_server.database == "ok"' > /dev/null; then
-              echo "$body" | jq .
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "배포 뒤 연결 확인 실패. 마지막 응답: ${body:-없음}"
-          exit 1
