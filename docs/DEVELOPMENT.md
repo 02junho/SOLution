@@ -227,7 +227,7 @@ curl -X POST localhost:8080/api/v1/purchase/sessions/1001/results -H 'Content-Ty
 
 **배포 이력**: 발표 때까지는 main에 병합되면 CI가 이미지 세 개를 GHCR에 올리고 SSH로 EC2 서버(t3.medium, DB는 프라이빗 서브넷의 RDS)를 갱신했습니다. 발표가 끝난 2026-11-27에 서버와 DB를 모두 없애고 CI의 `이미지 게시`·`서버 배포` 작업도 뺐습니다. 지금 CI는 검사 네 개만 돕니다.
 
-다시 서버에 올리려면 서버에 저장소와 `.env`를 두고, 파일 맨 위 주석대로 이미지 세 개를 빌드한 뒤 `docker compose -f docker-compose.prod.yml up -d` 합니다. 자동 배포를 되살리려면 이 작업을 뺀 커밋을 되돌리고 GitHub Secret(`EC2_HOST`·`EC2_USER`·`EC2_SSH_KEY`·`EC2_KNOWN_HOSTS`)을 새 서버 값으로 넣습니다.
+다시 서버에 올리려면 서버에 저장소와 `.env`를 두고, 파일 맨 위 주석대로 이미지 세 개를 빌드한 뒤 `docker compose -f docker-compose.prod.yml up -d` 합니다. 주석의 빌드 명령은 `:latest` 태그라서, `.env`에 `IMAGE_TAG` 줄이 있으면 지우거나 빌드할 때 같은 태그를 붙입니다. 자동 배포를 되살리려면 이 작업을 뺀 커밋을 되돌리고 GitHub Secret(`EC2_HOST`·`EC2_USER`·`EC2_SSH_KEY`·`EC2_KNOWN_HOSTS`)을 새 서버 값으로 넣습니다.
 
 `http://서버주소/api/v1/system/health`에서 `database`·`ai_server`가 모두 `ok`면 끝입니다. 로컬에서 같은 구성을 확인하려면 파일 맨 위 주석대로 이미지 세 개를 먼저 빌드한 뒤 띄우고 http://localhost 로 엽니다. 시연 데이터를 처음 상태로 돌리려면 `docker compose -f docker-compose.prod.yml down -v` 뒤 다시 `up -d` 합니다. `-v`는 임베딩 모델을 둔 `model-cache` 볼륨도 지워서 다음에 뜰 때 모델(2GB 넘음)을 다시 받습니다. 시연 데이터만 지우려면 `down` 뒤 `docker volume rm solution_db-data`만 하고 `up -d` 합니다.
 
